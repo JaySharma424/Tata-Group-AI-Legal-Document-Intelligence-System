@@ -14,7 +14,9 @@ load_dotenv()
 
 api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
-    genai.configure(api_key=api_key)    
+    genai.configure(api_key=api_key)
+else:
+    genai.configure(api_key="AQ.Ab8RN6KD5GRHayVsTygHrv2tpG4XboavUZVw1DKcMp-2hhHgpw")
 
 router = APIRouter()
 rag_service = RAGKnowledgeService()
