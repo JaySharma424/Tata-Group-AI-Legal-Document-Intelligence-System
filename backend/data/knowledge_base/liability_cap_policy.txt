@@ -1,0 +1,131 @@
+TITLE: Liability Capping & Indemnity Policy
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-CAP-99
+JURISDICTION: Global
+GUIDANCE: Vendor liability caps must not be unlimited. Standard cap is 100 percent of annual contract value unless explicitly approved by the General Counsel.
+
+TITLE: Third-Party Intellectual Property Indemnification
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-IND-101
+JURISDICTION: Global
+GUIDANCE: Vendors must provide un-capped indemnification against any third-party claims alleging patent, copyright, or trademark infringement stemming from delivered deliverables.
+
+TITLE: Consequential and Indirect Damages Exclusion
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-DAM-102
+JURISDICTION: Global
+GUIDANCE: Exclude indirect, incidental, punitive, or consequential damages for both parties, except in cases of gross negligence, willful misconduct, or data breach.
+
+TITLE: Super-Cap on Liability for Data Breaches
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-CAP-103
+JURISDICTION: Global
+GUIDANCE: For breaches involving personal data or information security failures, vendor liability must be subject to an enhanced super-cap of at least 3x the annual contract value.
+
+TITLE: Gross Negligence and Willful Misconduct Carve-Outs
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-NEG-104
+JURISDICTION: Global
+GUIDANCE: Liability caps must not apply to losses caused by gross negligence, willful misconduct, fraud, or intentional breach of confidentiality obligations.
+
+TITLE: Environmental Liability and Regulatory Indemnity
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-ENV-105
+JURISDICTION: India / Global
+GUIDANCE: Vendors operating on Tata premises must indemnify the company against any statutory penalties, environmental damages, or cleanup costs resulting from their operations.
+
+TITLE: Personal Injury and Property Damage Indemnity
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-INJ-106
+JURISDICTION: Global
+GUIDANCE: Vendors must maintain comprehensive coverage and fully indemnify Tata Group against claims arising from death, bodily injury, or physical property damage caused by personnel.
+
+TITLE: Defense of Claims and Settlement Restrictions
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-DEF-107
+JURISDICTION: Global
+GUIDANCE: Indemnifying parties must control the defense of third-party claims but cannot settle any claim without prior written consent if it imposes liability on Tata Group.
+
+TITLE: Sub-Contractor Liability Flow-Down Mandate
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-SUB-108
+JURISDICTION: Global
+GUIDANCE: Vendors are strictly liable for the acts, omissions, and liabilities of their approved subcontractors as if they were their own actions.
+
+TITLE: Tax Indemnification and Withholding Compliance
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-TAX-109
+JURISDICTION: India
+GUIDANCE: Vendors must indemnify Tata Group for any failure to remit applicable GST, TDS, or statutory taxes, protecting the company from secondary tax assessments.
+
+TITLE: Product Liability and Defect Indemnification
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-PROD-110
+JURISDICTION: Global
+GUIDANCE: For hardware or product procurement, vendors must provide full indemnity against manufacturing defects, safety hazards, and product recalls.
+
+TITLE: Mitigation of Damages Duty
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-MIT-111
+JURISDICTION: Global
+GUIDANCE: Both parties must take reasonable commercial steps to mitigate any losses or damages arising from a breach before seeking full indemnification recovery.
+
+TITLE: Cyber Liability and Ransomware Indemnity
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-CYB-112
+JURISDICTION: Global
+GUIDANCE: Vendors must indemnify Tata Group against losses, forensic costs, and ransom exposures resulting from malware or cyber incidents originating from vendor networks.
+
+TITLE: Export Control and Sanctions Breach Indemnity
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-SNC-113
+JURISDICTION: Global
+GUIDANCE: Vendors must hold harmless and indemnify Tata Group against any regulatory penalties or trade bans arising from violation of international trade sanctions.
+
+TITLE: Notice of Claim and Cooperation Requirement
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-NOT-114
+JURISDICTION: Global
+GUIDANCE: Indemnification claims require prompt written notice within a reasonable timeframe (not exceeding 30 days) and full cooperation in defending the claim.
+
+TITLE: Statutory Labor and Employment Indemnity
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-LAB-115
+JURISDICTION: India
+GUIDANCE: Vendors must indemnify Tata Group against any claims by vendor employees regarding unpaid wages, provident fund deficiencies, or wrongful termination.
+
+TITLE: Insurance Proceeds Offset Limitation
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-INS-116
+JURISDICTION: Global
+GUIDANCE: Indemnification payouts must not be reduced by insurance recoveries unless specifically agreed, ensuring primary reliance on contractual indemnitor obligations.
+
+TITLE: Professional Malpractice and Error Indemnity
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-MAL-117
+JURISDICTION: Global
+GUIDANCE: For professional services and consulting engagements, vendors must provide specific indemnification for professional negligence, design errors, and advisory failures.
+
+TITLE: Post-Termination Survival of Indemnities
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-SRV-118
+JURISDICTION: Global
+GUIDANCE: All indemnification obligations, liability caps, and confidentiality protections must explicitly survive the expiration or termination of the agreement.
+
+TITLE: Multi-Party Claim Apportionment
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-MUL-119
+JURISDICTION: Global
+GUIDANCE: In multi-vendor environments, liability and indemnity obligations must be apportioned based on comparative fault and direct contribution to the failure.
+
+TITLE: Breach of Confidentiality Special Liability
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-CONF-120
+JURISDICTION: Global
+GUIDANCE: Unauthorized disclosure of core enterprise data or trade secrets must carry heightened liability protections separate from general commercial liability caps.
+
+TITLE: General Counsel Approval Protocol for Liability Deviations
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-POL-121
+JURISDICTION: Global
+GUIDANCE: Any contract deviation proposing unlimited liability acceptance, zero caps, or modified indemnity language requires formal written clearance from the General Counsel.

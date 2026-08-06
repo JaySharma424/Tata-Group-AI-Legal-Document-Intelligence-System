@@ -1,0 +1,31 @@
+:: 1. Project folder par jayein (agar aap uss directory mein nahi hain)
+cd D:\VS\new_folder
+
+:: 2. Python Virtual Environment ko activate karein
+backend\tata-ai\Scripts\activate
+
+:: 3. FastAPI Backend Server start karein
+uvicorn backend.main:app --reload --port 8000
+
+
+:: 1. Project ke root folder se frontend folder mein jayein
+cd D:\VS\new_folder\frontend
+
+:: 2. Vite React Development Server start karein
+npm run dev
+
+
+
+// not every time its a .bat file.
+
+@echo off
+echo Starting Tata AI Backend and Frontend...
+
+:: Backend ke liye naya command prompt window kholega
+start cmd /k "cd /d D:\VS\new_folder && backend\tata-ai\Scripts\activate && uvicorn backend.main:app --reload --port 8000"
+
+:: Frontend ke liye naya command prompt window kholega
+start cmd /k "cd /d D:\VS\new_folder\frontend && npm run dev"
+
+echo Both services are starting up!
+pause

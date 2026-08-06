@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.log
+.env
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+tata-ai/
+backend/tata-ai/
+
+# Node
+node_modules/
+
+# VS Code
+.vscode/
+
+# Build
+dist/
+build/
+
+# Cache
+.pytest_cache/
+.ipynb_checkpoints/
