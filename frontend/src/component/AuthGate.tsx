@@ -10,12 +10,12 @@ interface UserData {
 }
 
 interface AuthProps {
-  onLoginSuccess: (userOrToken: any, user?: UserData) => void;
+  onLoginSuccess: (userOrToken: any, extraUser?: any) => void;
 }
 
 type AuthView = 'login' | 'register' | 'forgot';
 
-// Dynamic Base URL: Works locally (localhost:8000) and in production (Render)
+// Adaptive Base URL: Works locally on localhost:8000 and live on Render automatically
 const API_BASE_URL = 
   import.meta.env.VITE_API_BASE_URL || 
   (import.meta.env.DEV 
@@ -36,10 +36,14 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [successMessage, setSuccessMessage] = useState('');
   const [error, setError] = useState('');
 
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const resetMessages = () => {
     setError('');
     setSuccessMessage('');
+  };
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetMessages();
 
     try {
       const response = await axios.post(`${API_BASE_URL}/api/v1/auth/login`, {
@@ -47,38 +51,52 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
         password
       });
 
-      // Flexible token extraction across FastAPI response formats
+      console.log('Backend Login Response:', response.data);
+
+      const data = response.data;
+      // Extract token across multiple standard backend return formats
       const token = 
-        response.data?.access_token || 
-        response.data?.token || 
-        response.data?.data?.access_token || 
-        response.data?.data?.token;
+        data?.access_token || 
+        data?.accessToken || 
+        data?.token || 
+        data?.jwt || 
+        data?.id_token || 
+        data?.data?.access_token || 
+        data?.data?.accessToken || 
+        data?.data?.token;
 
       const userData: UserData = 
-        response.data?.user || 
-        response.data?.data?.user || 
-        { name: email.split('@')[0], email, role: 'Senior Reviewer', businessUnit: 'Enterprise Legal' };
+        data?.user || 
+        data?.data?.user || 
+        { 
+          name: name || email.split('@')[0], 
+          email, 
+          role: role || 'Senior Reviewer', 
+          businessUnit: businessUnit || 'Enterprise Legal' 
+        };
 
       if (token) {
         localStorage.setItem('access_token', token);
         localStorage.setItem('user', JSON.stringify(userData));
 
         if (onLoginSuccess) {
-          onLoginSuccess(userData, token);
+          // Pass both token and user object to satisfy parent component prop requirements
+          onLoginSuccess(token, userData);
         }
       } else {
         setError('Authentication server did not return a valid token.');
       }
     } catch (err: any) {
       console.error("Login failed:", err);
-      setError(err.response?.data?.detail || "Invalid credentials or server error.");
+      const detail = err.response?.data?.detail;
+      const errorMsg = typeof detail === 'string' ? detail : 'Invalid credentials or server error.';
+      setError(errorMsg);
     }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccessMessage('');
+    resetMessages();
 
     if (!name || !email || !password) {
       setError('Please fill in all required fields.');
@@ -99,14 +117,15 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
       setView('login');
     } catch (err: any) {
       console.error('Registration failed:', err);
-      setError(err.response?.data?.detail || 'Failed to register user. Check if backend is running.');
+      const detail = err.response?.data?.detail;
+      const errorMsg = typeof detail === 'string' ? detail : 'Failed to register user. Check if backend is running.';
+      setError(errorMsg);
     }
   };
 
   const handleForgotPassword = (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccessMessage('');
+    resetMessages();
 
     if (!email) {
       setError('Please enter your corporate email address.');
@@ -156,6 +175,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <input 
                 type="email" 
                 required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
@@ -168,7 +188,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 <label className="block text-xs font-bold text-slate-600 uppercase">Password</label>
                 <button 
                   type="button" 
-                  onClick={() => { setView('forgot'); setError(''); setSuccessMessage(''); }}
+                  onClick={() => { setView('forgot'); resetMessages(); }}
                   className="text-xs text-indigo-600 hover:underline font-medium cursor-pointer"
                 >
                   Forgot password?
@@ -177,6 +197,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <input 
                 type="password" 
                 required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
@@ -195,7 +216,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <span className="text-xs text-slate-500">New reviewer or counsel? </span>
               <button 
                 type="button" 
-                onClick={() => { setView('register'); setError(''); setSuccessMessage(''); }}
+                onClick={() => { setView('register'); resetMessages(); }}
                 className="text-xs font-bold text-indigo-600 hover:underline cursor-pointer"
               >
                 Register an account
@@ -214,6 +235,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <input 
                 type="text" 
                 required
+                autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
@@ -226,6 +248,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <input 
                 type="email" 
                 required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
@@ -238,6 +261,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <input 
                 type="password" 
                 required
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
@@ -286,7 +310,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             <div className="text-center pt-2">
               <button 
                 type="button" 
-                onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }}
+                onClick={() => { setView('login'); resetMessages(); }}
                 className="text-xs text-slate-600 hover:text-indigo-600 flex items-center justify-center gap-1 mx-auto cursor-pointer font-medium"
               >
                 <ArrowLeft className="w-3 h-3" /> Back to Sign In
@@ -307,6 +331,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <input 
                 type="email" 
                 required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
@@ -324,7 +349,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             <div className="text-center pt-2">
               <button 
                 type="button" 
-                onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }}
+                onClick={() => { setView('login'); resetMessages(); }}
                 className="text-xs text-slate-600 hover:text-indigo-600 flex items-center justify-center gap-1 mx-auto cursor-pointer font-medium"
               >
                 <ArrowLeft className="w-3 h-3" /> Back to Sign In
