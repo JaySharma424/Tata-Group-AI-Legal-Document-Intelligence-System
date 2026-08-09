@@ -86,7 +86,7 @@ class RAGKnowledgeService:
 
     try:
       response = self.client.models.embed_content(
-          model="text-embedding-004", contents=text[:2000]
+          model="text-embedding-005", contents=text[:2000]
       )
       if response.embeddings and len(response.embeddings) > 0:
         return list(response.embeddings[0].values)
