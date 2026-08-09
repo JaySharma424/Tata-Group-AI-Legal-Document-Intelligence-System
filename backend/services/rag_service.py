@@ -2,6 +2,7 @@ import csv
 import glob
 import os
 import re
+import time  # <--- Added for rate-limit throttling
 from typing import Any, Dict, List, Optional
 from google import genai
 from qdrant_client import QdrantClient
@@ -20,9 +21,8 @@ class RAGKnowledgeService:
 
   def __init__(self, storage_path: str = "./backend/storage/qdrant_db"):
     self.collection_name = "tata_legal_knowledge"
-    self.vector_dim = 768  # text-embedding-004 / embedding-001 dimension
+    self.vector_dim = 768
 
-    # 1. Disk Connection with In-Memory fallback for lock resilience
     os.makedirs(storage_path, exist_ok=True)
     try:
       self.qdrant = QdrantClient(path=storage_path)
@@ -34,7 +34,6 @@ class RAGKnowledgeService:
       else:
         raise e
 
-    # 2. Initialize Modern Google GenAI Client
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if api_key:
       self.client = genai.Client(api_key=api_key)
@@ -44,7 +43,6 @@ class RAGKnowledgeService:
       self.has_api_key = False
       print("⚠️ GEMINI_API_KEY missing. Vector search will use zero-vectors.")
 
-    # 3. Path Resolution
     current_dir = os.path.dirname(os.path.abspath(__file__))
     self.csv_path = os.path.join(
         os.path.dirname(current_dir), "data", "risk_taxonomy.csv"
@@ -56,7 +54,6 @@ class RAGKnowledgeService:
     self._ensure_collection_exists()
 
   def _ensure_collection_exists(self):
-    """Creates vector collection if missing, seeding only if empty."""
     try:
       collections = [c.name for c in self.qdrant.get_collections().collections]
     except Exception:
@@ -70,7 +67,6 @@ class RAGKnowledgeService:
           ),
       )
 
-    # Check count to avoid repeating seeding on every server restart
     try:
       collection_info = self.qdrant.get_collection(self.collection_name)
       if collection_info.points_count == 0:
@@ -79,26 +75,36 @@ class RAGKnowledgeService:
     except Exception as e:
       print(f"⚠️ RAG initialization check skipped: {e}")
 
-  def _get_embedding(self, text: str) -> List[float]:
-    """Generates 768-dim vector embedding using valid model names with quiet error logging."""
+  def _get_embedding(self, text: str, retries: int = 3) -> List[float]:
+    """Generates vector embedding with automatic 429 rate-limit backoff."""
     if not self.has_api_key or not text.strip():
       return [0.0] * self.vector_dim
 
-    # Real, valid Google Gemini embedding models
-    candidate_models = ["gemini-embedding-001", "text-embedding-004"]
+    candidate_models = ["text-embedding-004", "embedding-001"]
 
     for model_name in candidate_models:
-      try:
-        response = self.client.models.embed_content(
-            model=model_name, contents=text[:2000]
-        )
-        if response.embeddings and len(response.embeddings) > 0:
-          return list(response.embeddings[0].values)
-      except Exception as e:
-        if not hasattr(self, "_embedding_error_logged"):
-          print(f"⚠️ Embedding notice ({model_name}): {e}")
-          self._embedding_error_logged = True
-        continue
+      for attempt in range(retries):
+        try:
+          response = self.client.models.embed_content(
+              model=model_name, contents=text[:2000]
+          )
+          if response.embeddings and len(response.embeddings) > 0:
+            return list(response.embeddings[0].values)
+        except Exception as e:
+          err_msg = str(e)
+          # Handle Rate Limits cleanly with sleep
+          if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            wait_time = 2 * (attempt + 1)
+            print(
+                f"⏳ Gemini Rate Limit hit. Backing off for {wait_time}s..."
+            )
+            time.sleep(wait_time)
+            continue
+          else:
+            if not hasattr(self, "_embedding_error_logged"):
+              print(f"⚠️ Embedding notice ({model_name}): {e}")
+              self._embedding_error_logged = True
+            break
 
     return [0.0] * self.vector_dim
 
@@ -214,12 +220,16 @@ class RAGKnowledgeService:
           point_id_counter += 1
 
     points = []
-    for p in policies:
+    for idx, p in enumerate(policies):
       embed_input = p.get("embedding_text", p["payload"]["text"])
       vector = self._get_embedding(embed_input)
       points.append(
           PointStruct(id=p["id"], vector=vector, payload=p["payload"])
       )
+
+      # Throttle requests to respect Free-Tier 100 Requests/Min rate limit
+      if (idx + 1) % 10 == 0:
+        time.sleep(0.5)
 
     if points:
       self.qdrant.upsert(collection_name=self.collection_name, points=points)
