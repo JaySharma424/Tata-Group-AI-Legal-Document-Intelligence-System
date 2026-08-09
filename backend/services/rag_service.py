@@ -38,7 +38,7 @@ class RAGKnowledgeService:
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if api_key:
       self.embedding_model = GoogleGenerativeAIEmbeddings(
-          model="models/text-embedding-004", google_api_key=api_key
+          model="text/text-embedding-004", google_api_key=api_key
       )
     else:
       self.embedding_model = None
