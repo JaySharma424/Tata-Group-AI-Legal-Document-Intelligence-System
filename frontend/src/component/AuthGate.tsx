@@ -59,7 +59,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     }
 
     try {
-      const response = await axios.post('http://localhost:8000/api/v1/auth/register', {
+      const _response = await axios.post('http://localhost:8000/api/v1/auth/register', {
         full_name: name, // Fixed from fullName to name
         email: email,
         password: password,

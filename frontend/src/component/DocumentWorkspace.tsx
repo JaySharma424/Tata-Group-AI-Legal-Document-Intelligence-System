@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Upload, FileText, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap, AlertTriangle, ArchiveX, CheckCircle, XCircle } from 'lucide-react';
+import { Upload, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap, AlertTriangle, ArchiveX, CheckCircle, XCircle } from 'lucide-react';
 
 interface DocumentWorkspaceProps {
   selectedHistoryJobId?: string | null;
-  onActiveJobChange?: (jobId: string) => void; 
+  _onActiveJobChange?: (jobId: string) => void; 
 }
 
 // FIX: Deep Scan LocalStorage to automatically find the REAL logged-in user's email
@@ -28,7 +28,7 @@ const getSessionUser = () => {
   return "demo1@tata.com";
 };
 
-export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHistoryJobId, onActiveJobChange }) => {
+export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHistoryJobId, _onActiveJobChange }) => {
   const [file, setFile] = useState<File | null>(null);
   const [businessUnit, setBusinessUnit] = useState('Procurement');
   const [category, setCategory] = useState('Vendor Agreement');
