@@ -3,7 +3,7 @@ import glob
 import os
 import re
 from typing import Any, Dict, List, Optional
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+import google.generativeai as genai
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -16,11 +16,11 @@ from qdrant_client.models import (
 
 
 class RAGKnowledgeService:
-  """Production-grade RAG service using Gemini API embeddings (0 MB local RAM usage)."""
+  """Production-grade RAG service using native Google Gemini API embeddings (0 MB local RAM)."""
 
   def __init__(self, storage_path: str = "./backend/storage/qdrant_db"):
     self.collection_name = "tata_legal_knowledge"
-    self.vector_dim = 768  # Gemini text-embedding-001 output dimension
+    self.vector_dim = 768  # text-embedding-004 dimension
 
     # 1. Disk Connection with In-Memory fallback for lock resilience
     os.makedirs(storage_path, exist_ok=True)
@@ -34,14 +34,13 @@ class RAGKnowledgeService:
       else:
         raise e
 
-    # 2. Cloud API Embedding Model (Replaces local heavy SentenceTransformer)
+    # 2. Configure Native Google Gemini Client
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if api_key:
-      self.embedding_model = GoogleGenerativeAIEmbeddings(
-          model="models/embedding-001", google_api_key=api_key
-      )
+      genai.configure(api_key=api_key)
+      self.has_api_key = True
     else:
-      self.embedding_model = None
+      self.has_api_key = False
       print(
           "⚠️ GEMINI_API_KEY not found. Embeddings will fallback to zero vectors."
       )
@@ -58,37 +57,41 @@ class RAGKnowledgeService:
     self._ensure_collection_exists()
 
   def _ensure_collection_exists(self):
-      """Creates vector collection if missing, seeding only if empty."""
-      try:
-        collections = [
-            c.name for c in self.qdrant.get_collections().collections
-        ]
-      except Exception:
-        collections = []
+    """Creates vector collection if missing, seeding only if empty."""
+    try:
+      collections = [c.name for c in self.qdrant.get_collections().collections]
+    except Exception:
+      collections = []
 
-      if self.collection_name not in collections:
-        self.qdrant.create_collection(
-            collection_name=self.collection_name,
-            vectors_config=VectorParams(
-                size=self.vector_dim, distance=Distance.COSINE
-            ),
-        )
+    if self.collection_name not in collections:
+      self.qdrant.create_collection(
+          collection_name=self.collection_name,
+          vectors_config=VectorParams(
+              size=self.vector_dim, distance=Distance.COSINE
+          ),
+      )
 
-      # Check count to avoid blocking bootup with repeated embedding API calls
-      try:
-        collection_info = self.qdrant.get_collection(self.collection_name)
-        if collection_info.points_count == 0:
-          print("🌱 Seeding RAG knowledge base for the first time...")
-          self._seed_structured_policies()
-      except Exception as e:
-        print(f"⚠️ RAG initialization check skipped: {e}")
+    # Check count to avoid repeating seeding on every restart
+    try:
+      collection_info = self.qdrant.get_collection(self.collection_name)
+      if collection_info.points_count == 0:
+        print("🌱 Seeding RAG knowledge base for the first time...")
+        self._seed_structured_policies()
+    except Exception as e:
+      print(f"⚠️ RAG initialization check skipped: {e}")
 
   def _get_embedding(self, text: str) -> List[float]:
-    """Generates vector embedding via Gemini API."""
-    try:
-      if self.embedding_model:
-        return self.embedding_model.embed_query(text)
+    """Generates vector embedding directly via Google Generative AI SDK."""
+    if not self.has_api_key or not text.strip():
       return [0.0] * self.vector_dim
+
+    try:
+      response = genai.embed_content(
+          model="models/text-embedding-004",
+          content=text[:2000],
+          task_type="retrieval_document",
+      )
+      return response["embedding"]
     except Exception as e:
       print(f"Embedding error: {e}")
       return [0.0] * self.vector_dim
@@ -215,8 +218,7 @@ class RAGKnowledgeService:
     if points:
       self.qdrant.upsert(collection_name=self.collection_name, points=points)
       print(
-          f"✅ RAG Engine: Embedded {len(points)} structured legal records"
-          " into Qdrant using Gemini Embeddings."
+          f"✅ RAG Engine: Successfully embedded {len(points)} legal records into Qdrant using native Gemini API."
       )
 
   def retrieve_context(
