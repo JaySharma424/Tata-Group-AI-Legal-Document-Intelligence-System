@@ -45,52 +45,69 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     resetMessages();
 
+    let response;
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/v1/auth/login`, {
-        email,
-        password
+      // Attempt 1: Standard JSON Payload
+      response = await axios.post(`${API_BASE_URL}/api/v1/auth/login`, {
+        email: email,
+        username: email,
+        password: password
       });
-
-      console.log('Backend Login Response:', response.data);
-
-      const data = response.data;
-      // Extract token across multiple standard backend return formats
-      const token = 
-        data?.access_token || 
-        data?.accessToken || 
-        data?.token || 
-        data?.jwt || 
-        data?.id_token || 
-        data?.data?.access_token || 
-        data?.data?.accessToken || 
-        data?.data?.token;
-
-      const userData: UserData = 
-        data?.user || 
-        data?.data?.user || 
-        { 
-          name: name || email.split('@')[0], 
-          email, 
-          role: role || 'Senior Reviewer', 
-          businessUnit: businessUnit || 'Enterprise Legal' 
-        };
-
-      if (token) {
-        localStorage.setItem('access_token', token);
-        localStorage.setItem('user', JSON.stringify(userData));
-
-        if (onLoginSuccess) {
-          // Pass both token and user object to satisfy parent component prop requirements
-          onLoginSuccess(token, userData);
+    } catch (err: any) {
+      // Attempt 2: If FastAPI throws 422 Unprocessable Entity, it likely requires standard OAuth2 Form Data
+      if (err.response?.status === 422) {
+        try {
+          const formData = new URLSearchParams();
+          formData.append('username', email);
+          formData.append('password', password);
+          
+          response = await axios.post(`${API_BASE_URL}/api/v1/auth/login`, formData, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+        } catch (fallbackErr: any) {
+           const detail = fallbackErr.response?.data?.detail;
+           setError(`API Error: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+           return;
         }
       } else {
-        setError('Authentication server did not return a valid token.');
+         const detail = err.response?.data?.detail;
+         setError(`Error: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+         return;
       }
-    } catch (err: any) {
-      console.error("Login failed:", err);
-      const detail = err.response?.data?.detail;
-      const errorMsg = typeof detail === 'string' ? detail : 'Invalid credentials or server error.';
-      setError(errorMsg);
+    }
+
+    // Process successful response
+    const data = response.data;
+    
+    // Check all possible token formats, including raw string returns
+    const token = 
+      typeof data === 'string' ? data : (
+      data?.access_token || 
+      data?.accessToken || 
+      data?.token || 
+      data?.jwt || 
+      data?.id_token ||
+      data?.data?.access_token || 
+      data?.data?.token
+    );
+
+    if (token && token.length > 10) {
+      const userData: UserData = data?.user || data?.data?.user || { 
+        name: email.split('@')[0], 
+        email, 
+        role: 'Senior Reviewer', 
+        businessUnit: 'Enterprise Legal' 
+      };
+      
+      localStorage.setItem('access_token', token);
+      localStorage.setItem('user', JSON.stringify(userData));
+
+      if (onLoginSuccess) {
+        onLoginSuccess(token, userData);
+      }
+    } else {
+      // If still no token, print the EXACT payload to the UI so we can fix it instantly
+      setError(`Token missing. Backend returned: ${JSON.stringify(data)}`);
     }
   };
 
@@ -155,12 +172,12 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
 
         {/* Success or Error Banners */}
         {successMessage && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg font-medium text-center">
+          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg font-medium text-center break-words">
             {successMessage}
           </div>
         )}
         {error && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-lg font-medium text-center">
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-lg font-medium text-center break-words">
             {error}
           </div>
         )}
