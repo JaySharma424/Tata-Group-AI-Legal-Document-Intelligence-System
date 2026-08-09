@@ -16,11 +16,7 @@ interface AuthProps {
 type AuthView = 'login' | 'register' | 'forgot';
 
 // Adaptive Base URL: Works locally on localhost:8000 and live on Render automatically
-const API_BASE_URL = 
-  import.meta.env.VITE_API_BASE_URL || 
-  (import.meta.env.DEV 
-    ? 'http://localhost:8000' 
-    : 'https://tata-ai-backend-og7t.onrender.com');
+const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
 
 export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [view, setView] = useState<AuthView>('login');
