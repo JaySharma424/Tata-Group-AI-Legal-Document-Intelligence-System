@@ -25,6 +25,7 @@ PyMuPDF==1.24.2
 pypdf
 
 # AI, Vector DB & Orchestration
+google-generativeai>=0.4.0
 google-genai>=0.1.0
 langchain>=0.2.16
 langchain-google-genai>=1.0.4
