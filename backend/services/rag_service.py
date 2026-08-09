@@ -85,7 +85,7 @@ class RAGKnowledgeService:
       return [0.0] * self.vector_dim
 
     # Real, valid Google Gemini embedding models
-    candidate_models = ["text-embedding-004", "embedding-001"]
+    candidate_models = ["gemini-embedding-001", "text-embedding-004"]]
 
     for model_name in candidate_models:
       try:
