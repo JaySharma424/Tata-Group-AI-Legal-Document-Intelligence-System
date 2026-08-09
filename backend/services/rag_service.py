@@ -16,11 +16,11 @@ from qdrant_client.models import (
 
 
 class RAGKnowledgeService:
-  """Production-grade RAG service using the new official Google GenAI SDK (v1 API)."""
+  """Production-grade RAG service using the modern Google GenAI SDK."""
 
   def __init__(self, storage_path: str = "./backend/storage/qdrant_db"):
     self.collection_name = "tata_legal_knowledge"
-    self.vector_dim = 768  # text-embedding-004 dimension
+    self.vector_dim = 768  # text-embedding-004 / embedding-001 dimension
 
     # 1. Disk Connection with In-Memory fallback for lock resilience
     os.makedirs(storage_path, exist_ok=True)
@@ -34,7 +34,7 @@ class RAGKnowledgeService:
       else:
         raise e
 
-    # 2. Initialize Modern Google GenAI Client (v1 API Endpoint)
+    # 2. Initialize Modern Google GenAI Client
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if api_key:
       self.client = genai.Client(api_key=api_key)
@@ -80,20 +80,27 @@ class RAGKnowledgeService:
       print(f"⚠️ RAG initialization check skipped: {e}")
 
   def _get_embedding(self, text: str) -> List[float]:
-    """Generates 768-dim vector embedding using modern google-genai SDK."""
+    """Generates 768-dim vector embedding using valid model names with quiet error logging."""
     if not self.has_api_key or not text.strip():
       return [0.0] * self.vector_dim
 
-    try:
-      response = self.client.models.embed_content(
-          model="text-embedding-005", contents=text[:2000]
-      )
-      if response.embeddings and len(response.embeddings) > 0:
-        return list(response.embeddings[0].values)
-      return [0.0] * self.vector_dim
-    except Exception as e:
-      print(f"Embedding error: {e}")
-      return [0.0] * self.vector_dim
+    # Real, valid Google Gemini embedding models
+    candidate_models = ["text-embedding-004", "embedding-001"]
+
+    for model_name in candidate_models:
+      try:
+        response = self.client.models.embed_content(
+            model=model_name, contents=text[:2000]
+        )
+        if response.embeddings and len(response.embeddings) > 0:
+          return list(response.embeddings[0].values)
+      except Exception as e:
+        if not hasattr(self, "_embedding_error_logged"):
+          print(f"⚠️ Embedding notice ({model_name}): {e}")
+          self._embedding_error_logged = True
+        continue
+
+    return [0.0] * self.vector_dim
 
   def _parse_structured_policy_file(
       self, file_path: str
@@ -217,7 +224,7 @@ class RAGKnowledgeService:
     if points:
       self.qdrant.upsert(collection_name=self.collection_name, points=points)
       print(
-          f"✅ RAG Engine: Successfully embedded {len(points)} legal records into Qdrant using modern google-genai SDK."
+          f"✅ RAG Engine: Successfully embedded {len(points)} legal records into Qdrant."
       )
 
   def retrieve_context(

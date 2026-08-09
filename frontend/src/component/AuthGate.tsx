@@ -10,13 +10,14 @@ interface UserData {
 }
 
 interface AuthProps {
-  onLoginSuccess: (token: string, user: UserData) => void;
+  onLoginSuccess: (userOrToken: any, user?: UserData) => void;
 }
 
 type AuthView = 'login' | 'register' | 'forgot';
 
-// Dynamic URL: Uses localhost in local dev, Render URL in production
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+// Dynamic Base URL: Works locally (localhost:8000) and in production (Render)
+const API_BASE_URL = 
+  import.meta.env.VITE_API_BASE_URL || 
   (import.meta.env.DEV 
     ? 'http://localhost:8000' 
     : 'https://tata-ai-backend-og7t.onrender.com');
@@ -46,18 +47,24 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
         password
       });
 
-      // Capture token and user data dynamically from the backend response
-      const token = response.data.access_token || response.data.token;
-      const userData: UserData = response.data.user || { email, role: 'Compliance Officer' };
+      // Flexible token extraction across FastAPI response formats
+      const token = 
+        response.data?.access_token || 
+        response.data?.token || 
+        response.data?.data?.access_token || 
+        response.data?.data?.token;
+
+      const userData: UserData = 
+        response.data?.user || 
+        response.data?.data?.user || 
+        { name: email.split('@')[0], email, role: 'Senior Reviewer', businessUnit: 'Enterprise Legal' };
 
       if (token) {
-        // Store securely so Axios interceptors can read it
         localStorage.setItem('access_token', token);
         localStorage.setItem('user', JSON.stringify(userData));
 
-        // Propagate success up to parent App
         if (onLoginSuccess) {
-          onLoginSuccess(token, userData);
+          onLoginSuccess(userData, token);
         }
       } else {
         setError('Authentication server did not return a valid token.');
