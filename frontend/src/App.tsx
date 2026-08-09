@@ -96,7 +96,7 @@ function App() {
     e.preventDefault();
     setIsUpdating(true);
     try {
-      const response = await axios.put('http://localhost:8000/api/v1/auth/profile', {
+      const response = await axios.put('https://tata-ai-backend-og7t.onrender.com/api/v1/auth/profile', {
         email: userEmail,
         full_name: editName,
         new_password: editPassword

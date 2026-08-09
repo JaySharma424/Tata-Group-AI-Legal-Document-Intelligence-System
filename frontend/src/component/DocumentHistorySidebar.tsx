@@ -54,7 +54,8 @@ export const DocumentHistorySidebar: React.FC<SidebarProps> = ({ onSelectDocumen
     setIsLoading(true);
     try {
       // Clean request relying entirely on the JWT token in the Axios authorization header
-      const response = await axios.get('http://localhost:8000/api/v1/review/history');
+      const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
+      const response = await axios.get(`${API_BASE_URL}/api/v1/review/history`);
       setHistory(response.data.history || []);
     } catch (error) {
       console.error("Failed to fetch document history:", error);
