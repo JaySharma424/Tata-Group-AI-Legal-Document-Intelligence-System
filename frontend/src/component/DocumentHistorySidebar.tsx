@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { History, FileText, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 
+const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
+
 
 interface SidebarProps {
   userEmail?: string;       // <-- Optional add kiya
@@ -54,7 +56,6 @@ export const DocumentHistorySidebar: React.FC<SidebarProps> = ({ onSelectDocumen
     setIsLoading(true);
     try {
       // Clean request relying entirely on the JWT token in the Axios authorization header
-      const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
       const response = await axios.get(`${API_BASE_URL}/api/v1/review/history`);
       setHistory(response.data.history || []);
     } catch (error) {

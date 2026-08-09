@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { BarChart3, ShieldAlert, Clock, CheckCircle2, AlertTriangle, ArrowUpRight } from 'lucide-react';
+const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
+
 
 export const LegalOpsDashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<any>(null);
@@ -9,7 +11,7 @@ export const LegalOpsDashboard: React.FC = () => {
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const response = await axios.get('http://localhost:8000/api/v1/documents/operations/metrics');
+        const response = await axios.get(`${API_BASE_URL}/api/v1/documents/operations/metrics`);
         setMetrics(response.data);
       } catch (err) {
         console.error('Failed to load legal operations metrics:', err);

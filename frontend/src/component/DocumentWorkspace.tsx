@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Upload, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap, AlertTriangle, ArchiveX, CheckCircle, XCircle } from 'lucide-react';
+const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
 
 interface DocumentWorkspaceProps {
   selectedHistoryJobId?: string | null;
@@ -82,7 +83,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     setReviewComments('');
     
     try {
-      const response = await axios.post('http://localhost:8000/api/v1/documents/upload', formData, {
+      const response = await axios.post(`${API_BASE_URL}/api/v1/documents/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
@@ -107,7 +108,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
   const loadDocumentFromHistory = async (jobId: string) => {
     try {
-      const response = await axios.get(`http://localhost:8000/api/v1/documents/${jobId}`);
+      const response = await axios.get(`${API_BASE_URL}/api/v1/documents/${jobId}`);
       
       const safeClauses = Array.isArray(response.data?.clauses) 
         ? response.data.clauses.filter((c: any) => c !== null && typeof c === 'object') 
@@ -136,7 +137,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     const token = localStorage.getItem('access_token');
     
     try {
-      const response = await axios.get(`http://localhost:8000/api/v1/documents/${targetId}/export-pdf`, {
+      const response = await axios.get(`${API_BASE_URL}/api/v1/documents/${targetId}/export-pdf`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob',
       });
@@ -164,7 +165,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
     setIsSubmitting(true);
     try {
-      await axios.post('http://localhost:8000/api/v1/review/actions', {
+      await axios.post(`${API_BASE_URL}/api/v1/review/actions`, {
         document_id: activeJobId,
         user_email: currentUser, // Ensure review matches dynamic user
         action: action,

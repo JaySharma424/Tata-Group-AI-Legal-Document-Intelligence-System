@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { Bot, Send, X, Maximize2, Minimize2, Loader2 } from 'lucide-react';
+const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
+
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -42,7 +44,7 @@ export function LegalChatWidget({ currentDocumentId }: { currentDocumentId?: str
         text: msg.text
       }));
 
-      const response = await axios.post('http://localhost:8000/api/v1/chat/query', {
+      const response = await axios.post(`${API_BASE_URL}/api/v1/chat/query`, {
         query: userText,
         user_id: "demo_user@tata.com", // You can dynamically pass the logged-in user here later
         document_id: currentDocumentId || null,
