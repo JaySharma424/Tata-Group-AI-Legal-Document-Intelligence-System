@@ -99,7 +99,7 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 async def login(user_credentials: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(UserModel).filter(UserModel.email == user_credentials.email).first()
+    user = db.query(UserModel).filter(UserModel.email == user_credentials.username).first()
     if not user or not verify_password(user_credentials.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
         
