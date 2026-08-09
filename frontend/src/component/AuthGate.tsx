@@ -15,7 +15,7 @@ interface AuthProps {
 
 type AuthView = 'login' | 'register' | 'forgot';
 
-// Adaptive Base URL: Works locally on localhost:8000 and live on Render automatically
+// Strict Production URL to prevent Render environment misrouting
 const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
 
 export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
@@ -41,75 +41,51 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     resetMessages();
 
-    let response;
     try {
-      // Attempt 1: Standard JSON Payload
-      response = await axios.post(`${API_BASE_URL}/api/v1/auth/login`, {
-        email: email,
-        username: email,
-        password: password
+      // Send standard OAuth2 Form Data directly
+      const formData = new URLSearchParams();
+      formData.append('username', email);
+      formData.append('password', password);
+      
+      const response = await axios.post(`${API_BASE_URL}/api/v1/auth/login`, formData, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
-    } catch (err: any) {
-      // Attempt 2: If FastAPI throws 422 Unprocessable Entity, it likely requires standard OAuth2 Form Data
-      if (err.response?.status === 422) {
-        try {
-          const formData = new URLSearchParams();
-          formData.append('username', email);
-          formData.append('password', password);
-          
-          response = await axios.post(`${API_BASE_URL}/api/v1/auth/login`, formData, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-          });
-        } catch (fallbackErr: any) {
-           const detail = fallbackErr.response?.data?.detail;
-           setError(`API Error: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
-           return;
+
+      const data = response.data;
+      
+      // Extract token
+      const token = 
+        typeof data === 'string' ? data : (
+        data?.access_token || 
+        data?.accessToken || 
+        data?.token || 
+        data?.jwt || 
+        data?.id_token ||
+        data?.data?.access_token || 
+        data?.data?.token
+      );
+
+      if (token && token.length > 10) {
+        const userData: UserData = data?.user || data?.data?.user || { 
+          name: email.split('@')[0], 
+          email, 
+          role: 'Senior Reviewer', 
+          businessUnit: 'Enterprise Legal' 
+        };
+        
+        localStorage.setItem('access_token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
+
+        if (onLoginSuccess) {
+          onLoginSuccess(token, userData);
         }
       } else {
-         const detail = err.response?.data?.detail;
-         setError(`Error: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
-         return;
+        setError(`Token missing. Backend returned: ${JSON.stringify(data)}`);
       }
-    }
-
-    // Process successful response
-    const data = response.data;
-
-    // NEW: Intercept silent backend failures (200 OK with empty body)
-    if (!data || data === "") {
-      setError('Invalid credentials: User not found or incorrect password.');
-      return;
-    }
-    
-    // Check all possible token formats, including raw string returns
-    const token = 
-      typeof data === 'string' ? data : (
-      data?.access_token || 
-      data?.accessToken || 
-      data?.token || 
-      data?.jwt || 
-      data?.id_token ||
-      data?.data?.access_token || 
-      data?.data?.token
-    );
-
-    if (token && token.length > 10) {
-      const userData: UserData = data?.user || data?.data?.user || { 
-        name: email.split('@')[0], 
-        email, 
-        role: 'Senior Reviewer', 
-        businessUnit: 'Enterprise Legal' 
-      };
-      
-      localStorage.setItem('access_token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
-
-      if (onLoginSuccess) {
-        onLoginSuccess(token, userData);
-      }
-    } else {
-      // If still no token, print the EXACT payload to the UI so we can fix it instantly
-      setError(`Token missing. Backend returned: ${JSON.stringify(data)}`);
+    } catch (err: any) {
+      console.error("Login failed:", err);
+      const detail = err.response?.data?.detail;
+      setError(`Error: ${typeof detail === 'string' ? detail : 'Invalid credentials or server error.'}`);
     }
   };
 
