@@ -10,7 +10,8 @@ class ParsingService:
         except OSError:
             raise RuntimeError("spaCy model 'en_core_web_sm' not found. Please run: python -m spacy download en_core_web_sm")
 
-    def parse(self, text: str, file_path: str = None) -> dict:
+    # FIX: Added actual_confidence parameter with a default fallback of 100.0
+    def parse(self, text: str, file_path: str = None, actual_confidence: float = 100.0) -> dict:
         """
         Wrapper method to match documents.py expectations while 
         leveraging parse_text logic and extracting true PDF page counts.
@@ -28,7 +29,7 @@ class ParsingService:
         
         # Map to keys expected by documents.py
         return {
-            "ocr_confidence": 100.0,  # Default or derived confidence
+            "ocr_confidence": actual_confidence,  # FIX: Now maps the dynamic score dynamically
             "pages": page_count,      # True extracted PDF page count
             "entities": raw_result.get("entities_found", []),
             "section_count": raw_result.get("section_count", 0),

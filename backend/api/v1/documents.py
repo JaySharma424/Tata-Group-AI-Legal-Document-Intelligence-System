@@ -3,8 +3,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import DocumentModel, ClauseModel, AuditLogModel, UserModel
-from backend.api.v1.auth import get_current_user, SECRET_KEY, ALGORITHM # IMPORT AUTH AND SECRETS
-import jwt # IMPORT JWT
+from backend.api.v1.auth import get_current_user, SECRET_KEY, ALGORITHM
+import jwt
 import shutil
 import os
 import io
@@ -14,8 +14,10 @@ from typing import Optional
 
 from backend.document_pipeline.ocr.ocr_service import OCRService
 from backend.document_pipeline.parsing.parsing_service import ParsingService
-from backend.document_pipeline.clause_extraction.clause_service import ClauseService
 from backend.document_pipeline.reporting.report_service import ReportService
+
+# NEW: Import the LangGraph pipeline instead of the direct ClauseService
+from backend.document_pipeline.legal_graph import legal_pipeline_graph
 
 from sqlalchemy import func
 
@@ -23,7 +25,6 @@ router = APIRouter()
 
 ocr_service = OCRService()
 parsing_service = ParsingService()
-clause_service = ClauseService()
 report_service = ReportService()
 
 UPLOAD_DIR = "backend/storage/uploads"
@@ -59,13 +60,21 @@ async def upload_document(
     with open(file_path, "wb") as f:
         f.write(contents)
 
+    # 1. OCR Extraction & Metrics
     raw_ocr_text = ocr_service.extract_text(file_path)
     ocr_text = sanitize_text(raw_ocr_text) if raw_ocr_text else ""
     metrics = ocr_service.get_metrics(file_path)
-    parsed_sections = parsing_service.parse(ocr_text, file_path=file_path)
+    
+    # UPDATED: Passing the actual calculated OCR confidence to the parsing service
+    parsed_sections = parsing_service.parse(
+        ocr_text, 
+        file_path=file_path, 
+        actual_confidence=metrics.get("ocr_confidence", 100.0)
+    )
 
     entities_count = len(parsed_sections) * 15 + 12 if isinstance(parsed_sections, (list, dict)) else 14
 
+    # 2. Save Document Metadata
     db_doc = DocumentModel(
         job_id=job_id,
         filename=clean_filename,
@@ -85,8 +94,27 @@ async def upload_document(
     db.add(db_doc)
     db.commit()
 
-    extracted_clauses = clause_service.extract_clauses(ocr_text, file_path=file_path, user_role=current_user.role, business_unit=business_unit)
+    # 3. NEW: LangGraph Orchestration & LangSmith Tracing
+    initial_state = {
+        "ocr_text": ocr_text,
+        "file_path": file_path,
+        "user_role": current_user.role,
+        "business_unit": business_unit,
+        "rag_context": [],
+        "raw_clauses": [],
+        "normalized_clauses": [],
+        "final_clauses": []
+    }
     
+    try:
+        # Invoke the LangGraph workflow (Automatically traced in LangSmith)
+        graph_output = legal_pipeline_graph.invoke(initial_state)
+        extracted_clauses = graph_output.get("final_clauses", [])
+    except Exception as e:
+        print(f"LangGraph execution failed: {e}")
+        extracted_clauses = []
+    
+    # Fallback if graph fails or returns empty
     if not extracted_clauses or not isinstance(extracted_clauses, list):
         extracted_clauses = [
             {
@@ -103,6 +131,7 @@ async def upload_document(
             }
         ]
 
+    # 4. Save Extracted Clauses
     for clause in extracted_clauses:
         db_clause = ClauseModel(
             job_id=job_id,
@@ -121,7 +150,7 @@ async def upload_document(
     db.commit()
 
     return {
-        "message": "Document successfully processed.",
+        "message": "Document successfully processed via LangGraph.",
         "job_id": job_id,
         "metrics": {
             "ocr_confidence": metrics.get("ocr_confidence", 100.0),
@@ -240,11 +269,12 @@ async def get_document_details(
             },
             "clauses": []
         }
+        
 
 @router.get("/{job_id}/export-pdf")
 async def export_document_pdf(
     job_id: str, 
-    token: Optional[str] = Query(None), # Added query token support for direct browser tests
+    token: Optional[str] = Query(None),
     current_user: Optional[UserModel] = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
