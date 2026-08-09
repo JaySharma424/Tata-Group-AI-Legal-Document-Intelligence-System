@@ -78,6 +78,12 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
 
     // Process successful response
     const data = response.data;
+
+    // NEW: Intercept silent backend failures (200 OK with empty body)
+    if (!data || data === "") {
+      setError('Invalid credentials: User not found or incorrect password.');
+      return;
+    }
     
     // Check all possible token formats, including raw string returns
     const token = 
