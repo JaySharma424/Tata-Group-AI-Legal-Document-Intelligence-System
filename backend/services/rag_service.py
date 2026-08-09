@@ -20,7 +20,7 @@ class RAGKnowledgeService:
 
   def __init__(self, storage_path: str = "./backend/storage/qdrant_db"):
     self.collection_name = "tata_legal_knowledge"
-    self.vector_dim = 768  # Gemini text-embedding-004 output dimension
+    self.vector_dim = 768  # Gemini text-embedding-001 output dimension
 
     # 1. Disk Connection with In-Memory fallback for lock resilience
     os.makedirs(storage_path, exist_ok=True)
@@ -38,7 +38,7 @@ class RAGKnowledgeService:
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if api_key:
       self.embedding_model = GoogleGenerativeAIEmbeddings(
-          model="text/text-embedding-004", google_api_key=api_key
+          model="models/embedding-001", google_api_key=api_key
       )
     else:
       self.embedding_model = None
