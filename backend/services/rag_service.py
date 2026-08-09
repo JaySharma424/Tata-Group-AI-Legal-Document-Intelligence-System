@@ -58,7 +58,7 @@ class RAGKnowledgeService:
     self._ensure_collection_exists()
 
   def _ensure_collection_exists(self):
-      """Creates vector collection if missing."""
+      """Creates vector collection if missing, seeding only if empty."""
       try:
         collections = [
             c.name for c in self.qdrant.get_collections().collections
@@ -73,11 +73,15 @@ class RAGKnowledgeService:
                 size=self.vector_dim, distance=Distance.COSINE
             ),
         )
-        # Seed non-blockingly or with essential policies only
-        try:
+
+      # Check count to avoid blocking bootup with repeated embedding API calls
+      try:
+        collection_info = self.qdrant.get_collection(self.collection_name)
+        if collection_info.points_count == 0:
+          print("🌱 Seeding RAG knowledge base for the first time...")
           self._seed_structured_policies()
-        except Exception as e:
-          print(f"⚠️ Non-critical seeding warning: {e}")
+      except Exception as e:
+        print(f"⚠️ RAG initialization check skipped: {e}")
 
   def _get_embedding(self, text: str) -> List[float]:
     """Generates vector embedding via Gemini API."""
