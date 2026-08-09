@@ -4,6 +4,7 @@ pydantic>=2.8.0
 pydantic-settings>=2.2.1
 
 # Security & Auth
+PyJWT==2.8.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
@@ -13,7 +14,7 @@ python-multipart==0.0.9
 sqlalchemy==2.0.30
 psycopg2-binary==2.9.9
 
-# Cloud AI & Vectors (No heavy PyTorch needed!)
+# Cloud AI & Vectors
 langchain>=0.2.16
 langchain-google-genai>=1.0.4
 langchain-core>=0.2.30
