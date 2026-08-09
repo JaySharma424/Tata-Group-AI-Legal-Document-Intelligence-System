@@ -1,4 +1,3 @@
---extra-index-url https://download.pytorch.org/whl/cpu
 # API & Core
 fastapi[all]==0.111.0
 uvicorn==0.30.1
@@ -11,21 +10,21 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-multipart==0.0.9
-PyJWT
+PyJWT==2.8.0
 
 # Database & ORM
 sqlalchemy==2.0.30
 psycopg2-binary==2.9.9
 alembic==1.13.1
 
-# Document Pipeline & OCR
+# Document Pipeline, Images & OCR
+Pillow>=10.3.0
 pytesseract==0.3.10
 pdfplumber==0.11.0
 PyMuPDF==1.24.2
-spacy>=3.7.4
 pypdf
 
-# AI, Vector DB & Orchestration
+# AI, Vector DB & Orchestration (Cloud-based embeddings)
 google-generativeai>=0.4.0
 langchain>=0.2.16
 langchain-google-genai>=1.0.4
@@ -36,8 +35,7 @@ langgraph
 langsmith
 
 # Misc Data & Reporting
-sentence-transformers
 python-docx
-pytest
 reportlab
 pandas
+python-dotenv
