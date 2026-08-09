@@ -2,11 +2,21 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { ShieldCheck, Lock, Building2, UserCheck, Mail, ArrowLeft } from 'lucide-react';
 
+interface UserData {
+  name?: string;
+  email: string;
+  businessUnit?: string;
+  role: string;
+}
+
 interface AuthProps {
-  onLoginSuccess: (user: { name: string; email: string; businessUnit: string; role: string }) => void;
+  onLoginSuccess: (token: string, user: UserData) => void;
 }
 
 type AuthView = 'login' | 'register' | 'forgot';
+
+// Centralized API Base URL matching project environment configs
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://tata-ai-backend-og7t.onrender.com';
 
 export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [view, setView] = useState<AuthView>('login');
@@ -23,54 +33,59 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  try {
-    const response = await axios.post('http://localhost:8000/api/v1/auth/login', {
-      email,
-      password
-    });
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
 
-    // Capture token and user data dynamically from the backend response
-    const token = response.data.access_token || response.data.token;
-    const userData = response.data.user || { email, role: 'Compliance Officer' };
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/v1/auth/login`, {
+        email,
+        password
+      });
 
-    if (token) {
-      // Store securely so Axios interceptor can read it
-      localStorage.setItem('access_token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
+      // Capture token and user data dynamically from the backend response
+      const token = response.data.access_token || response.data.token;
+      const userData: UserData = response.data.user || { email, role: 'Compliance Officer' };
 
-      // Propagate success up to App.tsx
-      if (onLoginSuccess) {
-        onLoginSuccess(token);
+      if (token) {
+        // Store securely so Axios interceptors can read it
+        localStorage.setItem('access_token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
+
+        // Propagate success up to parent App
+        if (onLoginSuccess) {
+          onLoginSuccess(token, userData);
+        }
+      } else {
+        setError('Authentication server did not return a valid token.');
       }
+    } catch (err: any) {
+      console.error("Login failed:", err);
+      setError(err.response?.data?.detail || "Invalid credentials or server error.");
     }
-  } catch (error) {
-    console.error("Login failed:", error);
-    alert("Invalid credentials or server error.");
-  }
-};
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
+
     if (!name || !email || !password) {
       setError('Please fill in all required fields.');
       return;
     }
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://tata-ai-backend-og7t.onrender.com';
+
     try {
-      const _response = await axios.post(`${API_BASE_URL}/api/v1/auth/register`, {
-        full_name: name, // Fixed from fullName to name
+      await axios.post(`${API_BASE_URL}/api/v1/auth/register`, {
+        full_name: name,
         email: email,
         password: password,
         business_unit: businessUnit,
         role: role
       });
     
-      // Pass user data up on success
       setSuccessMessage('Registration successful! Please sign in with your credentials.');
       setPassword('');
-    //   onLoginSuccess(response.data.user);
       setView('login');
     } catch (err: any) {
       console.error('Registration failed:', err);
@@ -81,6 +96,8 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const handleForgotPassword = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
+
     if (!email) {
       setError('Please enter your corporate email address.');
       return;
@@ -141,7 +158,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 <label className="block text-xs font-bold text-slate-600 uppercase">Password</label>
                 <button 
                   type="button" 
-                  onClick={() => { setView('forgot'); setError(''); }}
+                  onClick={() => { setView('forgot'); setError(''); setSuccessMessage(''); }}
                   className="text-xs text-indigo-600 hover:underline font-medium cursor-pointer"
                 >
                   Forgot password?
@@ -168,7 +185,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <span className="text-xs text-slate-500">New reviewer or counsel? </span>
               <button 
                 type="button" 
-                onClick={() => { setView('register'); setError(''); }}
+                onClick={() => { setView('register'); setError(''); setSuccessMessage(''); }}
                 className="text-xs font-bold text-indigo-600 hover:underline cursor-pointer"
               >
                 Register an account
@@ -259,7 +276,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             <div className="text-center pt-2">
               <button 
                 type="button" 
-                onClick={() => { setView('login'); setError(''); }}
+                onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }}
                 className="text-xs text-slate-600 hover:text-indigo-600 flex items-center justify-center gap-1 mx-auto cursor-pointer font-medium"
               >
                 <ArrowLeft className="w-3 h-3" /> Back to Sign In
@@ -297,7 +314,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             <div className="text-center pt-2">
               <button 
                 type="button" 
-                onClick={() => { setView('login'); setError(''); }}
+                onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }}
                 className="text-xs text-slate-600 hover:text-indigo-600 flex items-center justify-center gap-1 mx-auto cursor-pointer font-medium"
               >
                 <ArrowLeft className="w-3 h-3" /> Back to Sign In
