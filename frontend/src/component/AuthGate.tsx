@@ -15,8 +15,11 @@ interface AuthProps {
 
 type AuthView = 'login' | 'register' | 'forgot';
 
-// Centralized API Base URL matching project environment configs
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://tata-ai-backend-og7t.onrender.com';
+// Dynamic URL: Uses localhost in local dev, Render URL in production
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.DEV 
+    ? 'http://localhost:8000' 
+    : 'https://tata-ai-backend-og7t.onrender.com');
 
 export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [view, setView] = useState<AuthView>('login');
