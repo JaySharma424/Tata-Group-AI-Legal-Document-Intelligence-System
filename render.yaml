@@ -4,7 +4,7 @@ services:
   # --------------------------------------------------
   - type: web
     name: tata-ai-backend
-    env: python
+    runtime: python
     region: singapore
     plan: free
     buildCommand: "pip install -r backend/requirements.txt"
@@ -26,7 +26,7 @@ services:
   # --------------------------------------------------
   - type: web
     name: tata-ai-frontend
-    env: static
+    runtime: static
     buildCommand: "npm run build"
     staticPublishPath: "./dist"
     envVars:
