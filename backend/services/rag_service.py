@@ -1,10 +1,11 @@
-import csv
+csv
 import glob
 import os
 import re
-import time  # <--- Added for rate-limit throttling
+import time
 from typing import Any, Dict, List, Optional
 from google import genai
+from google.genai import types
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -21,8 +22,9 @@ class RAGKnowledgeService:
 
   def __init__(self, storage_path: str = "./backend/storage/qdrant_db"):
     self.collection_name = "tata_legal_knowledge"
-    self.vector_dim = 768
+    self.vector_dim = 768  # Enforced 768-dim vector size
 
+    # 1. Disk Connection with In-Memory fallback for lock resilience
     os.makedirs(storage_path, exist_ok=True)
     try:
       self.qdrant = QdrantClient(path=storage_path)
@@ -34,6 +36,7 @@ class RAGKnowledgeService:
       else:
         raise e
 
+    # 2. Initialize Modern Google GenAI Client
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if api_key:
       self.client = genai.Client(api_key=api_key)
@@ -43,6 +46,7 @@ class RAGKnowledgeService:
       self.has_api_key = False
       print("⚠️ GEMINI_API_KEY missing. Vector search will use zero-vectors.")
 
+    # 3. Path Resolution
     current_dir = os.path.dirname(os.path.abspath(__file__))
     self.csv_path = os.path.join(
         os.path.dirname(current_dir), "data", "risk_taxonomy.csv"
@@ -54,8 +58,19 @@ class RAGKnowledgeService:
     self._ensure_collection_exists()
 
   def _ensure_collection_exists(self):
+    """Creates vector collection if missing or recreates it if vector size mismatches."""
     try:
       collections = [c.name for c in self.qdrant.get_collections().collections]
+      if self.collection_name in collections:
+        info = self.qdrant.get_collection(self.collection_name)
+        existing_dim = info.config.params.vectors.size
+        if existing_dim != self.vector_dim:
+          print(
+              f"⚠️ Dimension mismatch ({existing_dim} vs {self.vector_dim})."
+              " Recreating Qdrant collection..."
+          )
+          self.qdrant.delete_collection(self.collection_name)
+          collections.remove(self.collection_name)
     except Exception:
       collections = []
 
@@ -66,17 +81,11 @@ class RAGKnowledgeService:
               size=self.vector_dim, distance=Distance.COSINE
           ),
       )
-
-    try:
-      collection_info = self.qdrant.get_collection(self.collection_name)
-      if collection_info.points_count == 0:
-        print("🌱 Seeding RAG knowledge base for the first time...")
-        self._seed_structured_policies()
-    except Exception as e:
-      print(f"⚠️ RAG initialization check skipped: {e}")
+      print("🌱 Seeding RAG knowledge base for the first time...")
+      self._seed_structured_policies()
 
   def _get_embedding(self, text: str, retries: int = 3) -> List[float]:
-    """Generates vector embedding with automatic 429 rate-limit backoff."""
+    """Generates strictly 768-dim vector embeddings with rate-limit backoff."""
     if not self.has_api_key or not text.strip():
       return [0.0] * self.vector_dim
 
@@ -86,13 +95,22 @@ class RAGKnowledgeService:
       for attempt in range(retries):
         try:
           response = self.client.models.embed_content(
-              model=model_name, contents=text[:2000]
+              model=model_name,
+              contents=text[:2000],
+              config=types.EmbedContentConfig(
+                  output_dimensionality=self.vector_dim
+              ),
           )
           if response.embeddings and len(response.embeddings) > 0:
-            return list(response.embeddings[0].values)
+            values = list(response.embeddings[0].values)
+            # Enforce exact 768 dimensions
+            if len(values) > self.vector_dim:
+              values = values[: self.vector_dim]
+            elif len(values) < self.vector_dim:
+              values += [0.0] * (self.vector_dim - len(values))
+            return values
         except Exception as e:
           err_msg = str(e)
-          # Handle Rate Limits cleanly with sleep
           if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
             wait_time = 2 * (attempt + 1)
             print(
@@ -227,7 +245,6 @@ class RAGKnowledgeService:
           PointStruct(id=p["id"], vector=vector, payload=p["payload"])
       )
 
-      # Throttle requests to respect Free-Tier 100 Requests/Min rate limit
       if (idx + 1) % 10 == 0:
         time.sleep(0.5)
 
