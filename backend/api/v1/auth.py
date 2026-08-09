@@ -9,6 +9,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from backend.database import get_db
 from backend.models import UserModel, SessionModel
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 # Security Configuration
 SECRET_KEY = "tata_enterprise_secure_legal_intelligence_platform_secret_key_2026_safe"
@@ -97,7 +98,7 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     }
 
 @router.post("/login", response_model=Token)
-async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
+async def login(user_credentials: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(UserModel).filter(UserModel.email == user_credentials.email).first()
     if not user or not verify_password(user_credentials.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
