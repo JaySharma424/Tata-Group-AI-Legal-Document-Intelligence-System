@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { ShieldCheck, Lock, Building2, UserCheck, Mail, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, Lock, Building2, UserCheck, Mail, ArrowLeft, Award } from 'lucide-react';
 
 interface UserData {
   name?: string;
@@ -15,7 +15,7 @@ interface AuthProps {
 
 type AuthView = 'login' | 'register' | 'forgot';
 
-// Strict Production URL to prevent Render environment misrouting
+// Locked Production Base URL
 const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
 
 export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
@@ -53,16 +53,13 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
 
       const data = response.data;
       
-      // Extract token
       const token = 
         typeof data === 'string' ? data : (
         data?.access_token || 
         data?.accessToken || 
         data?.token || 
         data?.jwt || 
-        data?.id_token ||
-        data?.data?.access_token || 
-        data?.data?.token
+        data?.data?.access_token
       );
 
       if (token && token.length > 10) {
@@ -113,8 +110,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     } catch (err: any) {
       console.error('Registration failed:', err);
       const detail = err.response?.data?.detail;
-      const errorMsg = typeof detail === 'string' ? detail : 'Failed to register user. Check if backend is running.';
-      setError(errorMsg);
+      setError(typeof detail === 'string' ? detail : 'Failed to register user.');
     }
   };
 
@@ -126,7 +122,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
       setError('Please enter your corporate email address.');
       return;
     }
-    setSuccessMessage('Password reset instructions have been sent to your email.');
+    setSuccessMessage('Password reset instructions have been sent to your corporate email.');
     setTimeout(() => {
       setSuccessMessage('');
       setView('login');
@@ -134,38 +130,46 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-slate-900 font-sans p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-800 p-8 space-y-6">
+    <div className="flex h-screen w-screen items-center justify-center bg-[#001021] font-sans p-4 relative overflow-hidden">
+      {/* Tata Royal Glow Background Accents */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-b from-[#003B73]/20 via-[#002B49]/10 to-transparent rounded-full blur-3xl pointer-events-none"></div>
+
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200/80 p-8 space-y-6 relative z-10">
         
-        {/* Header Section */}
+        {/* Tata Header Brand Section */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-indigo-50 text-indigo-600 rounded-xl mb-2 shadow-inner">
-            <Lock className="w-7 h-7" />
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-[#002B49] text-white rounded-xl mb-1 shadow-md border border-[#004B87]">
+            <Award className="w-7 h-7 text-[#00A3E0]" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Tata AI Legal Intelligence</h1>
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
-            Enterprise Governance & Security Portal
+          <div className="flex items-center justify-center gap-1.5">
+            <span className="text-xs font-black tracking-widest text-[#002B49] uppercase">TATA GROUP</span>
+            <span className="text-xs text-slate-300">•</span>
+            <span className="text-xs font-semibold text-[#00A3E0] uppercase tracking-wider">AI LEGAL</span>
+          </div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Legal Intelligence</h1>
+          <p className="text-[11px] text-slate-500 uppercase tracking-widest font-bold">
+            Governance, Risk & Compliance Portal
           </p>
         </div>
 
-        {/* Success or Error Banners */}
+        {/* Feedback Banners */}
         {successMessage && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg font-medium text-center break-words">
+          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg font-medium text-center break-words shadow-sm">
             {successMessage}
           </div>
         )}
         {error && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-lg font-medium text-center break-words">
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-lg font-medium text-center break-words shadow-sm">
             {error}
           </div>
         )}
 
-        {/* ================= VIEW 1: LOGIN ================= */}
+        {/* VIEW 1: LOGIN */}
         {view === 'login' && (
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase mb-1 flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-indigo-600" /> Corporate Email
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-[#003B73]" /> Corporate Email
               </label>
               <input 
                 type="email" 
@@ -173,18 +177,18 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B73] bg-slate-50 text-slate-900"
                 placeholder="name@tata.com"
               />
             </div>
 
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="block text-xs font-bold text-slate-600 uppercase">Password</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase">Password</label>
                 <button 
                   type="button" 
                   onClick={() => { setView('forgot'); resetMessages(); }}
-                  className="text-xs text-indigo-600 hover:underline font-medium cursor-pointer"
+                  className="text-xs text-[#003B73] hover:underline font-bold cursor-pointer"
                 >
                   Forgot password?
                 </button>
@@ -195,16 +199,16 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B73] bg-slate-50 text-slate-900"
                 placeholder="••••••••"
               />
             </div>
 
             <button 
               type="submit" 
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer mt-2"
+              className="w-full bg-[#002B49] hover:bg-[#003B73] text-white py-3 rounded-lg text-sm font-bold transition-all shadow-lg shadow-[#002B49]/20 flex items-center justify-center gap-2 cursor-pointer mt-2"
             >
-              <ShieldCheck className="w-4 h-4" /> Secure Sign In
+              <ShieldCheck className="w-4 h-4 text-[#00A3E0]" /> Secure Corporate Sign In
             </button>
 
             <div className="text-center pt-2">
@@ -212,7 +216,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <button 
                 type="button" 
                 onClick={() => { setView('register'); resetMessages(); }}
-                className="text-xs font-bold text-indigo-600 hover:underline cursor-pointer"
+                className="text-xs font-bold text-[#003B73] hover:underline cursor-pointer"
               >
                 Register an account
               </button>
@@ -220,12 +224,12 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
           </form>
         )}
 
-        {/* ================= VIEW 2: REGISTER ================= */}
+        {/* VIEW 2: REGISTER */}
         {view === 'register' && (
           <form onSubmit={handleRegister} className="space-y-3">
             <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase mb-1 flex items-center gap-1.5">
-                <UserCheck className="w-3.5 h-3.5 text-indigo-600" /> Full Name
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1 flex items-center gap-1.5">
+                <UserCheck className="w-3.5 h-3.5 text-[#003B73]" /> Full Name
               </label>
               <input 
                 type="text" 
@@ -233,46 +237,46 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
-                placeholder="e.g. Jane Doe"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B73] bg-slate-50 text-slate-900"
+                placeholder="e.g. Ratan Tata"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Corporate Email</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Corporate Email</label>
               <input 
                 type="email" 
                 required
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B73] bg-slate-50 text-slate-900"
                 placeholder="name@tata.com"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Password</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Password</label>
               <input 
                 type="password" 
                 required
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B73] bg-slate-50 text-slate-900"
                 placeholder="Create secure password"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1 flex items-center gap-1">
-                  <Building2 className="w-3 h-3 text-indigo-600" /> Unit
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1 flex items-center gap-1">
+                  <Building2 className="w-3 h-3 text-[#003B73]" /> Business Unit
                 </label>
                 <select 
                   value={businessUnit}
                   onChange={(e) => setBusinessUnit(e.target.value)}
-                  className="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none bg-slate-50"
+                  className="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none bg-slate-50 text-slate-900 font-medium"
                 >
                   <option value="Enterprise Legal">Enterprise Legal</option>
                   <option value="Compliance & Risk">Compliance & Risk</option>
@@ -282,11 +286,11 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Role</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Role</label>
                 <select 
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none bg-slate-50"
+                  className="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none bg-slate-50 text-slate-900 font-medium"
                 >
                   <option value="Senior Reviewer">Senior Reviewer</option>
                   <option value="Compliance Officer">Compliance Officer</option>
@@ -297,7 +301,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
 
             <button 
               type="submit" 
-              className="w-full bg-slate-900 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-colors shadow-md cursor-pointer mt-1"
+              className="w-full bg-[#002B49] text-white py-2.5 rounded-lg text-sm font-bold hover:bg-[#003B73] transition-colors shadow-md cursor-pointer mt-1"
             >
               Complete Registration
             </button>
@@ -306,7 +310,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <button 
                 type="button" 
                 onClick={() => { setView('login'); resetMessages(); }}
-                className="text-xs text-slate-600 hover:text-indigo-600 flex items-center justify-center gap-1 mx-auto cursor-pointer font-medium"
+                className="text-xs text-slate-600 hover:text-[#003B73] flex items-center justify-center gap-1 mx-auto cursor-pointer font-bold"
               >
                 <ArrowLeft className="w-3 h-3" /> Back to Sign In
               </button>
@@ -314,29 +318,29 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
           </form>
         )}
 
-        {/* ================= VIEW 3: FORGOT PASSWORD ================= */}
+        {/* VIEW 3: FORGOT PASSWORD */}
         {view === 'forgot' && (
           <form onSubmit={handleForgotPassword} className="space-y-4">
             <p className="text-xs text-slate-500 leading-relaxed">
-              Enter your registered corporate email address and we will send password reset instructions to restore access.
+              Enter your registered corporate email address and we will send password reset instructions.
             </p>
 
             <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Corporate Email</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Corporate Email</label>
               <input 
                 type="email" 
                 required
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B73] bg-slate-50 text-slate-900"
                 placeholder="name@tata.com"
               />
             </div>
 
             <button 
               type="submit" 
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-md cursor-pointer"
+              className="w-full bg-[#002B49] text-white py-3 rounded-lg text-sm font-bold hover:bg-[#003B73] transition-colors shadow-md cursor-pointer"
             >
               Send Reset Instructions
             </button>
@@ -345,7 +349,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <button 
                 type="button" 
                 onClick={() => { setView('login'); resetMessages(); }}
-                className="text-xs text-slate-600 hover:text-indigo-600 flex items-center justify-center gap-1 mx-auto cursor-pointer font-medium"
+                className="text-xs text-slate-600 hover:text-[#003B73] flex items-center justify-center gap-1 mx-auto cursor-pointer font-bold"
               >
                 <ArrowLeft className="w-3 h-3" /> Back to Sign In
               </button>
@@ -353,8 +357,8 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
           </form>
         )}
 
-        <p className="text-[11px] text-center text-slate-400 leading-relaxed border-t border-slate-100 pt-4">
-          Authorized access only. All actions and document queries are audited for enterprise compliance.
+        <p className="text-[10px] text-center text-slate-400 leading-relaxed border-t border-slate-100 pt-4 font-mono">
+          Proprietary System of Tata Group. All activities audited for compliance.
         </p>
 
       </div>
