@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { BarChart3, ShieldAlert, Clock, CheckCircle2, AlertTriangle, ArrowUpRight } from 'lucide-react';
-const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
+import { BarChart3, ShieldAlert, Clock, CheckCircle2, AlertTriangle, ArrowUpRight, Award, Zap } from 'lucide-react';
 
+const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
 
 export const LegalOpsDashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<any>(null);
@@ -23,95 +23,134 @@ export const LegalOpsDashboard: React.FC = () => {
   }, []);
 
   if (loading) {
-    return <div className="p-6 text-slate-400 text-sm">Loading governance metrics and operational audit telemetry...</div>;
+    return <div className="p-8 text-slate-400 text-xs font-mono">Loading Tata Governance Telemetry & Audit Operations...</div>;
   }
 
   return (
-    <div className="space-y-6 p-6 bg-slate-900 min-h-screen text-slate-100 font-sans">
-      <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+    <div className="space-y-6 p-8 bg-[#001021] min-h-screen text-slate-100 font-sans max-w-7xl mx-auto">
+      
+      {/* Tata Corporate Header */}
+      <div className="flex justify-between items-center border-b border-[#002B49] pb-5">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Tata Legal Operations & Governance Dashboard</h1>
-          <p className="text-xs text-slate-400">Enterprise review throughput, risk taxonomy monitoring, and audit tracking.</p>
+          <div className="flex items-center gap-2 mb-1">
+            <Award className="w-4 h-4 text-[#00A3E0]" />
+            <span className="text-xs font-black uppercase tracking-widest text-[#00A3E0]">TATA GROUP TELEMETRY</span>
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-white">
+            Legal Operations & Governance Dashboard
+          </h1>
+          <p className="text-xs text-slate-400 mt-1">
+            Enterprise review throughput, risk taxonomy monitoring, and multi-tenant audit metrics.
+          </p>
         </div>
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-1">
-          <div className="flex justify-between text-slate-400 text-xs font-semibold uppercase">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+        
+        <div className="bg-[#00182C] border border-[#002B49] border-t-4 border-t-[#00A3E0] rounded-2xl p-5 shadow-lg space-y-2">
+          <div className="flex justify-between text-slate-400 text-[10px] font-black uppercase tracking-widest">
             <span>Processed Docs</span>
-            <BarChart3 className="w-4 h-4 text-indigo-400" />
+            <BarChart3 className="w-4 h-4 text-[#00A3E0]" />
           </div>
-          <div className="text-2xl font-bold">{metrics?.throughput?.total_documents_processed || 0}</div>
-          <p className="text-[11px] text-emerald-400 flex items-center gap-1">
-            <ArrowUpRight className="w-3 h-3" /> 100% OCR ingestion rate
+          <div className="text-3xl font-black text-white">{metrics?.throughput?.total_documents_processed || 0}</div>
+          <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+            <ArrowUpRight className="w-3 h-3" /> 100% Ingestion Rate
           </p>
         </div>
 
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-1">
-          <div className="flex justify-between text-slate-400 text-xs font-semibold uppercase">
+        <div className="bg-[#00182C] border border-[#002B49] border-t-4 border-t-rose-500 rounded-2xl p-5 shadow-lg space-y-2">
+          <div className="flex justify-between text-slate-400 text-[10px] font-black uppercase tracking-widest">
             <span>High-Risk Flags</span>
             <ShieldAlert className="w-4 h-4 text-rose-400" />
           </div>
-          <div className="text-2xl font-bold text-rose-400">{metrics?.risk_taxonomy_distribution?.HIGH || 0}</div>
-          <p className="text-[11px] text-slate-400">Requires senior counsel review</p>
+          <div className="text-3xl font-black text-rose-400">{metrics?.risk_taxonomy_distribution?.HIGH || 0}</div>
+          <p className="text-[11px] text-slate-400 font-medium">Requires senior counsel review</p>
         </div>
 
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-1">
-          <div className="flex justify-between text-slate-400 text-xs font-semibold uppercase">
+        <div className="bg-[#00182C] border border-[#002B49] border-t-4 border-t-amber-500 rounded-2xl p-5 shadow-lg space-y-2">
+          <div className="flex justify-between text-slate-400 text-[10px] font-black uppercase tracking-widest">
             <span>Turnaround Time</span>
             <Clock className="w-4 h-4 text-amber-400" />
           </div>
-          <div className="text-2xl font-bold">{metrics?.throughput?.review_turnaround_hours || 1.4} hrs</div>
-          <p className="text-[11px] text-slate-400">First-pass automated summary speed</p>
+          <div className="text-3xl font-black text-white">{metrics?.throughput?.review_turnaround_hours || 1.4} hrs</div>
+          <p className="text-[11px] text-slate-400 font-medium">First-pass automated review speed</p>
         </div>
 
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-1">
-          <div className="flex justify-between text-slate-400 text-xs font-semibold uppercase">
+        <div className="bg-[#00182C] border border-[#002B49] border-t-4 border-t-emerald-500 rounded-2xl p-5 shadow-lg space-y-2">
+          <div className="flex justify-between text-slate-400 text-[10px] font-black uppercase tracking-widest">
             <span>Governance Actions</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-2xl font-bold text-emerald-400">{metrics?.governance_actions?.total_approved || 0}</div>
-          <p className="text-[11px] text-slate-400">Signed off by authorized reviewers</p>
+          <div className="text-3xl font-black text-emerald-400">{metrics?.governance_actions?.total_approved || 0}</div>
+          <p className="text-[11px] text-slate-400 font-medium">Approved by counsel</p>
         </div>
+
       </div>
 
-      {/* Risk and Business Unit Breakdown Table */}
+      {/* Breakdown Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Risk Taxonomy Breakdown</h2>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-700">
-              <span className="text-rose-400 font-medium flex items-center gap-2"><AlertTriangle className="w-4 h-4"/> High Severity Risks</span>
-              <span className="font-bold">{metrics?.risk_taxonomy_distribution?.HIGH || 0}</span>
+        
+        {/* Risk Breakdown */}
+        <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 space-y-4 shadow-xl">
+          <h2 className="text-xs font-black uppercase tracking-widest text-[#00A3E0] flex items-center gap-2">
+            <Zap className="w-4 h-4" /> Risk Taxonomy Distribution
+          </h2>
+          <div className="space-y-3 text-xs font-medium">
+            <div className="flex justify-between items-center p-3 bg-[#001021] rounded-xl border border-[#002B49]">
+              <span className="text-rose-400 font-bold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4"/> High Severity Risks
+              </span>
+              <span className="font-black text-sm px-2.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                {metrics?.risk_taxonomy_distribution?.HIGH || 0}
+              </span>
             </div>
-            <div className="flex justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-700">
-              <span className="text-amber-400 font-medium flex items-center gap-2"><AlertTriangle className="w-4 h-4"/> Medium Severity Risks</span>
-              <span className="font-bold">{metrics?.risk_taxonomy_distribution?.MEDIUM || 0}</span>
+            
+            <div className="flex justify-between items-center p-3 bg-[#001021] rounded-xl border border-[#002B49]">
+              <span className="text-amber-400 font-bold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4"/> Medium Severity Risks
+              </span>
+              <span className="font-black text-sm px-2.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                {metrics?.risk_taxonomy_distribution?.MEDIUM || 0}
+              </span>
             </div>
-            <div className="flex justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-700">
-              <span className="text-emerald-400 font-medium flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/> Low Risk Clauses</span>
-              <span className="font-bold">{metrics?.risk_taxonomy_distribution?.LOW || 0}</span>
+
+            <div className="flex justify-between items-center p-3 bg-[#001021] rounded-xl border border-[#002B49]">
+              <span className="text-emerald-400 font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4"/> Low Risk Clauses
+              </span>
+              <span className="font-black text-sm px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                {metrics?.risk_taxonomy_distribution?.LOW || 0}
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Business Unit Distribution</h2>
-          <div className="space-y-2 text-sm">
+        {/* Business Unit Breakdown */}
+        <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 space-y-4 shadow-xl">
+          <h2 className="text-xs font-black uppercase tracking-widest text-[#00A3E0] flex items-center gap-2">
+            <Award className="w-4 h-4" /> Business Unit Volume
+          </h2>
+          <div className="space-y-3 text-xs font-medium">
             {metrics?.business_unit_breakdown && Object.keys(metrics.business_unit_breakdown).length > 0 ? (
               Object.entries(metrics.business_unit_breakdown).map(([unit, count]: [string, any]) => (
-                <div key={unit} className="flex justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-700">
-                  <span className="text-slate-300">{unit}</span>
-                  <span className="font-bold bg-indigo-900 text-indigo-200 px-2.5 py-0.5 rounded text-xs">{count} Docs</span>
+                <div key={unit} className="flex justify-between items-center p-3 bg-[#001021] rounded-xl border border-[#002B49]">
+                  <span className="text-slate-200 font-semibold">{unit}</span>
+                  <span className="font-bold bg-[#002B49] text-[#00A3E0] px-3 py-1 rounded-lg text-xs border border-[#004B87]">
+                    {count} Docs
+                  </span>
                 </div>
               ))
             ) : (
-              <div className="text-slate-500 text-xs py-4 text-center">No business unit documents indexed yet.</div>
+              <div className="text-slate-500 text-xs py-8 text-center bg-[#001021] rounded-xl border border-dashed border-[#002B49]">
+                No business unit documents indexed yet.
+              </div>
             )}
           </div>
         </div>
+
       </div>
+
     </div>
   );
 };
