@@ -7,7 +7,8 @@ from pydantic import BaseModel
 # Internal Imports
 from backend.database import get_db
 from backend.models import DocumentModel, ClauseModel, AuditLogModel, UserModel
-from backend.api.v1.auth import get_current_user  # JWT Security dependency
+# IMPORT CENTRALIZED AUTH DEPENDENCY (Fixes the 401 Unauthorized key mismatch)
+from backend.api.v1.auth import get_current_user  
 
 router = APIRouter()
 
@@ -36,7 +37,7 @@ async def get_review_history(
     current_user: UserModel = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """Returns review history strictly isolated by the authenticated user (unless Admin)."""
+    """Returns review history strictly isolated by the authenticated user's email."""
     try:
         query = db.query(AuditLogModel)
         
@@ -99,7 +100,6 @@ async def process_review_action(
 
     comment_text = payload.comment or payload.comments or f"Document reviewed with status: {action_upper}"
 
-    # Handle inline clause edits if present
     if action_upper == "EDIT" and payload.edited_clauses:
         for updated_clause in payload.edited_clauses:
             clause_id = updated_clause.get("id")
@@ -139,7 +139,7 @@ async def process_review_action(
 
 
 # ==================== ADMIN GOVERNANCE ENDPOINTS ====================
-# Mounted at: /api/v1/review/admin/documents
+
 @router.get("/admin/documents")
 async def get_admin_all_documents(
     current_user: UserModel = Depends(get_current_user),
@@ -195,7 +195,6 @@ async def get_admin_all_documents(
     return {"total_documents": len(result), "documents": result}
 
 
-# Mounted at: /api/v1/review/admin/review/action
 @router.post("/admin/review/action")
 async def execute_admin_review_action(
     payload: AdminActionRequest,
