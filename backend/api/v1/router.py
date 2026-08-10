@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from . import documents, governance, auth, chat, review, monitoring, risk_review, knowledge_base #, summary_api
+from . import documents, governance, auth, chat, review, monitoring, risk_review, knowledge_base
 
 api_router = APIRouter()
 
@@ -12,4 +12,3 @@ api_router.include_router(chat.router, prefix="/chat", tags=["Aadhya Legal Chat 
 api_router.include_router(monitoring.router, prefix="/monitoring", tags=["Legal Operations Telemetry"])
 api_router.include_router(risk_review.router, prefix="/risk", tags=["Risk Review & Clause Intelligence"])
 api_router.include_router(knowledge_base.router, prefix="/kb", tags=["Knowledge Base & Policies"])
-# api_router.include_router(summary_api.router, prefix="/summary", tags=["Executive Summary"])
