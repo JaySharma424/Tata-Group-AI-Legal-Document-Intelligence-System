@@ -42,31 +42,28 @@ class AdminActionRequest(BaseModel):
     comments: Optional[str] = ""
 
 
-# ==================== USER REVIEW & HISTORY ROUTES ====================
+# ==================== USER REVIEW & ISOLATED HISTORY ROUTES ====================
 
 @router.get("/history")
 async def get_review_history(
     current_user: UserModel = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """Returns review history isolated by user email unless requested by an Admin."""
+    """Returns personal review history strictly isolated by the authenticated user's email."""
     try:
-        query = db.query(AuditLogModel)
-        
-        # Admin sees all records; regular users see only their own
-        if not check_is_admin(current_user):
-            query = query.filter(AuditLogModel.user_email == current_user.email)
-
-        audits = query.order_by(AuditLogModel.timestamp.desc()).limit(50).all()
+        # STRICT ISOLATION: Always filter sidebar history by current user's email
+        audits = db.query(AuditLogModel).filter(
+            AuditLogModel.user_email == current_user.email
+        ).order_by(AuditLogModel.timestamp.desc()).limit(50).all()
     except Exception:
         audits = []
 
     history_list = []
     for idx, a in enumerate(audits, start=1):
-        job_id_val = a.job_id or getattr(a, 'document_id', None) or f"job-{idx}"
+        job_id_val = a.job_id or f"job-{idx}"
         doc = db.query(DocumentModel).filter(DocumentModel.job_id == job_id_val).first()
         file_name_val = getattr(doc, 'filename', None) or getattr(doc, 'file_name', None) or "Analyzed Contract.pdf"
-        timestamp_str = a.timestamp.isoformat() if a.timestamp else str(datetime.datetime.utcnow())
+        timestamp_str = a.timestamp.isoformat() if hasattr(a, 'timestamp') and a.timestamp else str(datetime.datetime.utcnow())
         
         history_list.append({
             "id": str(a.id),
@@ -124,7 +121,7 @@ async def process_review_action(
                     db_clause.edited_at = datetime.datetime.utcnow()
                     db_clause.edited_by = current_user.id
 
-    # Update document status
+    # Update document status for Admin Portal visibility
     doc.status = action_upper
     if action_upper == "ESCALATE":
         doc.requires_manual_review = True
@@ -165,52 +162,60 @@ async def get_admin_all_documents(
             detail="Access denied. Admin credentials required."
         )
 
-    documents = db.query(DocumentModel).order_by(DocumentModel.created_at.desc()).all()
+    try:
+        documents = db.query(DocumentModel).order_by(DocumentModel.created_at.desc()).all()
+    except Exception:
+        documents = []
 
     result = []
     for doc in documents:
-        audit_logs = db.query(AuditLogModel).filter(
-            (AuditLogModel.job_id == doc.job_id) | (AuditLogModel.document_id == doc.job_id)
-        ).order_by(AuditLogModel.timestamp.desc()).all()
-        
-        latest_action = getattr(doc, 'status', None) or (audit_logs[0].action if audit_logs else "PENDING_REVIEW")
+        try:
+            job_id = getattr(doc, 'job_id', str(doc.id) if hasattr(doc, 'id') else '')
+            audit_logs = db.query(AuditLogModel).filter(
+                AuditLogModel.job_id == job_id
+            ).order_by(AuditLogModel.timestamp.desc()).all()
+            
+            latest_action = getattr(doc, 'status', None) or (audit_logs[0].action if audit_logs else "PENDING_REVIEW")
 
-        high_risk_count = db.query(ClauseModel).filter(
-            ClauseModel.job_id == doc.job_id, 
-            ClauseModel.risk_level == "HIGH"
-        ).count()
-        total_clauses = db.query(ClauseModel).filter(ClauseModel.job_id == doc.job_id).count()
+            high_risk_count = db.query(ClauseModel).filter(
+                ClauseModel.job_id == job_id, 
+                ClauseModel.risk_level == "HIGH"
+            ).count()
+            total_clauses = db.query(ClauseModel).filter(ClauseModel.job_id == job_id).count()
 
-        uploader_email = getattr(doc, 'uploaded_by', None) or getattr(doc, 'uploader_email', None) or "Unknown User"
-        filename = getattr(doc, 'filename', None) or getattr(doc, 'file_name', None) or "Analyzed Contract.pdf"
-        pages = getattr(doc, 'pages', None) or getattr(doc, 'page_count', 1)
+            uploader = getattr(doc, 'uploaded_by', None) or getattr(doc, 'uploader_email', None) or "User"
+            filename = getattr(doc, 'filename', None) or getattr(doc, 'file_name', None) or "Contract.pdf"
+            pages = getattr(doc, 'pages', None) or getattr(doc, 'page_count', 1)
 
-        result.append({
-            "job_id": doc.job_id,
-            "file_name": filename,
-            "uploader_email": uploader_email,
-            "business_unit": doc.business_unit or "Enterprise Legal",
-            "document_category": getattr(doc, 'document_category', "Vendor Agreement"),
-            "document_type": getattr(doc, 'document_type', "Master Services Agreement"),
-            "confidentiality_level": getattr(doc, 'confidentiality_level', "Confidential"),
-            "review_priority": getattr(doc, 'review_priority', "Normal"),
-            "requires_manual_review": getattr(doc, 'requires_manual_review', False),
-            "created_at": doc.created_at.isoformat() if hasattr(doc, 'created_at') and doc.created_at else str(datetime.datetime.utcnow()),
-            "status": latest_action,
-            "ocr_confidence": getattr(doc, 'ocr_confidence', 95.0),
-            "page_count": pages,
-            "high_risk_count": high_risk_count,
-            "total_clauses": total_clauses,
-            "audit_trail": [
-                {
-                    "id": getattr(log, 'id', 0),
-                    "action": log.action,
-                    "user_email": getattr(log, 'user_email', uploader_email),
-                    "notes": getattr(log, 'notes', None) or getattr(log, 'reviewer_comment', None) or getattr(log, 'comments', None) or "",
-                    "timestamp": log.timestamp.isoformat() if hasattr(log, 'timestamp') and log.timestamp else str(datetime.datetime.utcnow())
-                } for log in audit_logs
-            ]
-        })
+            result.append({
+                "job_id": job_id,
+                "file_name": filename,
+                "uploader_email": uploader,
+                "business_unit": getattr(doc, 'business_unit', "Enterprise Legal") or "Enterprise Legal",
+                "document_category": getattr(doc, 'document_category', "Vendor Agreement") or "Vendor Agreement",
+                "document_type": getattr(doc, 'document_type', "Master Services Agreement") or "Master Services Agreement",
+                "confidentiality_level": getattr(doc, 'confidentiality_level', "Confidential") or "Confidential",
+                "review_priority": getattr(doc, 'review_priority', "Normal") or "Normal",
+                "requires_manual_review": getattr(doc, 'requires_manual_review', False),
+                "created_at": doc.created_at.isoformat() if hasattr(doc, 'created_at') and doc.created_at else str(datetime.datetime.utcnow()),
+                "status": latest_action,
+                "ocr_confidence": getattr(doc, 'ocr_confidence', 95.0) or 95.0,
+                "page_count": pages,
+                "high_risk_count": high_risk_count,
+                "total_clauses": total_clauses,
+                "audit_trail": [
+                    {
+                        "id": getattr(log, 'id', 0),
+                        "action": getattr(log, 'action', 'PENDING'),
+                        "user_email": getattr(log, 'user_email', uploader),
+                        "notes": getattr(log, 'notes', '') or getattr(log, 'reviewer_comment', '') or "",
+                        "timestamp": log.timestamp.isoformat() if hasattr(log, 'timestamp') and log.timestamp else str(datetime.datetime.utcnow())
+                    } for log in audit_logs
+                ]
+            })
+        except Exception as inner_e:
+            print(f"Error parsing document row: {inner_e}")
+            continue
 
     return {"total_documents": len(result), "documents": result}
 
