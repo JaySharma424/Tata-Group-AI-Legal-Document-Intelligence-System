@@ -65,7 +65,7 @@ export const AdminPortal: React.FC = () => {
   const handleAdminAction = async (docId: string, action: 'ACCEPT' | 'REJECT' | 'MANUAL_REVIEW') => {
     setActionSubmitting(docId);
     try {
-      const currentUser = localStorage.getItem('user_email') || 'admin@tata.com';
+      const currentUser = sessionStorage.getItem('user_email') || 'admin@tata.com';
       
       await axios.post(`${API_BASE_URL}/api/v1/review/admin/review/action`, {
         job_id: docId,

@@ -29,7 +29,7 @@ This repository contains the **Frontend Client** for the Tata AI Legal Intellige
 ## 📂 Key Component Structure
 
 *   `src/App.tsx`: The main layout container. Manages the global authentication state, applies Axios interceptors, and orchestrates the layout (Header, Sidebar, Workspace, Chat).
-*   `src/components/AuthGate.tsx`: The entry point for unauthenticated users. Captures login credentials and stores the JWT in `localStorage`.
+*   `src/components/AuthGate.tsx`: The entry point for unauthenticated users. Captures login credentials and stores the JWT in `sessionStorage`.
 *   `src/components/DocumentWorkspace.tsx`: The core UI where users upload files, view the extracted RAG Risk Matrix, accept/reject documents, and download the audit PDF.
 *   `src/components/DocumentHistorySidebar.tsx`: A side navigation panel that fetches and displays the user's secure audit archive.
 *   `src/components/LegalChatWidget.tsx`: A persistent, interactive chat window for querying the Aadhya AI assistant.

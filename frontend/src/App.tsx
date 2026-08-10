@@ -9,7 +9,7 @@ import { User, Settings, LogOut, X, CheckCircle2, Award, ShieldAlert, FileText, 
 
 // Global Axios Interceptors
 axios.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
+  const token = sessionStorage.getItem('access_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -23,27 +23,27 @@ function App() {
   const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('access_token');
+    const storedUser = sessionStorage.getItem('user');
+    const token = sessionStorage.getItem('access_token');
     if (storedUser && token) {
       setUser(JSON.parse(storedUser));
     }
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
+    sessionStorage.removeItem('access_token');
+    sessionStorage.removeItem('user');
     setUser(null);
     setClickedJobId(null);
   };
 
   const handleLoginSuccess = (arg1: any, arg2?: any) => {
-    let token = arg2 ? arg1 : (arg1?.access_token || localStorage.getItem('access_token') || '');
+    let token = arg2 ? arg1 : (arg1?.access_token || sessionStorage.getItem('access_token') || '');
     let userData = arg2 ? arg2 : (arg1?.user || arg1);
 
-    if (token) localStorage.setItem('access_token', token);
+    if (token) sessionStorage.setItem('access_token', token);
     if (userData) {
-      localStorage.setItem('user', JSON.stringify(userData));
+      sessionStorage.setItem('user', JSON.stringify(userData));
       setUser(userData);
     }
     setClickedJobId(null);

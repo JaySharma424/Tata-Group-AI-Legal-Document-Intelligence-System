@@ -21,14 +21,14 @@ const getSessionUser = () => {
   const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/;
   const keys = ['user_email', 'email', 'user', 'currentUser', 'session', 'auth'];
   for (const k of keys) {
-    const val = localStorage.getItem(k) || sessionStorage.getItem(k);
+    const val = sessionStorage.getItem(k) || sessionStorage.getItem(k);
     if (val) {
       const match = val.match(emailRegex);
       if (match) return match[1];
     }
   }
-  for (let i = 0; i < localStorage.length; i++) {
-    const val = localStorage.getItem(localStorage.key(i) || '');
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const val = sessionStorage.getItem(sessionStorage.key(i) || '');
     if (val) {
       const match = val.match(emailRegex);
       if (match) return match[1];

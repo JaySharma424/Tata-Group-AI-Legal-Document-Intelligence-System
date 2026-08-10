@@ -70,8 +70,8 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
           businessUnit: 'Enterprise Legal' 
         };
         
-        localStorage.setItem('access_token', token);
-        localStorage.setItem('user', JSON.stringify(userData));
+        sessionStorage.setItem('access_token', token);
+        sessionStorage.setItem('user', JSON.stringify(userData));
 
         if (onLoginSuccess) {
           onLoginSuccess(token, userData);
