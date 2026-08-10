@@ -1,8 +1,7 @@
 import os
-import subprocess
 import pandas as pd
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -12,18 +11,23 @@ from backend.api.v1.auth import get_current_user
 
 router = APIRouter()
 
-SCORECARD_CSV_PATH = "tests/ai_output_tests/ragas_gemini_scorecard.csv"
+SCORECARD_CSV_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "tests", "ai_output_tests", "ragas_gemini_scorecard.csv"
+)
 
 # -------------------------------------------------------------------------
-# BACKGROUND TASK RUNNER
+# DIRECT IN-MEMORY BACKGROUND TASK RUNNER (No Subprocess needed)
 # -------------------------------------------------------------------------
 def execute_ragas_async():
-    """Runs the Gemini-native RAGAS evaluation script in a background worker process."""
+    """Executes the Gemini RAGAS evaluation directly inside Python."""
     try:
-        subprocess.run(["python", "tests/ai_output_tests/ragas_eval_gemini.py"], check=True)
+        from tests.ai_output_tests.ragas_eval_gemini import run_evaluation
+        run_evaluation()
         print("✅ Background RAGAS evaluation completed successfully.")
     except Exception as e:
         print(f"❌ Background RAGAS evaluation failed: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # -------------------------------------------------------------------------
@@ -100,7 +104,6 @@ async def get_ragas_results():
         df = pd.read_csv(SCORECARD_CSV_PATH)
         records = df.to_dict(orient="records")
         
-        # Calculate overall averages
         avg_scores = {
             "faithfulness": round(float(df["faithfulness"].mean()), 4) if "faithfulness" in df else None,
             "context_precision": round(float(df["context_precision"].mean()), 4) if "context_precision" in df else None,

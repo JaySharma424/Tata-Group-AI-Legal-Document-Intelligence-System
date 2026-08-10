@@ -41,5 +41,8 @@ reportlab
 pandas
 python-dotenv
 
-ragas>=0.1.0
-datasets>=2.19.0
+ragas
+datasets
+pandas
+langchain-community
+langchain-google-vertexai
