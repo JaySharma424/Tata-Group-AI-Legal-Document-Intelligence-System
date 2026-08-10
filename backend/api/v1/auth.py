@@ -2,14 +2,14 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+
 from backend.database import get_db
 from backend.models import UserModel, SessionModel
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 # Security Configuration
 SECRET_KEY = "tata_enterprise_secure_legal_intelligence_platform_secret_key_2026_safe"
@@ -32,6 +32,11 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+class ProfileUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
+    new_password: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str
@@ -72,6 +77,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     return user
 
 # --- Endpoints ---
+
 @router.post("/register", response_model=Token)
 async def register(user: UserRegister, db: Session = Depends(get_db)):
     existing_user = db.query(UserModel).filter(UserModel.email == user.email).first()
@@ -89,12 +95,20 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     
-    access_token = create_access_token(data={"sub": new_user.email, "role": new_user.role}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    access_token = create_access_token(
+        data={"sub": new_user.email, "role": new_user.role}, 
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     
     return {
         "access_token": access_token, 
         "token_type": "bearer",
-        "user": {"email": new_user.email, "full_name": new_user.full_name, "role": new_user.role, "business_unit": new_user.business_unit}
+        "user": {
+            "email": new_user.email, 
+            "full_name": new_user.full_name, 
+            "role": new_user.role, 
+            "business_unit": new_user.business_unit
+        }
     }
 
 @router.post("/login", response_model=Token)
@@ -106,15 +120,53 @@ async def login(user_credentials: OAuth2PasswordRequestForm = Depends(), db: Ses
     user.last_login = datetime.utcnow()
     db.commit()
     
-    access_token = create_access_token(data={"sub": user.email, "role": user.role}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    access_token = create_access_token(
+        data={"sub": user.email, "role": user.role}, 
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     
     return {
-    "access_token": access_token,
-    "token_type": "bearer",
-    "user": {
-        "email": user.email,
-        "full_name": user.full_name,
-        "role": user.role,
-        "business_unit": user.business_unit
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "email": user.email,
+            "full_name": user.full_name,
+            "role": user.role,
+            "business_unit": user.business_unit
+        }
     }
-}
+
+@router.put("/profile")
+async def update_profile(
+    profile_data: ProfileUpdate, 
+    current_user: UserModel = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    """
+    Updates authenticated user's display name and/or password in the database.
+    """
+    user = db.query(UserModel).filter(UserModel.email == current_user.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Update Name
+    if profile_data.full_name and profile_data.full_name.strip():
+        user.full_name = profile_data.full_name.strip()
+
+    # Update Password
+    if profile_data.new_password and profile_data.new_password.strip():
+        user.password = get_password_hash(profile_data.new_password.strip())
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "status": "success",
+        "message": "Profile updated successfully in database",
+        "user": {
+            "email": user.email,
+            "full_name": user.full_name,
+            "role": user.role,
+            "business_unit": user.business_unit
+        }
+    }
