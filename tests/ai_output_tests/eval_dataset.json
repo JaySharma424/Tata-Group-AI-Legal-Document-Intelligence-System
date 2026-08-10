@@ -1,0 +1,19 @@
+[
+  {
+    "user_input": "Evaluate clause for risk: 'Vendor shall be the exclusive provider of technical support services to the Client for a duration of five (5) years without termination for convenience rights.'",
+    "retrieved_contexts": [
+      "KB-POLICY-EXCLUSIVITY-001: Tata Group procurement guidelines strictly prohibit multi-year single-vendor exclusivity arrangements without explicit waiver from General Counsel. Exclusivity agreements exceeding 2 years are classified as HIGH RISK.",
+      "KB-POLICY-TERM-002: Contracts lacking standard termination for convenience upon 30-day notice create operational lock-in and must be flagged as HIGH RISK."
+    ],
+    "response": "RISK: HIGH. Rationale: This clause creates an exclusive vendor relationship for 5 years without a termination for convenience mechanism. This directly violates Tata Group procurement policy KB-POLICY-EXCLUSIVITY-001 and KB-POLICY-TERM-002 regarding vendor lock-in exposure.",
+    "ground_truth": "RISK: HIGH. The 5-year exclusivity without convenience termination violates Tata Group procurement policies KB-POLICY-EXCLUSIVITY-001 and KB-POLICY-TERM-002 due to severe operational lock-in and restriction of alternative supplier engagement."
+  },
+  {
+    "user_input": "Evaluate clause for risk: 'Client shall pay all undisputed vendor invoices within Net 60 days of receipt. Late payments shall accrue an interest penalty of 1% per month.'",
+    "retrieved_contexts": [
+      "KB-POLICY-PAYMENT-005: Standard payment terms for commercial contracts are Net 60 days. Late payment interest capped at 1% per month (12% per annum) or SOFR equivalent is acceptable and classified as LOW RISK."
+    ],
+    "response": "RISK: LOW. Rationale: Net 60 payment terms and 1% monthly late penalty align with standard financial governance policies under KB-POLICY-PAYMENT-005.",
+    "ground_truth": "RISK: LOW. The Net 60 payment timeline and 1% monthly interest rate are fully compliant with Tata Group standard financial governance policy KB-POLICY-PAYMENT-005."
+  }
+]
