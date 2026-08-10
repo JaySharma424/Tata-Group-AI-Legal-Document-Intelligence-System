@@ -1,155 +1,144 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { FileText, CheckCircle, XCircle, RefreshCw, Award, ShieldCheck, Clock } from 'lucide-react';
+import { History, FileText, CheckCircle, XCircle, RefreshCw, AlertCircle } from 'lucide-react';
 
-interface SidebarProps {
-  userEmail?: string;
-  refreshTrigger?: number;
-  onSelectDocument: (jobId: string) => void;
-}
-
-interface AuditRecord {
+interface HistoryItem {
   id: string;
   document_id: string;
   file_name: string;
-  action: 'ACCEPT' | 'REJECT' | 'ESCALATE';
+  action: string;
   timestamp: string;
-  reviewer_email: string;
+  reviewer_email?: string;
 }
 
-const getSessionUser = () => {
-  const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/;
-  const keys = ['user_email', 'email', 'user', 'currentUser', 'session', 'auth'];
-  for (const k of keys) {
-    const val = sessionStorage.getItem(k) || sessionStorage.getItem(k);
-    if (val) {
-      const match = val.match(emailRegex);
-      if (match) return match[1];
-    }
-  }
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const val = sessionStorage.getItem(sessionStorage.key(i) || '');
-    if (val) {
-      const match = val.match(emailRegex);
-      if (match) return match[1];
-    }
-  }
-  return "demo1@tata.com";
-};
+interface SidebarProps {
+  onSelectDocument?: (jobId: string) => void;
+}
+
+const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
 
 export const DocumentHistorySidebar: React.FC<SidebarProps> = ({ onSelectDocument }) => {
-  const [history, setHistory] = useState<AuditRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const currentUser = getSessionUser();
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchHistory = async () => {
-    setIsLoading(true);
     try {
-      const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
-      const response = await axios.get(`${API_BASE_URL}/api/v1/review/history`);
-      setHistory(response.data.history || []);
+      const token = sessionStorage.getItem('access_token');
+      const response = await axios.get(`${API_BASE_URL}/api/v1/review/history`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setHistory(response.data?.history || []);
     } catch (error) {
-      console.error("Failed to fetch document history:", error);
+      console.error('Failed to load document history:', error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchHistory();
-    const interval = setInterval(fetchHistory, 5000); 
-    return () => clearInterval(interval);
-  }, [currentUser]); 
 
-  const formatDate = (isoString: string) => {
-    const date = new Date(isoString);
-    return new Intl.DateTimeFormat('en-US', { 
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
-    }).format(date);
+    // 1. Listen for instant updates when Accept/Reject/Upload happens
+    const handleAuditUpdate = () => fetchHistory();
+    window.addEventListener('audit_updated', handleAuditUpdate);
+
+    // 2. Poll every 5 seconds for live database sync
+    const interval = setInterval(fetchHistory, 5000);
+
+    return () => {
+      window.removeEventListener('audit_updated', handleAuditUpdate);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Helper to format ISO timestamps cleanly (e.g., Aug 11, 03:15 AM)
+  const formatTimestamp = (rawTs: string) => {
+    if (!rawTs) return 'Just now';
+    try {
+      const date = new Date(rawTs);
+      if (isNaN(date.getTime())) return rawTs;
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
+      }) + ', ' + date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return rawTs;
+    }
   };
 
   return (
-    <div className="w-80 bg-[#001021] border-r border-[#002B49] h-screen flex flex-col font-sans select-none shadow-2xl z-10">
+    <aside className="w-72 bg-[#001021] border-r border-[#002B49] flex flex-col h-full text-slate-300 font-sans select-none shrink-0">
       
-      {/* Tata Corporate Sidebar Header */}
-      <div className="p-5 border-b border-[#002B49] bg-[#00182C] space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-[#002B49] rounded-lg border border-[#004B87]">
-              <Award className="w-4 h-4 text-[#00A3E0]" />
-            </div>
-            <div>
-              <span className="text-[9px] font-black uppercase tracking-widest text-[#00A3E0] block leading-none">
-                TATA GROUP
-              </span>
-              <h2 className="text-xs font-bold text-white tracking-tight mt-0.5">
-                Audit & History Archive
-              </h2>
-            </div>
+      {/* Sidebar Header */}
+      <div className="p-4 border-b border-[#002B49] flex items-center justify-between bg-[#001426]">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-[#002B49] rounded-lg border border-[#004B87]">
+            <History className="w-4 h-4 text-[#00A3E0]" />
           </div>
-
-          <button 
-            onClick={fetchHistory} 
-            title="Refresh History"
-            className={`p-1.5 bg-[#002B49] border border-[#004B87] text-slate-300 hover:text-white rounded-lg transition-all cursor-pointer ${isLoading ? 'animate-spin' : ''}`}
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-[#00A3E0]" />
-          </button>
+          <div>
+            <h2 className="text-xs font-black text-white tracking-wider uppercase">TATA GROUP</h2>
+            <p className="text-[10px] font-bold text-[#00A3E0] uppercase tracking-widest">Audit & History Archive</p>
+          </div>
         </div>
-
-        <div className="bg-[#001021] p-2.5 rounded-xl border border-[#002B49] flex items-center justify-between">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <ShieldCheck className="w-3 h-3 text-[#00A3E0]" /> Reviewer Scoped
-          </span>
-          <span className="text-[10px] font-mono text-[#00A3E0] truncate max-w-[120px]" title={currentUser}>
-            {currentUser}
-          </span>
-        </div>
+        <button 
+          onClick={fetchHistory} 
+          className="p-1.5 hover:bg-[#002B49] text-slate-400 hover:text-[#00A3E0] rounded-lg transition-colors cursor-pointer"
+          title="Refresh History"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#00A3E0]' : ''}`} />
+        </button>
       </div>
 
-      {/* History Cards Container */}
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-3">
+      {/* History Items Container */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2.5 custom-scrollbar">
         {history.length === 0 ? (
-          <div className="text-center p-8 border border-dashed border-[#002B49] rounded-2xl bg-[#00182C]">
-            <Clock className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+          <div className="text-center py-10 px-4 space-y-2">
+            <FileText className="w-8 h-8 text-slate-600 mx-auto opacity-50" />
             <p className="text-xs text-slate-400 font-bold">No Audit History</p>
-            <p className="text-[10px] text-slate-500 mt-1">Processed contracts will log here automatically.</p>
+            <p className="text-[10px] text-slate-500">Processed contracts will log here automatically.</p>
           </div>
         ) : (
-          history.map((record) => {
-            const isApproved = record.action === 'ACCEPT';
-            
+          history.map((item) => {
+            const actionUpper = item.action.toUpperCase();
+            const isAccept = actionUpper.includes('ACCEPT');
+            const isReject = actionUpper.includes('REJECT');
+            const isManual = actionUpper.includes('MANUAL') || actionUpper.includes('ESCALATE');
+
             return (
               <div 
-                key={record.id}
-                onClick={() => onSelectDocument(record.document_id)} 
-                className="bg-[#00182C] border border-[#002B49] hover:border-[#00A3E0]/50 rounded-xl p-3.5 shadow-lg hover:bg-[#002340] transition-all duration-200 cursor-pointer group relative overflow-hidden"
+                key={item.id}
+                onClick={() => onSelectDocument && onSelectDocument(item.document_id)}
+                className="bg-[#00182C] hover:bg-[#002340] border border-[#002B49] hover:border-[#004B87] p-3 rounded-xl transition-all cursor-pointer shadow-md space-y-2 group"
               >
-                {/* Active Hover Glow */}
-                <div className="absolute top-0 left-0 bottom-0 w-1 bg-[#00A3E0] opacity-0 group-hover:opacity-100 transition-opacity"></div>
-
-                <div className="flex items-start justify-between gap-2 mb-2.5">
-                  <div className="flex items-start gap-2 overflow-hidden">
-                    <div className="p-1 bg-[#001021] rounded border border-[#002B49] mt-0.5 shrink-0">
-                      <FileText className="w-3.5 h-3.5 text-[#00A3E0]" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-200 group-hover:text-white line-clamp-2 leading-tight">
-                      {record.file_name}
-                    </span>
+                <div className="flex items-start gap-2">
+                  <FileText className="w-4 h-4 text-[#00A3E0] shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-white truncate group-hover:text-[#00A3E0] transition-colors">
+                      {item.file_name}
+                    </p>
+                    <p className="text-[9px] font-mono text-slate-500 truncate mt-0.5">
+                      ID: {item.document_id}
+                    </p>
                   </div>
                 </div>
-                
-                <div className="flex items-center justify-between pt-2 border-t border-[#002B49]/60 text-[10px]">
-                  <span className={`font-black px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1 border ${
-                    isApproved 
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
-                      : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+
+                <div className="flex items-center justify-between pt-1 border-t border-[#002B49]/60">
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-black tracking-widest uppercase border flex items-center gap-1 ${
+                    isAccept ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                    isReject ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' :
+                    isManual ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+                    'bg-amber-500/10 text-amber-400 border-amber-500/30'
                   }`}>
-                    {isApproved ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                    {record.action}
+                    {isAccept ? <CheckCircle className="w-2.5 h-2.5" /> : isReject ? <XCircle className="w-2.5 h-2.5" /> : <AlertCircle className="w-2.5 h-2.5" />}
+                    {actionUpper}
                   </span>
-                  <span className="text-slate-400 font-mono font-medium">
-                    {formatDate(record.timestamp)}
+
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {formatTimestamp(item.timestamp)}
                   </span>
                 </div>
               </div>
@@ -158,13 +147,9 @@ export const DocumentHistorySidebar: React.FC<SidebarProps> = ({ onSelectDocumen
         )}
       </div>
 
-      {/* Footer System Badge */}
-      <div className="p-3 bg-[#00182C] border-t border-[#002B49] text-center">
-        <p className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">
-          Tata Corporate Security • Encrypted
-        </p>
+      <div className="p-3 border-t border-[#002B49] bg-[#001426] text-[10px] text-slate-500 font-mono text-center">
+        🔒 ENTERPRISE AUDIT TRAIL LOG
       </div>
-
-    </div>
+    </aside>
   );
 };

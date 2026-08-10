@@ -103,6 +103,9 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       setAnalysisResult({ ...response.data, metrics: safeMetrics });
       setClauses(safeClauses);
 
+      // Trigger instant refresh of sidebar on new upload
+      window.dispatchEvent(new Event('audit_updated'));
+
     } catch (error) {
       console.error('Upload error:', error);
       alert('Failed to process document through backend pipeline.');
@@ -177,6 +180,10 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       });
 
       setReviewStatus(action);
+
+      // INSTANT REFRESH EVENT TRIGGER FOR SIDEBAR AND ADMIN PORTAL
+      window.dispatchEvent(new Event('audit_updated'));
+
       alert(`Success: Document ${action.toLowerCase()}ed and securely logged to Tata Audit Archive.`);
     } catch (error) {
       console.error("Audit logging failed:", error);
@@ -378,9 +385,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
       </div>
 
-      {/* ========================================================================= */}
-      {/* THREE-SURFACE NAVIGATION TAB SWITCHER (CLAUSES, PAGE OCR, PARSED SECTIONS) */}
-      {/* ========================================================================= */}
+      {/* THREE-SURFACE NAVIGATION TAB SWITCHER */}
       <div className="bg-[#00182C] border border-[#002B49] rounded-3xl p-8 shadow-2xl space-y-6">
         
         {/* Tab Header Bar */}
@@ -442,7 +447,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
                 const badgeBg = isHigh ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : isMed ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
                 const icon = isHigh ? <AlertTriangle className="w-3.5 h-3.5" /> : isMed ? <ShieldAlert className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />;
 
-                // RAG Reference Source (Requirement 1)
                 const ragReference = clause?.rag_reference_used || clause?.policy_citation || `KB-POLICY-${(clause?.clause_type || 'INDEMNITY').toUpperCase().replace(/\s+/g, '_')}-00${idx + 1}`;
 
                 return (
@@ -470,7 +474,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
                         {clause?.risk_rationale || 'Awaiting policy grounding evaluation...'}
                       </div>
 
-                      {/* REQUIREMENT 1: RAG REFERENCE SOURCE CITATION */}
                       <div className="flex items-center gap-2 pt-3 border-t border-[#002B49] text-xs">
                         <BookOpen className="w-4 h-4 text-[#00A3E0] shrink-0" />
                         <span className="font-mono text-slate-400">
@@ -495,7 +498,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           </div>
         )}
 
-        {/* TAB 2: PAGE-BY-PAGE OCR CONFIDENCE (Requirement 2) */}
+        {/* TAB 2: PAGE-BY-PAGE OCR CONFIDENCE */}
         {activeTab === 'ocr' && (
           <div className="space-y-4">
             <div className="bg-[#001021] p-4 rounded-xl border border-[#002B49] flex justify-between items-center text-xs">
@@ -521,7 +524,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
                     </span>
                   </div>
 
-                  {/* Meter Bar */}
                   <div className="w-full bg-[#00182C] h-2.5 rounded-full overflow-hidden border border-[#002B49]">
                     <div 
                       className={`h-full transition-all ${p.isHighQuality ? 'bg-emerald-400' : 'bg-amber-400'}`} 
@@ -539,7 +541,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           </div>
         )}
 
-        {/* TAB 3: PAGE-BY-PAGE PARSED SECTIONS (Requirement 3) */}
+        {/* TAB 3: PAGE-BY-PAGE PARSED SECTIONS */}
         {activeTab === 'parsing' && (
           <div className="space-y-4">
             <div className="bg-[#001021] p-4 rounded-xl border border-[#002B49] flex justify-between items-center text-xs">
