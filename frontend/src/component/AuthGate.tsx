@@ -26,7 +26,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [businessUnit, setBusinessUnit] = useState('Enterprise Legal');
-  const [role, setRole] = useState('Senior Reviewer');
+  const [role, setRole] = useState('Compliance Officer'); // Default standard operational role
   
   // Feedback Messages
   const [successMessage, setSuccessMessage] = useState('');
@@ -42,7 +42,6 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     resetMessages();
 
     try {
-      // Send standard OAuth2 Form Data directly
       const formData = new URLSearchParams();
       formData.append('username', email);
       formData.append('password', password);
@@ -66,7 +65,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
         const userData: UserData = data?.user || data?.data?.user || { 
           name: email.split('@')[0], 
           email, 
-          role: 'Senior Reviewer', 
+          role: 'Compliance Officer', 
           businessUnit: 'Enterprise Legal' 
         };
         
@@ -285,6 +284,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 </select>
               </div>
 
+              {/* SECURED ROLE SELECTOR: Standard Operational Roles Only */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Role</label>
                 <select 
@@ -292,9 +292,9 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                   onChange={(e) => setRole(e.target.value)}
                   className="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none bg-slate-50 text-slate-900 font-medium"
                 >
-                  <option value="Senior Reviewer">Senior Reviewer</option>
                   <option value="Compliance Officer">Compliance Officer</option>
-                  <option value="General Counsel">General Counsel</option>
+                  <option value="Procurement Specialist">Procurement Specialist</option>
+                  <option value="Legal Analyst">Legal Analyst</option>
                 </select>
               </div>
             </div>

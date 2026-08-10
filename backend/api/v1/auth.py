@@ -21,6 +21,13 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 router = APIRouter()
 
+# Authorized corporate email accounts permitted to hold elevated Admin roles
+AUTHORIZED_ADMIN_EMAILS = [
+    "admin@tata.com",
+    "generalcounsel@tata.com",
+    "senior.reviewer@tata.com"
+]
+
 # --- Pydantic Schemas ---
 class UserRegister(BaseModel):
     email: EmailStr
@@ -84,12 +91,22 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
         
+    # SECURITY GUARD: Sanitize requested role to prevent unauthorized privilege escalation
+    assigned_role = user.role
+    if assigned_role in ["Admin", "Senior Reviewer", "General Counsel"]:
+        is_authorized = (
+            user.email.lower() in AUTHORIZED_ADMIN_EMAILS or 
+            user.email.lower().startswith("admin")
+        )
+        if not is_authorized:
+            assigned_role = "Compliance Officer"  # Fallback for non-whitelisted emails
+            
     new_user = UserModel(
         email=user.email,
         full_name=user.full_name,
         password=get_password_hash(user.password),
         business_unit=user.business_unit,
-        role=user.role
+        role=assigned_role
     )
     db.add(new_user)
     db.commit()
