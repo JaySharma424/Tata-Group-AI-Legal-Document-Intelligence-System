@@ -5,8 +5,9 @@ import { DocumentWorkspace } from './component/DocumentWorkspace';
 import { AdminPortal } from './component/AdminPortal';
 import { AuthGate } from './component/AuthGate';
 import { LegalChatWidget } from './component/LegalChatWidget';
-import { User, Settings, LogOut, X, CheckCircle2, Award, ShieldAlert, FileText } from 'lucide-react';
+import { User, Settings, LogOut, X, CheckCircle2, Award, ShieldAlert, FileText, Lock } from 'lucide-react';
 
+// Global Axios Interceptors
 axios.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -52,10 +53,13 @@ function App() {
     return <AuthGate onLoginSuccess={handleLoginSuccess} />;
   }
 
-  const userEmail = user?.email || 'demo1@tata.com';
+  const userEmail = (user?.email || 'user@tata.com').toLowerCase();
   const userName = user?.full_name || user?.name || user?.username || 'Enterprise User';
   const userRole = user?.role || 'Compliance Officer';
   const userBU = user?.businessUnit || user?.business_unit || 'Enterprise Legal';
+
+  // Strict Role Guard: Only Admin, General Counsel, Senior Reviewer, or Admin email gets access
+  const isAdminUser = ['Admin', 'General Counsel', 'Senior Reviewer'].includes(userRole) || userEmail.includes('admin');
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#000D1A] text-slate-200 font-sans relative">
@@ -79,36 +83,40 @@ function App() {
               </div>
             </div>
 
-            {/* Navigation View Switch */}
-            <div className="flex bg-[#001021] border border-[#002B49] rounded-xl p-1 gap-1">
-              <button 
-                onClick={() => setActiveView('workspace')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
-                  activeView === 'workspace' 
-                    ? 'bg-[#002B49] text-[#00A3E0] border border-[#004B87]' 
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" /> Workspace
-              </button>
+            {/* Navigation View Switcher - Strictly Visible ONLY to Admin / Senior Roles */}
+            {isAdminUser && (
+              <div className="flex bg-[#001021] border border-[#002B49] rounded-xl p-1 gap-1">
+                <button 
+                  onClick={() => setActiveView('workspace')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                    activeView === 'workspace' 
+                      ? 'bg-[#002B49] text-[#00A3E0] border border-[#004B87]' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" /> Workspace
+                </button>
 
-              <button 
-                onClick={() => setActiveView('admin')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
-                  activeView === 'admin' 
-                    ? 'bg-[#002B49] text-[#00A3E0] border border-[#004B87]' 
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <ShieldAlert className="w-3.5 h-3.5" /> Admin Control Portal
-              </button>
-            </div>
+                <button 
+                  onClick={() => setActiveView('admin')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                    activeView === 'admin' 
+                      ? 'bg-[#002B49] text-[#00A3E0] border border-[#004B87]' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" /> Admin Control Portal
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-xs font-bold text-white tracking-wide">{userName}</p>
-              <p className="text-[10px] font-bold tracking-widest uppercase text-[#00A3E0]">{userRole} • {userBU}</p>
+              <p className="text-[10px] font-bold tracking-widest uppercase text-[#00A3E0]">
+                {userRole} • {userBU}
+              </p>
             </div>
             <div className="h-9 w-9 rounded-xl bg-[#002B49] border border-[#004B87] flex items-center justify-center text-[#00A3E0] font-black text-sm">
               {userName.charAt(0).toUpperCase()}
@@ -120,12 +128,12 @@ function App() {
           </div>
         </header>
 
-        {/* View Switch */}
+        {/* View Switch Logic with Security Check */}
         <div className="flex-1">
-          {activeView === 'workspace' ? (
-            <DocumentWorkspace selectedHistoryJobId={clickedJobId} />
-          ) : (
+          {activeView === 'admin' && isAdminUser ? (
             <AdminPortal />
+          ) : (
+            <DocumentWorkspace selectedHistoryJobId={clickedJobId} />
           )}
         </div>
       </main>
