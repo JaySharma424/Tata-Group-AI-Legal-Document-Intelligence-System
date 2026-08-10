@@ -1,38 +1,63 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from backend.api.v1.router import api_router
-from backend.database import engine, Base
-from backend import models
-from backend.api.v1 import monitoring
-from backend.api.v1 import risk_review
-from backend.api.v1 import chat
-from backend.api.v1 import auth  # IMPORT NEW AUTH ROUTER
+from fastapi.responses import JSONResponse
+import logging
 import os
 from dotenv import load_dotenv
 
+from backend.database import engine, Base
+from backend import models
+from backend.api.v1.router import api_router
+
 load_dotenv() 
 
-Base.metadata.create_all(bind=engine)  # Issue all DDL statements to create all mapped database tabels if not exist.
+# Issue all DDL statements to create mapped database tables if they do not exist
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Tata AI Legal Intelligence API", version="1.0.0")
 
-# MOUNT AUTH ROUTER
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
-
-app.include_router(risk_review.router, prefix="/api/v1/risk", tags=["Risk Review & Clause Intelligence"])
-app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
-app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["Monitoring & Telemetry"])
+# -------------------------------------------------------------------------
+# CORS HARDENING: FIXES THE RENDER CROSS-ORIGIN BLOCK
+# -------------------------------------------------------------------------
+allowed_origins = [
+    "https://tata-ai-frontend.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.onrender\.com",  # Matches any Render deployment
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],        
+    allow_headers=["*"],
+    expose_headers=["*"]
 )
 
+# Global Exception Handler to guarantee CORS headers on 500 errors
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logging.error(f"Unhandled Exception: {exc}", exc_info=True)
+    origin = request.headers.get("origin", "https://tata-ai-frontend.onrender.com")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal Server Error: {str(exc)}"},
+        headers={
+            "Access-Control-Allow-Origin": origin if origin in allowed_origins or "onrender.com" in origin else allowed_origins[0],
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "*",
+        }
+    )
+
+# -------------------------------------------------------------------------
+# CENTRALIZED API GATEWAY MOUNTING (Avoids Duplicate Prefix Bugs)
+# -------------------------------------------------------------------------
+# Includes auth, documents, review, governance, chat, monitoring, risk, and kb
 app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/")
 def health_check():
-    return {"status": "healthy", "database": "PostgreSQL connected"}
+    return {"status": "healthy", "database": "Connected"}
