@@ -46,7 +46,10 @@ export const AdminPortal: React.FC = () => {
 
   const fetchAdminDocuments = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/v1/review/admin/documents`);
+      const token = sessionStorage.getItem('access_token');
+      const response = await axios.get(`${API_BASE_URL}/api/v1/review/admin/documents`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setDocuments(response.data.documents || []);
     } catch (err) {
       console.error('Failed to load admin documents:', err);
@@ -65,12 +68,15 @@ export const AdminPortal: React.FC = () => {
   const handleAdminAction = async (docId: string, action: 'ACCEPT' | 'REJECT' | 'MANUAL_REVIEW') => {
     setActionSubmitting(docId);
     try {
+      const token = sessionStorage.getItem('access_token');
       const currentUser = sessionStorage.getItem('user_email') || 'admin@tata.com';
       
       await axios.post(`${API_BASE_URL}/api/v1/review/admin/review/action`, {
         job_id: docId,
         action: action,
         comments: `Admin (${currentUser}) marked document as ${action}`
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       // Immediate UI status update
@@ -80,6 +86,9 @@ export const AdminPortal: React.FC = () => {
         }
         return d;
       }));
+
+      // Trigger sidebar refresh across windows
+      window.dispatchEvent(new Event('audit_updated'));
 
       alert(`Admin Action Success: Document updated to ${action.replace('_', ' ')}`);
     } catch (err) {
@@ -94,7 +103,10 @@ export const AdminPortal: React.FC = () => {
     setInspectDoc(doc);
     setInspectLoading(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/v1/documents/${doc.job_id}`);
+      const token = sessionStorage.getItem('access_token');
+      const response = await axios.get(`${API_BASE_URL}/api/v1/documents/${doc.job_id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setDocClauses(response.data.clauses || []);
     } catch (err) {
       console.error('Failed to inspect document clauses:', err);
