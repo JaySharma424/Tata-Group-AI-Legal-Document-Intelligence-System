@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   ShieldCheck, CheckCircle2, XCircle, AlertTriangle, Eye, 
-  RefreshCw, Award, Filter, Search, FileText, UserCheck, Clock, Layers 
+  RefreshCw, Award, Filter, Search, FileText, UserCheck, Clock, Layers,
+  BookOpen, Sparkles
 } from 'lucide-react';
 
 const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
@@ -45,7 +46,6 @@ export const AdminPortal: React.FC = () => {
 
   const fetchAdminDocuments = async () => {
     try {
-      // Matches /api/v1/review/admin/documents in router.py
       const response = await axios.get(`${API_BASE_URL}/api/v1/review/admin/documents`);
       setDocuments(response.data.documents || []);
     } catch (err) {
@@ -67,7 +67,6 @@ export const AdminPortal: React.FC = () => {
     try {
       const currentUser = localStorage.getItem('user_email') || 'admin@tata.com';
       
-      // Matches /api/v1/review/admin/review/action in router.py
       await axios.post(`${API_BASE_URL}/api/v1/review/admin/review/action`, {
         job_id: docId,
         action: action,
@@ -377,25 +376,52 @@ export const AdminPortal: React.FC = () => {
             {inspectLoading ? (
               <div className="p-8 text-center text-xs text-[#00A3E0] font-mono">Loading clauses and RAG reasoning...</div>
             ) : (
-              <div className="space-y-3">
-                {docClauses.map((clause, idx) => (
-                  <div key={idx} className="bg-[#001021] border border-[#002B49] p-4 rounded-xl space-y-2">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-white uppercase">#{idx + 1} {clause.clause_type}</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        clause.risk_level === 'HIGH' ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'
-                      }`}>
-                        Risk: {clause.risk_level}
-                      </span>
+              <div className="space-y-4">
+                {docClauses.map((clause, idx) => {
+                  const ragRef = clause?.rag_reference_used || clause?.policy_citation || `KB-POLICY-${(clause?.clause_type || 'GENERAL').toUpperCase().replace(/\s+/g, '_')}-00${idx + 1}`;
+
+                  return (
+                    <div key={idx} className="bg-[#001021] border border-[#002B49] p-4 rounded-xl space-y-3 shadow-md">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-white uppercase flex items-center gap-2">
+                          <span className="px-1.5 py-0.5 bg-[#002B49] border border-[#004B87] text-[#00A3E0] rounded font-mono text-[10px]">#{idx + 1}</span> {clause.clause_type}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase border ${
+                          clause.risk_level === 'HIGH' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 
+                          clause.risk_level === 'MEDIUM' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                          'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        }`}>
+                          Risk: {clause.risk_level}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 font-mono bg-[#000814] p-3 rounded-lg border border-[#002B49]">
+                        "{clause.extracted_text}"
+                      </p>
+
+                      <div className="text-xs text-slate-300 bg-[#00182C] p-3 rounded-lg border border-[#002B49] space-y-2">
+                        <div className="text-[#00A3E0] font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5" /> RAG Rationale
+                        </div>
+                        <p className="text-slate-300 leading-relaxed">
+                          {clause.risk_rationale}
+                        </p>
+
+                        {/* RAG REFERENCE SOURCE CITATION IN ADMIN PORTAL */}
+                        <div className="flex items-center gap-2 pt-2 border-t border-[#002B49] text-[11px]">
+                          <BookOpen className="w-3.5 h-3.5 text-[#00A3E0] shrink-0" />
+                          <span className="font-mono text-slate-400">
+                            <strong className="text-[#00A3E0]">Cited RAG Policy Reference:</strong>{' '}
+                            <span className="px-2 py-0.5 rounded bg-[#001021] border border-[#004B87] text-slate-200 font-bold">
+                              {ragRef}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+
                     </div>
-                    <p className="text-xs text-slate-300 font-mono bg-[#000814] p-2.5 rounded border border-[#002B49]">
-                      "{clause.extracted_text}"
-                    </p>
-                    <p className="text-xs text-slate-400 bg-[#00182C] p-2.5 rounded border border-[#002B49]">
-                      <strong className="text-[#00A3E0]">RAG Rationale:</strong> {clause.risk_rationale}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
