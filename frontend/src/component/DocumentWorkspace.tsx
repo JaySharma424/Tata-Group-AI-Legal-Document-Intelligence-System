@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Upload, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap, AlertTriangle, ArchiveX, CheckCircle, XCircle } from 'lucide-react';
-const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
+import { Upload, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap, AlertTriangle, ArchiveX, CheckCircle, XCircle, Award, FileSearch, Sparkles } from 'lucide-react';
 
 interface DocumentWorkspaceProps {
   selectedHistoryJobId?: string | null;
   _onActiveJobChange?: (jobId: string) => void; 
 }
 
-// FIX: Deep Scan LocalStorage to automatically find the REAL logged-in user's email
+const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
+
 const getSessionUser = () => {
   const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/;
   const keys = ['user_email', 'email', 'user', 'currentUser', 'session', 'auth'];
@@ -29,7 +29,7 @@ const getSessionUser = () => {
   return "demo1@tata.com";
 };
 
-export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHistoryJobId, _onActiveJobChange }) => {
+export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHistoryJobId }) => {
   const [file, setFile] = useState<File | null>(null);
   const [businessUnit, setBusinessUnit] = useState('Procurement');
   const [category, setCategory] = useState('Vendor Agreement');
@@ -49,7 +49,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
   const [reviewComments, setReviewComments] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const currentUser = getSessionUser(); // REAL LOGGED-IN USER
+  const currentUser = getSessionUser();
 
   useEffect(() => {
     if (selectedHistoryJobId) {
@@ -60,7 +60,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
-      alert('Please select a document file first.');
+      alert('Please select a legal contract file first.');
       return;
     }
 
@@ -73,8 +73,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     formData.append('jurisdiction', jurisdiction || 'Global');
     formData.append('confidentiality_level', confidentiality);
     formData.append('review_priority', priority);
-    
-    // Pass the real authenticated user to backend database
     formData.append('user_email', currentUser);
     formData.append('user_role', 'Compliance Officer');
 
@@ -126,9 +124,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
   };
 
   const handleDownloadPdf = async () => {
-    // Determine target job ID from props or internal state
-    const targetId = selectedHistoryJobId || (typeof activeJobId !== 'undefined' ? activeJobId : null);
-    
+    const targetId = selectedHistoryJobId || activeJobId;
     if (!targetId) {
       alert("Please select or analyze a document first.");
       return;
@@ -146,7 +142,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Audit_Report_${targetId}.pdf`);
+      link.setAttribute('download', `Tata_Audit_Report_${targetId}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -167,160 +163,211 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     try {
       await axios.post(`${API_BASE_URL}/api/v1/review/actions`, {
         document_id: activeJobId,
-        user_email: currentUser, // Ensure review matches dynamic user
+        user_email: currentUser,
         action: action,
         file_name: file?.name || "Analyzed Document",
         comments: reviewComments
       });
 
       setReviewStatus(action);
-      alert(`Success: Document ${action.toLowerCase()}ed and securely archived to history!`);
+      alert(`Success: Document ${action.toLowerCase()}ed and securely logged to Tata Audit Archive.`);
     } catch (error) {
       console.error("Audit logging failed:", error);
-      alert("Failed to record review action. Please check the backend connection.");
+      alert("Failed to record review action.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="p-8 space-y-8 min-h-screen text-slate-300 font-sans max-w-7xl mx-auto">
+    <div className="p-8 space-y-8 min-h-screen text-slate-200 font-sans max-w-7xl mx-auto bg-[#000D1A]">
       
-      <div className="border-b border-slate-800/80 pb-6">
-        <h1 className="text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400">
-          Tata AI Legal Intelligence
-        </h1>
-        <p className="text-sm text-slate-400 mt-2 flex items-center gap-2">
-          <Zap className="w-4 h-4 text-amber-400" /> Enterprise Document Parsing, RAG Grounding & Risk Governance Portal
-        </p>
+      {/* Tata Corporate Workspace Header */}
+      <div className="border-b border-[#002B49] pb-6 flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <Award className="w-5 h-5 text-[#00A3E0]" />
+            <span className="text-xs font-black uppercase tracking-widest text-[#00A3E0]">
+              TATA GROUP ENTERPRISE
+            </span>
+            <span className="text-slate-600">•</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              GOVERNANCE PORTAL
+            </span>
+          </div>
+          <h1 className="text-3xl font-black tracking-tight text-white">
+            Tata AI Legal Intelligence System
+          </h1>
+          <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+            <Zap className="w-3.5 h-3.5 text-[#00A3E0]" /> Automated Clause Ingestion, Vector RAG Policy Grounding & Risk Governance
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        <div className="bg-slate-800/40 backdrop-blur-md border border-slate-700/60 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-          <div className="absolute -top-20 -right-20 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        {/* Upload Form Panel */}
+        <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 shadow-2xl relative overflow-hidden flex flex-col justify-between">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[#003B73]/10 rounded-full blur-2xl pointer-events-none"></div>
           
-          <h2 className="text-xs font-bold uppercase tracking-widest text-slate-300 mb-6 flex items-center gap-2">
-            <Upload className="w-4 h-4 text-indigo-400" /> Upload Legal Document
-          </h2>
-          
-          <form onSubmit={handleUpload} className="space-y-4 text-sm relative z-10">
-            <div className="space-y-1.5">
-              <label className="block text-slate-400 text-xs font-semibold uppercase tracking-wider">Select File</label>
-              <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="w-full text-slate-300 bg-slate-900/50 p-2.5 rounded-xl border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/10 file:text-indigo-400 hover:file:bg-indigo-500/20 cursor-pointer" />
-            </div>
+          <div>
+            <h2 className="text-xs font-black uppercase tracking-widest text-[#00A3E0] mb-5 flex items-center gap-2">
+              <Upload className="w-4 h-4 text-[#00A3E0]" /> Upload Legal Contract
+            </h2>
             
-            <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleUpload} className="space-y-4 text-sm relative z-10">
               <div className="space-y-1.5">
-                <label className="block text-slate-400 text-xs font-semibold uppercase tracking-wider">Business Unit</label>
-                <select value={businessUnit} onChange={(e) => setBusinessUnit(e.target.value)} className="w-full bg-slate-900/50 p-3 rounded-xl border border-slate-700 text-slate-200 focus:border-indigo-500 outline-none text-xs">
-                  <option value="Procurement">Procurement</option>
-                  <option value="Legal">Legal & Compliance</option>
-                  <option value="Corporate Strategy">Corporate Strategy</option>
-                </select>
+                <label className="block text-slate-300 text-xs font-bold uppercase tracking-wider">
+                  Select Document File
+                </label>
+                <input 
+                  type="file" 
+                  onChange={(e) => setFile(e.target.files?.[0] || null)} 
+                  className="w-full text-slate-300 bg-[#001021] p-2.5 rounded-xl border border-[#002B49] focus:border-[#00A3E0] transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#002B49] file:text-[#00A3E0] hover:file:bg-[#003B73] cursor-pointer" 
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Business Unit</label>
+                  <select value={businessUnit} onChange={(e) => setBusinessUnit(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 focus:border-[#00A3E0] outline-none text-xs font-medium">
+                    <option value="Procurement">Procurement</option>
+                    <option value="Legal">Legal & Compliance</option>
+                    <option value="Corporate Strategy">Corporate Strategy</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Category</label>
+                  <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 focus:border-[#00A3E0] outline-none text-xs" />
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-slate-400 text-xs font-semibold uppercase tracking-wider">Category</label>
-                <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-slate-900/50 p-3 rounded-xl border border-slate-700 text-slate-200 focus:border-indigo-500 outline-none text-xs" />
-              </div>
-            </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider">Doc Type</label>
+                  <input type="text" value={documentType} onChange={(e) => setDocumentType(e.target.value)} placeholder="e.g. MSA" className="w-full bg-[#001021] p-2 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none" />
+                </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <label className="block text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Doc Type</label>
-                <input type="text" value={documentType} onChange={(e) => setDocumentType(e.target.value)} placeholder="e.g. MSA" className="w-full bg-slate-900/50 p-2.5 rounded-xl border border-slate-700 text-slate-200 text-xs outline-none" />
-              </div>
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider">Counterparty</label>
+                  <input type="text" value={counterparty} onChange={(e) => setCounterparty(e.target.value)} placeholder="e.g. Acme Inc" className="w-full bg-[#001021] p-2 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none" />
+                </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Counterparty</label>
-                <input type="text" value={counterparty} onChange={(e) => setCounterparty(e.target.value)} placeholder="e.g. Acme Inc" className="w-full bg-slate-900/50 p-2.5 rounded-xl border border-slate-700 text-slate-200 text-xs outline-none" />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Jurisdiction</label>
-                <input type="text" value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} placeholder="e.g. Global" className="w-full bg-slate-900/50 p-2.5 rounded-xl border border-slate-700 text-slate-200 text-xs outline-none" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="block text-slate-400 text-xs font-semibold uppercase tracking-wider">Confidentiality</label>
-                <select value={confidentiality} onChange={(e) => setConfidentiality(e.target.value)} className="w-full bg-slate-900/50 p-3 rounded-xl border border-slate-700 text-slate-200 text-xs outline-none">
-                  <option value="Confidential">Confidential</option>
-                  <option value="Restricted">Restricted</option>
-                  <option value="Standard">Standard</option>
-                </select>
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider">Jurisdiction</label>
+                  <input type="text" value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} placeholder="e.g. Global" className="w-full bg-[#001021] p-2 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none" />
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-slate-400 text-xs font-semibold uppercase tracking-wider">Review Priority</label>
-                <select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full bg-slate-900/50 p-3 rounded-xl border border-slate-700 text-slate-200 text-xs outline-none">
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Normal">Normal</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Confidentiality</label>
+                  <select value={confidentiality} onChange={(e) => setConfidentiality(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none">
+                    <option value="Confidential">Confidential</option>
+                    <option value="Restricted">Restricted</option>
+                    <option value="Standard">Standard</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Review Priority</label>
+                  <select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none">
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Normal">Normal</option>
+                  </select>
+                </div>
               </div>
-            </div>
-            
-            <button type="submit" disabled={loading} className="w-full mt-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed">
-              {loading ? (
-                <><CheckCircle2 className="w-5 h-5 animate-spin" /> Processing AI Pipeline...</>
-              ) : (
-                <>Analyze Document <ArrowRight className="w-5 h-5" /></>
-              )}
-            </button>
-          </form>
+
+              {/* TATA Corporate Electric Action Button */}
+              <button 
+                type="submit" 
+                disabled={loading} 
+                className="w-full mt-4 bg-[#00A3E0] hover:bg-[#0082B3] text-[#001021] font-black py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-[#00A3E0]/20 disabled:opacity-50 cursor-pointer uppercase tracking-wider text-xs"
+              >
+                {loading ? (
+                  <><CheckCircle2 className="w-4 h-4 animate-spin text-[#001021]" /> Executing Analysis Pipeline...</>
+                ) : (
+                  <>Analyze Document <ArrowRight className="w-4 h-4 text-[#001021]" /></>
+                )}
+              </button>
+            </form>
+          </div>
         </div>
 
-        <div className="lg:col-span-2 flex flex-col gap-6">
+        {/* Processing Metric KPI Cards */}
+        <div className="lg:col-span-2 flex flex-col justify-between gap-6">
           <div className="grid grid-cols-3 gap-5">
-            <div className="bg-slate-800/40 backdrop-blur-md border border-slate-700/60 border-t-emerald-500 rounded-2xl p-5 shadow-lg flex flex-col justify-between relative overflow-hidden group">
-              <div className="text-slate-400 text-[10px] font-bold uppercase tracking-widest relative z-10">OCR Confidence</div>
-              <div className="text-3xl font-black text-emerald-400 relative z-10 mt-2">
+            
+            <div className="bg-[#00182C] border border-[#002B49] border-t-4 border-t-emerald-500 rounded-2xl p-5 shadow-lg space-y-1">
+              <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                OCR Extraction Quality
+              </div>
+              <div className="text-3xl font-black text-emerald-400">
                 {analysisResult?.metrics?.ocr_confidence ? `${Math.round(analysisResult.metrics.ocr_confidence)}%` : '—'}
               </div>
+              <p className="text-[10px] text-slate-500 font-mono">Multimodal confidence</p>
             </div>
             
-            <div className="bg-slate-800/40 backdrop-blur-md border border-slate-700/60 border-t-indigo-500 rounded-2xl p-5 shadow-lg flex flex-col justify-between relative overflow-hidden group">
-              <div className="text-slate-400 text-[10px] font-bold uppercase tracking-widest relative z-10">Pages Processed</div>
-              <div className="text-3xl font-black text-white relative z-10 mt-2">
+            <div className="bg-[#00182C] border border-[#002B49] border-t-4 border-t-[#00A3E0] rounded-2xl p-5 shadow-lg space-y-1">
+              <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                Pages Processed
+              </div>
+              <div className="text-3xl font-black text-white">
                 {analysisResult?.metrics?.pages || '—'}
               </div>
+              <p className="text-[10px] text-slate-500 font-mono">Parsed pages</p>
             </div>
             
-            <div className="bg-slate-800/40 backdrop-blur-md border border-slate-700/60 border-t-cyan-500 rounded-2xl p-5 shadow-lg flex flex-col justify-between relative overflow-hidden group">
-              <div className="text-slate-400 text-[10px] font-bold uppercase tracking-widest relative z-10">Entities Detected</div>
-              <div className="text-3xl font-black text-cyan-400 relative z-10 mt-2">
+            <div className="bg-[#00182C] border border-[#002B49] border-t-4 border-t-cyan-400 rounded-2xl p-5 shadow-lg space-y-1">
+              <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                Entities Detected
+              </div>
+              <div className="text-3xl font-black text-[#00A3E0]">
                 {analysisResult?.metrics?.entities_detected || '—'}
               </div>
+              <p className="text-[10px] text-slate-500 font-mono">Extracted NLP entities</p>
             </div>
+
           </div>
 
-          <div className="bg-gradient-to-r from-slate-800 to-slate-800/40 border border-slate-700/60 rounded-2xl p-6 shadow-lg flex justify-between items-center mt-auto">
+          {/* Executive PDF Report Banner */}
+          <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 shadow-xl flex justify-between items-center">
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Executive Audit Package
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Executive Compliance Report
               </h3>
-              <p className="text-xs text-slate-400 mt-1">Download certified PDF report with AI RAG risk matrix & sign-offs.</p>
+              <p className="text-xs text-slate-400 mt-1">
+                Download certified ReportLab PDF audit package with RAG rationale and sign-offs.
+              </p>
             </div>
             <button 
               onClick={handleDownloadPdf} 
               disabled={!activeJobId && !selectedHistoryJobId}
-              className="bg-slate-700 hover:bg-slate-600 border border-slate-600 hover:border-slate-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-[#002B49] hover:bg-[#003B73] border border-[#004B87] text-white px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer"
             >
-              <Download className="w-4 h-4" /> Download PDF
+              <Download className="w-4 h-4 text-[#00A3E0]" /> Export Audit PDF
             </button>
           </div>
         </div>
+
       </div>
 
-      <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/60 rounded-3xl p-8 shadow-2xl space-y-6">
-        <div className="flex items-center gap-3 pb-2 border-b border-slate-700/50">
-          <ShieldAlert className="w-6 h-6 text-indigo-400" /> 
-          <h2 className="text-sm font-black uppercase tracking-widest text-slate-200">
-            Extracted Legal Clauses & RAG Risk Matrix
-          </h2>
+      {/* RAG Clauses & Risk Matrix */}
+      <div className="bg-[#00182C] border border-[#002B49] rounded-3xl p-8 shadow-2xl space-y-6">
+        <div className="flex items-center justify-between pb-4 border-b border-[#002B49]">
+          <div className="flex items-center gap-3">
+            <ShieldAlert className="w-6 h-6 text-[#00A3E0]" /> 
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-100">
+              Extracted Legal Clauses & Vector RAG Risk Matrix
+            </h2>
+          </div>
+          {clauses.length > 0 && (
+            <span className="text-xs font-mono px-3 py-1 bg-[#001021] border border-[#002B49] rounded-lg text-[#00A3E0]">
+              {clauses.length} Clauses Analyzed
+            </span>
+          )}
         </div>
         
         <div className="space-y-5">
@@ -337,40 +384,28 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
               const icon = isHigh ? <AlertTriangle className="w-3.5 h-3.5" /> : isMed ? <ShieldAlert className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />;
 
               return (
-                <div key={idx} className={`bg-slate-900/60 border border-slate-700/50 ${borderLeft} border-l-4 rounded-xl p-5 shadow-md hover:shadow-lg hover:bg-slate-900/80 transition-all space-y-4`}>
+                <div key={idx} className={`bg-[#001021] border border-[#002B49] ${borderLeft} border-l-4 rounded-xl p-5 shadow-md space-y-4`}>
                   
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-bold tracking-wide text-white uppercase flex items-center gap-2">
-                      <span className="p-1 bg-slate-800 rounded text-indigo-400">#{idx + 1}</span> {clause?.clause_type || 'General Provision'}
+                    <span className="text-xs font-extrabold tracking-wider text-white uppercase flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-[#002B49] rounded border border-[#004B87] text-[#00A3E0] font-mono text-[11px]">#{idx + 1}</span> {clause?.clause_type || 'General Provision'}
                     </span>
-                    <span className={`px-3 py-1 rounded-md text-[10px] font-black tracking-widest border uppercase flex items-center gap-1.5 shadow-sm ${badgeBg}`}>
-                      {icon} Risk: {riskLevel} ({Math.round((clause?.confidence_score || 0.9) * 100)}% Match)
+                    <span className={`px-3 py-1 rounded-md text-[10px] font-black tracking-widest border uppercase flex items-center gap-1.5 ${badgeBg}`}>
+                      {icon} Risk: {riskLevel} ({Math.round((clause?.confidence_score || 0.9) * 100)}% Vector Match)
                     </span>
                   </div>
                   
-                  <div className="text-[13px] text-slate-300 font-mono bg-[#0B1120] p-4 rounded-lg border border-slate-800 leading-relaxed shadow-inner">
-                    <span className="text-slate-500 select-none mr-2">{"// Document Extract:"}</span><br/>
+                  <div className="text-[12px] text-slate-300 font-mono bg-[#000814] p-4 rounded-xl border border-[#002B49] leading-relaxed">
+                    <span className="text-slate-500 select-none mr-2">// Extracted Contract Wording:</span><br/>
                     "{clause?.extracted_text || 'No text extracted.'}"
                   </div>
                   
-                  <div className="text-[13px] text-slate-300 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50 space-y-3">
-                    <div className="whitespace-pre-wrap leading-relaxed">
-                      <strong className="text-indigo-300 text-xs uppercase tracking-widest flex items-center gap-2 mb-2">
-                        <Zap className="w-3.5 h-3.5" /> AI RAG Rationale
-                      </strong>
-                      {clause?.risk_rationale || 'Awaiting reasoning...'}
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-4 text-xs border-t border-slate-700/50 pt-3 mt-3">
-                      <span className="flex items-center gap-1.5">
-                        <strong className="text-slate-400 font-medium">Involved Party:</strong> 
-                        <span className="text-slate-200">{clause?.involved_party || 'N/A'}</span>
-                      </span>
-                      <span className="text-slate-600">|</span>
-                      <span className="flex items-center gap-1.5">
-                        <strong className="text-slate-400 font-medium">RAG Reference:</strong> 
-                        <span className="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">{clause?.rag_reference_used || 'Standard Policy'}</span>
-                      </span>
+                  <div className="text-[12px] text-slate-300 bg-[#00182C] p-4 rounded-xl border border-[#002B49] space-y-2">
+                    <strong className="text-[#00A3E0] text-[11px] uppercase tracking-widest flex items-center gap-2 font-black">
+                      <Sparkles className="w-3.5 h-3.5" /> Tata AI Policy Grounding & Rationale
+                    </strong>
+                    <div className="whitespace-pre-wrap leading-relaxed text-slate-200">
+                      {clause?.risk_rationale || 'Awaiting policy grounding evaluation...'}
                     </div>
                   </div>
                   
@@ -378,20 +413,21 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
               );
             })
           ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-center bg-slate-900/40 rounded-2xl border border-dashed border-slate-700">
-              <ShieldAlert className="w-12 h-12 text-slate-600 mb-4" />
-              <h3 className="text-slate-300 font-bold mb-1">No clauses extracted yet</h3>
-              <p className="text-slate-500 text-sm max-w-sm">Upload and analyze a document above to generate the RAG risk matrix and compliance overview.</p>
+            <div className="flex flex-col items-center justify-center py-16 text-center bg-[#001021] rounded-2xl border border-dashed border-[#002B49]">
+              <FileSearch className="w-10 h-10 text-[#00A3E0] mb-3 opacity-60" />
+              <h3 className="text-slate-300 font-bold mb-1">No clauses analyzed yet</h3>
+              <p className="text-slate-500 text-xs max-w-sm">Upload a legal contract file above to run automated parsing and RAG policy vector matching.</p>
             </div>
           )}
         </div>
       </div>
 
+      {/* Human-in-the-Loop Governance Sign-Off */}
       {activeJobId && clauses.length > 0 && (
-        <div className="bg-[#0F172A] border border-slate-700/60 rounded-3xl p-8 shadow-2xl mt-8">
-          <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-            <ArchiveX className="w-5 h-5 text-indigo-400" />
-            Final Review & Audit Sign-Off
+        <div className="bg-[#00182C] border border-[#002B49] rounded-3xl p-8 shadow-2xl space-y-4">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <ArchiveX className="w-5 h-5 text-[#00A3E0]" />
+            Human-in-the-Loop Governance Sign-Off
           </h3>
           
           {reviewStatus ? (
@@ -399,31 +435,31 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
               {reviewStatus === 'ACCEPT' ? <CheckCircle className="w-8 h-8" /> : <XCircle className="w-8 h-8" />}
               <div>
                 <p className="font-bold text-sm tracking-wide">Document {reviewStatus}ED</p>
-                <p className="text-xs opacity-80 mt-1">This decision and rationale have been permanently recorded in the audit archive.</p>
+                <p className="text-xs opacity-80 mt-0.5">Audit action securely logged and committed to Tata Corporate Archive.</p>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
               <textarea
-                placeholder="Enter rationale or comments for the audit log..."
+                placeholder="Enter formal compliance notes or reviewer comments..."
                 value={reviewComments}
                 onChange={(e) => setReviewComments(e.target.value)}
-                className="w-full bg-[#162032] border border-slate-700 rounded-xl p-4 text-sm text-white focus:border-indigo-500 outline-none min-h-[100px] resize-none"
+                className="w-full bg-[#001021] border border-[#002B49] rounded-xl p-4 text-xs text-white focus:border-[#00A3E0] outline-none min-h-[90px] resize-none"
               />
               <div className="flex gap-4">
                 <button 
                   onClick={() => handleReviewAction('ACCEPT')}
                   disabled={isSubmitting}
-                  className="flex-1 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/50 text-emerald-400 font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="flex-1 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/50 text-emerald-400 font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-xs uppercase tracking-wider"
                 >
-                  <CheckCircle className="w-5 h-5" /> Accept Document
+                  <CheckCircle className="w-4 h-4" /> Accept Contract
                 </button>
                 <button 
                   onClick={() => handleReviewAction('REJECT')}
                   disabled={isSubmitting}
-                  className="flex-1 bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/50 text-rose-400 font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="flex-1 bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/50 text-rose-400 font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-xs uppercase tracking-wider"
                 >
-                  <XCircle className="w-5 h-5" /> Reject Document
+                  <XCircle className="w-4 h-4" /> Reject Contract
                 </button>
               </div>
             </div>
