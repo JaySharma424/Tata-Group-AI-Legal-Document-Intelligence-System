@@ -19,9 +19,9 @@ from backend.document_pipeline.legal_graph import legal_pipeline_graph
 
 # Import your custom RAGAS evaluator from your tests directory
 try:
-    from tests.ai_output_tests.ragas_eval_gemini import generate_ragas_scorecard
-except ImportError:
-    print("⚠️ Warning: Could not import generate_ragas_scorecard. RAGAS evaluation will be bypassed.")
+    from backend.services.ragas_evaluator import generate_ragas_scorecard
+except ImportError as e:
+    print(f"⚠️ Warning: Could not import generate_ragas_scorecard: {e}")
     def generate_ragas_scorecard(clauses): return {}
 
 from sqlalchemy import func
