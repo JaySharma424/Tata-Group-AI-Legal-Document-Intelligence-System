@@ -17,6 +17,13 @@ from backend.document_pipeline.parsing.parsing_service import ParsingService
 from backend.document_pipeline.reporting.report_service import ReportService
 from backend.document_pipeline.legal_graph import legal_pipeline_graph
 
+# Import your custom RAGAS evaluator from your tests directory
+try:
+    from tests.ai_output_tests.ragas_eval_gemini import generate_ragas_scorecard
+except ImportError:
+    print("⚠️ Warning: Could not import generate_ragas_scorecard. RAGAS evaluation will be bypassed.")
+    def generate_ragas_scorecard(clauses): return {}
+
 from sqlalchemy import func
 
 router = APIRouter()
@@ -134,7 +141,7 @@ async def upload_document(
             }
         ]
 
-    # 4. Save Extracted Clauses (Shielded against Schema Kwarg TypeErrors)
+    # 4. Save Extracted Clauses
     for clause in extracted_clauses:
         db_clause = ClauseModel(
             job_id=job_id,
@@ -149,14 +156,25 @@ async def upload_document(
             recommended_action=sanitize_text(clause.get("recommended_action", "Review"))
         )
 
-        # Safely assign RAG Reference ID if supported by ClauseModel attributes
         ref_val = sanitize_text(clause.get("rag_reference_used", default_kb_ref))
         for attr in ["rag_reference_used", "rag_reference", "policy_citation", "reference_id"]:
             if hasattr(ClauseModel, attr):
                 setattr(db_clause, attr, ref_val)
 
         db.add(db_clause)
-    
+        
+    # 5. Trigger RAGAS Evaluation on the dynamic LLM
+    try:
+        ragas_scores = generate_ragas_scorecard(extracted_clauses)
+        db_doc.ragas_faithfulness = ragas_scores.get("faithfulness", 0.0)
+        db_doc.ragas_answer_relevancy = ragas_scores.get("answer_relevancy", 0.0)
+        db_doc.ragas_context_precision = ragas_scores.get("context_precision", 0.0)
+        db_doc.ragas_context_recall = ragas_scores.get("context_recall", 0.0)
+        db_doc.ragas_answer_correctness = ragas_scores.get("answer_correctness", 0.0)
+    except Exception as e:
+        print(f"Skipping RAGAS save due to error: {e}")
+        ragas_scores = {}
+
     db.commit()
 
     return {
@@ -168,6 +186,7 @@ async def upload_document(
             "entities_detected": entities_count,
             "requires_manual_review": metrics.get("requires_manual_review", False)
         },
+        "ragas_scores": ragas_scores, 
         "clauses": extracted_clauses,
         "clauses_extracted_count": len(extracted_clauses)
     }
@@ -193,7 +212,14 @@ async def get_document_history(
             "ocr_confidence": doc.ocr_confidence,
             "pages": doc.pages,
             "entities_detected": doc.entities_detected,
-            "created_at": doc.created_at.isoformat() if doc.created_at else None
+            "created_at": doc.created_at.isoformat() if doc.created_at else None,
+            "ragas_scores": {
+                "faithfulness": getattr(doc, "ragas_faithfulness", 0.0),
+                "answer_relevancy": getattr(doc, "ragas_answer_relevancy", 0.0),
+                "context_precision": getattr(doc, "ragas_context_precision", 0.0),
+                "context_recall": getattr(doc, "ragas_context_recall", 0.0),
+                "answer_correctness": getattr(doc, "ragas_answer_correctness", 0.0)
+            }
         }
         for doc in documents
     ]
@@ -205,7 +231,7 @@ async def get_document_details(
     current_user: UserModel = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """Fetches previously analyzed document details with comprehensive error shielding."""
+    """Fetches previously analyzed document details including RAGAS metrics."""
     try:
         doc = None
         try:
@@ -245,10 +271,15 @@ async def get_document_details(
                 "job_id": getattr(doc, "job_id", document_id),
                 "filename": getattr(doc, "filename", "Analyzed Contract.pdf"),
                 "business_unit": getattr(doc, "business_unit", "Procurement"),
-                "category": getattr(doc, "category", "Vendor Agreement"),
+                "category": getattr(doc, "document_category", "Vendor Agreement"),
                 "created_at": str(getattr(doc, "created_at", "")),
                 "ocr_confidence": getattr(doc, "ocr_confidence", 0.97),
-                "pages_processed": getattr(doc, "pages_processed", 1),
+                "pages_processed": getattr(doc, "pages", 1),
+                "ragas_faithfulness": getattr(doc, "ragas_faithfulness", 0.0),
+                "ragas_answer_relevancy": getattr(doc, "ragas_answer_relevancy", 0.0),
+                "ragas_context_precision": getattr(doc, "ragas_context_precision", 0.0),
+                "ragas_context_recall": getattr(doc, "ragas_context_recall", 0.0),
+                "ragas_answer_correctness": getattr(doc, "ragas_answer_correctness", 0.0)
             },
             "clauses": [
                 {

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   Upload, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap, 
   AlertTriangle, ArchiveX, CheckCircle, XCircle, Award, FileSearch, 
-  Sparkles, BookOpen, Eye, Layers, FileText, Hash
+  Sparkles, BookOpen, Eye, Layers, FileText, Hash, BarChart3
 } from 'lucide-react';
 import { PipelineVisualizer } from './PipelineVisualizer';
 
@@ -18,14 +18,7 @@ const getSessionUser = () => {
   const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/;
   const keys = ['user_email', 'email', 'user', 'currentUser', 'session', 'auth'];
   for (const k of keys) {
-    const val = sessionStorage.getItem(k) || sessionStorage.getItem(k);
-    if (val) {
-      const match = val.match(emailRegex);
-      if (match) return match[1];
-    }
-  }
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const val = sessionStorage.getItem(sessionStorage.key(i) || '');
+    const val = sessionStorage.getItem(k) || localStorage.getItem(k);
     if (val) {
       const match = val.match(emailRegex);
       if (match) return match[1];
@@ -35,8 +28,8 @@ const getSessionUser = () => {
 };
 
 export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHistoryJobId }) => {
-  // Navigation Tabs State: 'clauses' | 'ocr' | 'parsing'
-  const [activeTab, setActiveTab] = useState<'clauses' | 'ocr' | 'parsing'>('clauses');
+  // Navigation Tabs State: 'clauses' | 'ocr' | 'parsing' | 'ragas'
+  const [activeTab, setActiveTab] = useState<'clauses' | 'ocr' | 'parsing' | 'ragas'>('clauses');
 
   const [file, setFile] = useState<File | null>(null);
   const [businessUnit, setBusinessUnit] = useState('Procurement');
@@ -104,8 +97,10 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       setAnalysisResult({ ...response.data, metrics: safeMetrics });
       setClauses(safeClauses);
 
-      // Trigger instant refresh of sidebar on new upload
       window.dispatchEvent(new Event('audit_updated'));
+      
+      // Auto-switch to RAGAS tab upon completion
+      setActiveTab('ragas');
 
     } catch (error) {
       console.error('Upload error:', error);
@@ -123,8 +118,20 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
         ? response.data.clauses.filter((c: any) => c !== null && typeof c === 'object') 
         : [];
 
-      setActiveJobId(response.data?.job_id || null);
-      setAnalysisResult({ metrics: response.data?.metrics || {} });
+      setActiveJobId(response.data?.document?.job_id || null);
+      
+      // Format response to extract saved RAGAS scores
+      setAnalysisResult({ 
+        metrics: response.data?.document || {},
+        ragas_scores: {
+            faithfulness: response.data?.document?.ragas_faithfulness,
+            answer_relevancy: response.data?.document?.ragas_answer_relevancy,
+            context_precision: response.data?.document?.ragas_context_precision,
+            context_recall: response.data?.document?.ragas_context_recall,
+            answer_correctness: response.data?.document?.ragas_answer_correctness
+        }
+      });
+      
       setClauses(safeClauses);
       
       setReviewStatus(null);
@@ -181,10 +188,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       });
 
       setReviewStatus(action);
-
-      // INSTANT REFRESH EVENT TRIGGER FOR SIDEBAR AND ADMIN PORTAL
       window.dispatchEvent(new Event('audit_updated'));
-
       alert(`Success: Document ${action.toLowerCase()}ed and securely logged to Tata Audit Archive.`);
     } catch (error) {
       console.error("Audit logging failed:", error);
@@ -194,7 +198,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     }
   };
 
-  // Helper to generate Page Breakdown list for OCR & Parsing tabs
   const totalPageCount = analysisResult?.metrics?.pages || (clauses.length > 0 ? Math.max(...clauses.map(c => parseInt(c?.page_reference || '1') || 1)) : 1);
   const baseOcrScore = Math.round(analysisResult?.metrics?.ocr_confidence || 95.0);
 
@@ -329,7 +332,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
             </div>
           </div>
           
-          {/* Dynamic Pipeline Visualizer triggers when loading state is true */}
           <PipelineVisualizer isAnalyzing={loading} />
         </div>
 
@@ -391,10 +393,9 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
       </div>
 
-      {/* THREE-SURFACE NAVIGATION TAB SWITCHER */}
+      {/* FOUR-SURFACE NAVIGATION TAB SWITCHER */}
       <div className="bg-[#00182C] border border-[#002B49] rounded-3xl p-8 shadow-2xl space-y-6">
         
-        {/* Tab Header Bar */}
         <div className="flex flex-wrap items-center justify-between pb-4 border-b border-[#002B49] gap-4">
           <div className="flex bg-[#001021] border border-[#002B49] rounded-xl p-1 gap-1">
             <button
@@ -409,6 +410,17 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
             </button>
 
             <button
+              onClick={() => setActiveTab('ragas')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === 'ragas'
+                  ? 'bg-[#002B49] text-[#00A3E0] border border-[#004B87] shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" /> AI RAGAS Scorecard
+            </button>
+
+            <button
               onClick={() => setActiveTab('ocr')}
               className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'ocr'
@@ -416,7 +428,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Eye className="w-4 h-4" /> Page-by-Page OCR Quality ({totalPageCount})
+              <Eye className="w-4 h-4" /> Page-by-Page OCR Quality
             </button>
 
             <button
@@ -438,7 +450,44 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           )}
         </div>
 
-        {/* TAB 1: EXTRACTED CLAUSES & VECTOR RAG RISK MATRIX */}
+        {/* TAB 1: RAGAS SCORECARD (NEW!) */}
+        {activeTab === 'ragas' && (
+          <div className="space-y-6">
+            <div className="bg-[#001021] p-5 rounded-xl border border-[#002B49] flex justify-between items-center text-xs shadow-md">
+              <div>
+                <span className="text-white font-black uppercase tracking-wider flex items-center gap-2 text-base">
+                  <BarChart3 className="w-5 h-5 text-[#00A3E0]"/> Document AI Evaluation Report
+                </span>
+                <p className="text-[11px] text-slate-400 mt-1 font-mono">Scores evaluated dynamically against Ground Truth using the configured LLM engine.</p>
+              </div>
+              <span className="text-emerald-400 font-mono font-bold bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/30">
+                Live Evaluation Complete
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {[
+                { label: 'Faithfulness', score: analysisResult?.ragas_scores?.faithfulness, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+                { label: 'Answer Relevancy', score: analysisResult?.ragas_scores?.answer_relevancy, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                { label: 'Context Precision', score: analysisResult?.ragas_scores?.context_precision, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+                { label: 'Context Recall', score: analysisResult?.ragas_scores?.context_recall, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+                { label: 'Answer Correctness', score: analysisResult?.ragas_scores?.answer_correctness, color: 'text-rose-400', bg: 'bg-rose-500/10' },
+              ].map((metric, idx) => (
+                <div key={idx} className="bg-[#001021] border border-[#002B49] rounded-xl p-5 shadow-lg flex flex-col items-center text-center space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{metric.label}</span>
+                  <div className={`text-2xl font-black ${metric.color}`}>
+                    {metric.score !== undefined && metric.score !== null ? (metric.score * 100).toFixed(1) + '%' : 'N/A'}
+                  </div>
+                  <div className={`text-[10px] font-mono px-2 py-0.5 rounded ${metric.bg} ${metric.color}`}>
+                    Confidence Metric
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: EXTRACTED CLAUSES & VECTOR RAG RISK MATRIX */}
         {activeTab === 'clauses' && (
           <div className="space-y-5">
             {clauses.length > 0 ? (
@@ -504,7 +553,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           </div>
         )}
 
-        {/* TAB 2: PAGE-BY-PAGE OCR CONFIDENCE */}
+        {/* TAB 3: PAGE-BY-PAGE OCR CONFIDENCE */}
         {activeTab === 'ocr' && (
           <div className="space-y-4">
             <div className="bg-[#001021] p-4 rounded-xl border border-[#002B49] flex justify-between items-center text-xs">
@@ -547,7 +596,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           </div>
         )}
 
-        {/* TAB 3: PAGE-BY-PAGE PARSED SECTIONS */}
+        {/* TAB 4: PAGE-BY-PAGE PARSED SECTIONS */}
         {activeTab === 'parsing' && (
           <div className="space-y-4">
             <div className="bg-[#001021] p-4 rounded-xl border border-[#002B49] flex justify-between items-center text-xs">
