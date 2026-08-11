@@ -47,7 +47,8 @@ def deduplicate_extracted_clauses(clauses: List[Dict[str, Any]]) -> List[Dict[st
   for clause in clauses:
     raw_text = clause.get("extracted_text", "").strip()
     clause_type = clause.get("clause_type", "").strip()
-
+    
+    # Create normalized key to catch near-duplicates
     norm_text_snippet = re.sub(r"\s+", " ", raw_text.lower())[:150]
     norm_key = (clause_type.lower(), norm_text_snippet)
 
@@ -62,7 +63,7 @@ def deduplicate_extracted_clauses(clauses: List[Dict[str, Any]]) -> List[Dict[st
 
 @traceable(name="LLM Clause Extraction Node")
 def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Extracts distinct, unique legal clauses from OCR text using Gemini."""
+  """Step 1: Extract distinct clauses FIRST (without worrying about RAG citations yet)."""
   ocr_text = state.get("ocr_text", "")
   business_unit = state.get("business_unit", "Enterprise")
   user_role = state.get("user_role", "Senior Reviewer")
@@ -75,28 +76,22 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     {ocr_text[:8000]}
 
     INSTRUCTIONS:
-    1. Extract ALL distinct, non-duplicate legal clauses present in the text (e.g., Scope of Service, Fees/Payment, Confidentiality, Indemnification, Limitation of Liability, Termination, Governing Law).
-    2. Provide an exact text quote for 'extracted_text'.
+    1. Extract ALL distinct, non-duplicate legal clauses present in the text (e.g., Scope, Fees/Payment, Confidentiality, Indemnification, Limitation of Liability, Termination, Governing Law).
     
     Return ONLY a valid JSON array where each object contains these EXACT keys:
-    - "clause_type": (string, e.g., "Indemnification", "Limitation of Liability", "Governing Law")
+    - "clause_type": (string)
     - "extracted_text": (exact text quote from document)
     - "confidence_score": MUST BE A FLOAT NUMBER between 0.0 and 1.0 (e.g. 0.95).
     - "risk_level": "HIGH", "MEDIUM", or "LOW"
-    - "risk_rationale": (initial legal assessment)
+    - "risk_rationale": "Pending Reasoning"
     - "involved_party": (parties involved)
+    - "rag_reference_used": "PENDING"
     - "page_reference": (e.g., "Section 4" or "Section 5")
     - "obligation_owner": (responsible entity)
-    - "recommended_action": (e.g., "Escalate to Legal", "Accept Standard Term", "Request Revision")
+    - "recommended_action": (e.g., "Review Document")
     """
 
-  model_candidates = [
-      "gemini-2.0-flash",
-      "gemini-3.5-flash",
-      "gemini-3.6-flash",
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-  ]
+  model_candidates = ["gemini-2.0-flash", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 
   raw_clauses = []
   for model_name in model_candidates:
@@ -105,36 +100,27 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
       response = model.generate_content(prompt)
       text_res = response.text.strip()
 
-      if text_res.startswith("```json"):
-        text_res = text_res[7:]
-      if text_res.startswith("```"):
-        text_res = text_res[3:]
-      if text_res.endswith("```"):
-        text_res = text_res[:-3]
+      if text_res.startswith("```json"): text_res = text_res[7:]
+      if text_res.startswith("```"): text_res = text_res[3:]
+      if text_res.endswith("```"): text_res = text_res[:-3]
 
       match = re.search(r"\[.*\]", text_res.strip(), re.DOTALL)
       if match:
         parsed = json.loads(match.group(0))
         if isinstance(parsed, list) and len(parsed) > 0:
           raw_clauses = parsed
-          print(f"✅ Extracted {len(raw_clauses)} raw clauses using model: {model_name}")
           break
     except Exception as e:
-      print(f"⚠️ Model {model_name} failed in extract_clauses_node: {e}")
       continue
 
   if not raw_clauses:
-    snippet = ocr_text[:300].replace("\n", " ") if ocr_text else "Standard agreement provisions."
     raw_clauses = [{
-        "clause_type": "GENERAL PROVISION & COMPLIANCE",
-        "extracted_text": snippet,
+        "clause_type": "GENERAL PROVISION",
+        "extracted_text": ocr_text[:300].replace("\n", " "),
         "confidence_score": 0.88,
         "risk_level": "MEDIUM",
         "risk_rationale": "Evaluated under default compliance parameters.",
-        "involved_party": "Tata Group & Counterparty",
-        "page_reference": "Section 1",
-        "obligation_owner": "Compliance Team",
-        "recommended_action": "Review Document",
+        "rag_reference_used": "PENDING",
     }]
 
   unique_clauses = deduplicate_extracted_clauses(raw_clauses)
@@ -143,7 +129,7 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
 
 @traceable(name="RAG Per-Clause Grounding Node")
 def ground_clauses_with_rag_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Queries Qdrant Vector DB for EACH clause individually to fetch specific Knowledge Base Reference IDs."""
+  """Step 2: Perform targeted Qdrant Vector search for EACH individual clause to get unique IDs."""
   raw_clauses = state.get("raw_clauses", [])
   grounded_clauses = []
   all_retrieved_context = []
@@ -152,21 +138,18 @@ def ground_clauses_with_rag_node(state: LegalPipelineState) -> Dict[str, Any]:
     clause_text = clause.get("extracted_text", "")
     clause_type = clause.get("clause_type", "")
 
-    # Formulate targeted search query for THIS specific clause
-    search_query = f"{clause_type} {clause_text[:400]}"
+    # Query Qdrant with THIS specific clause text
+    search_query = f"[{clause_type}] {clause_text[:400]}"
     search_hits = rag_service.retrieve_context(search_query, top_k=1)
 
     if search_hits and len(search_hits) > 0:
-      top_hit = search_hits[0]
-      cited_ref = top_hit.get("ref", "CLS-GEN-020")
-      policy_text = top_hit.get("text", "")
-
-      clause["rag_reference_used"] = cited_ref
-      clause["matched_policy_text"] = policy_text
-      all_retrieved_context.append(top_hit)
-      print(f"🎯 Grounded [{clause_type}] -> Citation: {cited_ref}")
+      best_match = search_hits[0]
+      # Lock in the EXACT Qdrant database ID (e.g., CLS-LIAB-001, TAX-1)
+      clause["rag_reference_used"] = best_match.get("ref", "TAX-1")
+      clause["matched_policy_text"] = best_match.get("text", "")
+      all_retrieved_context.append(best_match)
     else:
-      clause["rag_reference_used"] = "CLS-GEN-020"
+      clause["rag_reference_used"] = "TAX-1"
 
     grounded_clauses.append(clause)
 
@@ -178,7 +161,7 @@ def ground_clauses_with_rag_node(state: LegalPipelineState) -> Dict[str, Any]:
 
 @traceable(name="Clause Normalization Node")
 def normalize_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Standardizes raw clause headings to enterprise taxonomy and enforces float type safety."""
+  """Step 3: Standardize headings to enterprise taxonomy."""
   raw_clauses = state.get("raw_clauses", [])
   normalized = normalization_service.normalize_clauses(raw_clauses)
   unique_normalized = deduplicate_extracted_clauses(normalized)
@@ -187,16 +170,33 @@ def normalize_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
 
 @traceable(name="Legal Reasoning & Risk Assessment Node")
 def legal_reasoning_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Applies dedicated risk evaluation pass with per-clause model cascading."""
+  """Step 4: Execute LLM risk evaluation AND forcefully apply the Citation Lock."""
   normalized_clauses = state.get("normalized_clauses", [])
   business_unit = state.get("business_unit", "Enterprise")
   user_role = state.get("user_role", "Senior Reviewer")
 
+  # The reasoning_service runs its own LLM prompt and will hallucinate IDs
   final_clauses = reasoning_service.evaluate_risk_and_reasoning(
       normalized_clauses,
       business_unit=business_unit,
       user_role=user_role,
   )
+
+  # --- THE CITATION LOCK ---
+  # Build a map of the exact IDs we retrieved from Qdrant in Step 2
+  grounding_map = {}
+  for nc in normalized_clauses:
+      key = re.sub(r"\s+", " ", nc.get("extracted_text", "").lower())[:100]
+      grounding_map[key] = nc.get("rag_reference_used", "TAX-1")
+
+  # Forcefully overwrite the hallucinated ID with our locked Qdrant ID
+  for fc in final_clauses:
+      key = re.sub(r"\s+", " ", fc.get("extracted_text", "").lower())[:100]
+      if key in grounding_map:
+          fc["rag_reference_used"] = grounding_map[key]
+      elif not fc.get("rag_reference_used") or fc.get("rag_reference_used") == "PENDING":
+          fc["rag_reference_used"] = "TAX-1"
+
   unique_final = deduplicate_extracted_clauses(final_clauses)
   return {"final_clauses": unique_final}
 
@@ -204,6 +204,7 @@ def legal_reasoning_node(state: LegalPipelineState) -> Dict[str, Any]:
 # --- 4. Build and Compile StateGraph ---
 workflow = StateGraph(LegalPipelineState)
 
+# Notice we removed the global "retrieve_rag_context_node" entirely
 workflow.add_node("extract_clauses", extract_clauses_node)
 workflow.add_node("ground_clauses", ground_clauses_with_rag_node)
 workflow.add_node("normalize_clauses", normalize_clauses_node)
