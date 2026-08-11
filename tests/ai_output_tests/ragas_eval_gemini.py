@@ -19,7 +19,7 @@ if "langchain_community.chat_models.vertexai" not in sys.modules:
 from ragas import evaluate
 from ragas.metrics import (
     faithfulness,
-    answer_relevance,
+    answer_relevancy,  # FIX: Spelled with a 'y'
     context_precision,
     context_recall,
     answer_correctness,
@@ -41,7 +41,7 @@ evaluator_llm = ChatGoogleGenerativeAI(
     temperature=0
 )
 
-# CRITICAL FIX: Use the latest active model gemini-embedding-001
+# Use the latest active model gemini-embedding-001
 evaluator_embeddings = GoogleGenerativeAIEmbeddings(
     model="gemini-embedding-001",
     google_api_key=GEMINI_API_KEY
@@ -75,7 +75,7 @@ def run_evaluation():
 
     metrics = [
         faithfulness,
-        answer_relevance,
+        answer_relevancy,  # FIX: Spelled with a 'y'
         context_precision,
         context_recall,
         answer_correctness,
@@ -97,6 +97,7 @@ def run_evaluation():
 
     print("\n=================== TATA AI RAGAS EVALUATION SCORECARD ===================")
     print(f"📊 Faithfulness (Groundedness):    {results.get('faithfulness', 0):.4f}")
+    print(f"📊 Answer Relevancy:               {results.get('answer_relevancy', 0):.4f}")
     print(f"📊 Context Precision (Retrieval):  {results.get('context_precision', 0):.4f}")
     print(f"📊 Context Recall (KB Coverage):   {results.get('context_recall', 0):.4f}")
     print(f"📊 Answer Correctness (Accuracy):  {results.get('answer_correctness', 0):.4f}")
