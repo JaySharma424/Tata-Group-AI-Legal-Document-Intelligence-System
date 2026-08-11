@@ -22,7 +22,7 @@ class RAGKnowledgeService:
   """Production-grade RAG service using the modern Google GenAI SDK."""
 
   def __init__(self, storage_path: str = "./backend/storage/qdrant_db"):
-    self.collection_name = "tata_legal_knowledge"
+    self.collection_name = "tata_legal_knowledge_v2"
     self.vector_dim = 768  # Enforced 768-dim vector size
     self.is_seeding = False # Prevent concurrent seeding attempts
     
