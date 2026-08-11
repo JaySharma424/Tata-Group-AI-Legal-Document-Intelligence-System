@@ -4,6 +4,7 @@ import asyncio
 from typing import List, Dict, Any
 from datasets import Dataset
 import warnings
+import nest_asyncio # 🚀 NEW: Import the loop patch
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -118,6 +119,9 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
             m.embeddings = evaluator_embeddings
 
     try:
+        # 🚀 NEW: Apply the async patch to allow RAGAS to run inside FastAPI's loop!
+        nest_asyncio.apply()
+        
         results = evaluate(dataset=dataset, metrics=metrics, raise_exceptions=False)
         df = results.to_pandas()
         return {
