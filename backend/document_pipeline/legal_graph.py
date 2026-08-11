@@ -49,7 +49,7 @@ def retrieve_rag_context_node(state: LegalPipelineState) -> Dict[str, Any]:
   except Exception as e:
     print(f"⚠️ RAG retrieval error in node: {e}")
     references = [{
-        "ref": "POL-IND-2026-01",
+        "ref": "TAX-1",
         "text": (
             "All vendor agreements must mandate explicit confidentiality"
             " obligations and liability caps."
@@ -61,34 +61,51 @@ def retrieve_rag_context_node(state: LegalPipelineState) -> Dict[str, Any]:
 
 @traceable(name="LLM Clause Extraction Node")
 def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Extracts raw legal clauses using Gemini based on OCR text and retrieved RAG context."""
-  rag_str = json.dumps(state.get("rag_context", []), indent=2)
+  """Extracts raw legal clauses using Gemini strictly grounded in retrieved KB Ref IDs."""
+  rag_context = state.get("rag_context", [])
   ocr_text = state.get("ocr_text", "")
   business_unit = state.get("business_unit", "Enterprise")
   user_role = state.get("user_role", "Senior Reviewer")
+
+  # Extract exact valid payload Ref IDs retrieved from Qdrant vector store
+  valid_ref_ids = [item.get("ref") for item in rag_context if item.get("ref") and item.get("ref") != "REF-N/A"]
+  default_ref = valid_ref_ids[0] if valid_ref_ids else "TAX-1"
+
+  formatted_rag_policies = ""
+  for idx, item in enumerate(rag_context, 1):
+    ref_id = item.get("ref", f"TAX-{idx}")
+    policy_text = item.get("text", "")
+    formatted_rag_policies += f"\n--- POLICY CHUNK #{idx} [EXACT KB REF ID: {ref_id}] ---\n{policy_text}\n"
 
   prompt = f"""
     You are Aadhya, Enterprise Legal Intelligence AI for Tata Group.
     Analyze the document text for Business Unit: '{business_unit}' and User Role: '{user_role}'.
     
-    APPROVED ENTERPRISE RAG POLICIES:
-    {rag_str}
+    APPROVED ENTERPRISE RAG POLICIES (FROM QDRANT KNOWLEDGE BASE):
+    {formatted_rag_policies}
+
+    ALLOWED KNOWLEDGE BASE REFERENCE IDs:
+    {valid_ref_ids}
 
     DOCUMENT TEXT TO ANALYZE:
     {ocr_text[:8000]}
 
+    STRICT CITATION RULES:
+    1. In 'rag_reference_used', you MUST ONLY output an EXACT Reference ID string from the ALLOWED KNOWLEDGE BASE REFERENCE IDs list above {valid_ref_ids}.
+    2. DO NOT invent, hallucinate, or abbreviate new codes (e.g., DO NOT generate 'POL-PROC-001', 'CLS-LIAB-001', or 'FIN-PAY-002' unless they are explicitly in {valid_ref_ids}).
+    3. Match each extracted clause to the closest relevant policy chunk and copy its EXACT 'EXACT KB REF ID'.
+
     INSTRUCTIONS:
-    1. Extract ALL distinct legal clauses present in the text (e.g., Scope, Fees/Payment, Confidentiality, Indemnification, Limitation of Liability, Termination, Governing Law, IP Rights).
-    2. Evaluate each clause against the provided APPROVED ENTERPRISE RAG POLICIES.
+    Extract ALL distinct legal clauses present in the text (e.g., Scope, Fees/Payment, Confidentiality, Indemnification, Limitation of Liability, Termination, Governing Law, IP Rights).
     
     Return ONLY a valid JSON array where each object contains these EXACT keys:
     - "clause_type": (string, e.g., "Indemnification", "Limitation of Liability", "Governing Law")
     - "extracted_text": (exact text quote from document)
-    - "confidence_score": MUST BE A FLOAT NUMBER between 0.0 and 1.0 (e.g. 0.95). DO NOT write words like "High" or "Medium".
+    - "confidence_score": MUST BE A FLOAT NUMBER between 0.0 and 1.0 (e.g. 0.95).
     - "risk_level": "HIGH", "MEDIUM", or "LOW"
     - "risk_rationale": (detailed legal rationale comparing against approved RAG policies)
-    - "involved_party": (parties involved, e.g., "Tata Enterprise Solutions Ltd. & Apex Cloud Technologies Inc.")
-    - "rag_reference_used": (the policy Ref ID cited from RAG policies, e.g., "CLS-LIAB-001" or "RISK-IND-101")
+    - "involved_party": (parties involved)
+    - "rag_reference_used": (MUST BE AN EXACT STRING MATCH FROM {valid_ref_ids})
     - "page_reference": (e.g., "Section 4" or "Section 5")
     - "obligation_owner": (responsible entity)
     - "recommended_action": (e.g., "Escalate to Legal", "Accept Standard Term", "Request Revision")
@@ -149,11 +166,18 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
             " quota limits."
         ),
         "involved_party": "Tata Group & Counterparty",
-        "rag_reference_used": "POL-IND-2026-01",
+        "rag_reference_used": default_ref,
         "page_reference": "Section 1",
         "obligation_owner": "Compliance Team",
         "recommended_action": "Review Document",
     }]
+
+  # --- POST-PROCESSING VALIDATION: GUARANTEE GROUNDED KB REFERENCE IDs ---
+  for clause in raw_clauses:
+    cited_ref = clause.get("rag_reference_used", "")
+    if valid_ref_ids and cited_ref not in valid_ref_ids:
+      # If LLM generated a non-existent code, map it to the top retrieved KB payload ID
+      clause["rag_reference_used"] = default_ref
 
   return {"raw_clauses": raw_clauses}
 

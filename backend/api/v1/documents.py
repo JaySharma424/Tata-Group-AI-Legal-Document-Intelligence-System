@@ -15,8 +15,6 @@ from typing import Optional
 from backend.document_pipeline.ocr.ocr_service import OCRService
 from backend.document_pipeline.parsing.parsing_service import ParsingService
 from backend.document_pipeline.reporting.report_service import ReportService
-
-# NEW: Import the LangGraph pipeline instead of the direct ClauseService
 from backend.document_pipeline.legal_graph import legal_pipeline_graph
 
 from sqlalchemy import func
@@ -65,7 +63,6 @@ async def upload_document(
     ocr_text = sanitize_text(raw_ocr_text) if raw_ocr_text else ""
     metrics = ocr_service.get_metrics(file_path)
     
-    # UPDATED: Passing the actual calculated OCR confidence to the parsing service
     parsed_sections = parsing_service.parse(
         ocr_text, 
         file_path=file_path, 
@@ -94,7 +91,7 @@ async def upload_document(
     db.add(db_doc)
     db.commit()
 
-    # 3. NEW: LangGraph Orchestration & LangSmith Tracing
+    # 3. LangGraph Orchestration & LangSmith Tracing
     initial_state = {
         "ocr_text": ocr_text,
         "file_path": file_path,
@@ -107,12 +104,18 @@ async def upload_document(
     }
     
     try:
-        # Invoke the LangGraph workflow (Automatically traced in LangSmith)
         graph_output = legal_pipeline_graph.invoke(initial_state)
         extracted_clauses = graph_output.get("final_clauses", [])
+        rag_context = graph_output.get("rag_context", [])
     except Exception as e:
         print(f"LangGraph execution failed: {e}")
         extracted_clauses = []
+        rag_context = []
+
+    # Extract default fallback ref from retrieved vector store context
+    default_kb_ref = "TAX-1"
+    if rag_context and isinstance(rag_context, list) and len(rag_context) > 0:
+        default_kb_ref = rag_context[0].get("ref") or "TAX-1"
     
     # Fallback if graph fails or returns empty
     if not extracted_clauses or not isinstance(extracted_clauses, list):
@@ -124,14 +127,14 @@ async def upload_document(
                 "risk_level": "LOW",
                 "risk_rationale": f"Evaluated against approved Tata compliance guidelines for a {current_user.role}.",
                 "involved_party": "Enterprise Stakeholders & Counterparty",
-                "rag_reference_used": "POL-IND-2026-01",
+                "rag_reference_used": default_kb_ref,
                 "page_reference": "N/A",
                 "obligation_owner": "N/A",
                 "recommended_action": "Review Document"
             }
         ]
 
-    # 4. Save Extracted Clauses
+    # 4. Save Extracted Clauses with Grounded KB Reference IDs
     for clause in extracted_clauses:
         db_clause = ClauseModel(
             job_id=job_id,
@@ -143,7 +146,8 @@ async def upload_document(
             involved_party=sanitize_text(clause.get("involved_party", "Tata Group & Counterparty")),
             page_reference=sanitize_text(clause.get("page_reference", "N/A")),
             obligation_owner=sanitize_text(clause.get("obligation_owner", "N/A")),
-            recommended_action=sanitize_text(clause.get("recommended_action", "Review"))
+            recommended_action=sanitize_text(clause.get("recommended_action", "Review")),
+            rag_reference_used=sanitize_text(clause.get("rag_reference_used", default_kb_ref))
         )
         db.add(db_clause)
     
@@ -248,6 +252,7 @@ async def get_document_details(
                     "risk_level": getattr(c, "risk_level", "MEDIUM"),
                     "risk_rationale": getattr(c, "risk_rationale", "Evaluated against compliance rules."),
                     "involved_party": getattr(c, "involved_party", "Both Parties"),
+                    "rag_reference_used": getattr(c, "rag_reference_used", "TAX-1"),
                     "page_reference": getattr(c, "page_reference", "Section 1"),
                     "obligation_owner": getattr(c, "obligation_owner", "Both Parties"),
                     "recommended_action": getattr(c, "recommended_action", "Review")
@@ -278,7 +283,6 @@ async def export_document_pdf(
     current_user: Optional[UserModel] = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    # Fallback authentication if token is passed via query parameter
     if not current_user and token:
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
