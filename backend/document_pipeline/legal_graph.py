@@ -90,7 +90,7 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     - "recommended_action": (e.g., "Review Document")
     """
 
-  model_candidates = ["gemini-2.0-flash", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+  model_candidates = ["gemini-2.0-flash", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash-lite"]
 
   raw_clauses = []
   for model_name in model_candidates:
