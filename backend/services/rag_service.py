@@ -4,6 +4,7 @@ import os
 import re
 import time
 import threading
+from backend.services.llm_config import get_llm_config
 from typing import Any, Dict, List, Optional
 from google import genai
 from google.genai import types
@@ -25,7 +26,15 @@ class RAGKnowledgeService:
     self.collection_name = "tata_legal_knowledge"
     self.vector_dim = 768  # Enforced 768-dim vector size
     self.is_seeding = False # Prevent concurrent seeding attempts
-
+    # Inside __init__:
+    config = get_llm_config()
+    api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
+    if api_key:
+      self.client = genai.Client(api_key=api_key)
+      self.has_api_key = True
+    else:
+      self.client = None
+      self.has_api_key = False
     os.makedirs(storage_path, exist_ok=True)
     try:
       self.qdrant = QdrantClient(path=storage_path)
