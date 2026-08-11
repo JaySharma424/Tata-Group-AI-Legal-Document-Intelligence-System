@@ -6,8 +6,6 @@ from dotenv import load_dotenv
 
 # ==============================================================================
 # 🛑 CRITICAL DEPENDENCY FIX FOR RAGAS + LANGCHAIN v1.0+
-# Modern LangChain removed 'chat_models.vertexai', causing Ragas to crash on import.
-# We inject a dummy mock into sys.modules so Ragas bypasses the ModuleNotFoundError.
 # ==============================================================================
 import sys
 import types
@@ -18,7 +16,6 @@ if "langchain_community.chat_models.vertexai" not in sys.modules:
     sys.modules["langchain_community.chat_models.vertexai"] = _vx
 # ==============================================================================
 
-# Now we can safely import Ragas without it crashing!
 from ragas import evaluate
 from ragas.metrics import (
     faithfulness,
@@ -44,9 +41,9 @@ evaluator_llm = ChatGoogleGenerativeAI(
     temperature=0
 )
 
-# Use models/text-embedding-004 (Active Google GenAI Model)
+# CRITICAL FIX: Use the latest active model gemini-embedding-001
 evaluator_embeddings = GoogleGenerativeAIEmbeddings(
-    model="models/text-embedding-004",
+    model="gemini-embedding-001",
     google_api_key=GEMINI_API_KEY
 )
 

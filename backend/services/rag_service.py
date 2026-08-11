@@ -24,7 +24,6 @@ class RAGKnowledgeService:
     self.collection_name = "tata_legal_knowledge"
     self.vector_dim = 768  # Enforced 768-dim vector size
 
-    # 1. Disk Connection with In-Memory fallback for lock resilience
     os.makedirs(storage_path, exist_ok=True)
     try:
       self.qdrant = QdrantClient(path=storage_path)
@@ -36,7 +35,6 @@ class RAGKnowledgeService:
       else:
         raise e
 
-    # 2. Initialize Modern Google GenAI Client
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if api_key:
       self.client = genai.Client(api_key=api_key)
@@ -46,7 +44,6 @@ class RAGKnowledgeService:
       self.has_api_key = False
       print("⚠️ GEMINI_API_KEY missing. Vector search will use zero-vectors.")
 
-    # 3. Path Resolution
     current_dir = os.path.dirname(os.path.abspath(__file__))
     self.csv_path = os.path.join(
         os.path.dirname(current_dir), "data", "risk_taxonomy.csv"
@@ -89,8 +86,8 @@ class RAGKnowledgeService:
     if not self.has_api_key or not text.strip():
       return [0.0] * self.vector_dim
 
-    # CRITICAL FIX: Prioritize embedding-001 to prevent 404 Not Found errors on v1beta
-    candidate_models = ["models/embedding-001", "embedding-001", "text-embedding-004"]
+    # CRITICAL FIX: Use the latest active Google embedding model (gemini-embedding-001)
+    candidate_models = ["gemini-embedding-001", "gemini-embedding-2-preview"]
 
     for model_name in candidate_models:
       for attempt in range(retries):
@@ -104,7 +101,6 @@ class RAGKnowledgeService:
           )
           if response.embeddings and len(response.embeddings) > 0:
             values = list(response.embeddings[0].values)
-            # Enforce exact 768 dimensions
             if len(values) > self.vector_dim:
               values = values[: self.vector_dim]
             elif len(values) < self.vector_dim:
@@ -119,7 +115,7 @@ class RAGKnowledgeService:
             continue
           else:
             print(f"⚠️ Embedding failed for {model_name}: {err_msg}. Trying next model...")
-            break # Break out of retries for THIS model, but continue to the next model in candidate_models
+            break 
 
     print("❌ All embedding models failed. Returning zero-vector fallback.")
     return [0.0] * self.vector_dim
