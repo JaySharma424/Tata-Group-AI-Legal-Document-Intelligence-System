@@ -1,6 +1,8 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
+from fastapi.concurrency import run_in_threadpool  # 🚀 NEW: Import the thread pool manager!
+
 from backend.database import get_db
 from backend.models import DocumentModel, ClauseModel, AuditLogModel, UserModel
 from backend.api.v1.auth import get_current_user, SECRET_KEY, ALGORITHM
@@ -17,7 +19,7 @@ from backend.document_pipeline.parsing.parsing_service import ParsingService
 from backend.document_pipeline.reporting.report_service import ReportService
 from backend.document_pipeline.legal_graph import legal_pipeline_graph
 
-# Import your custom RAGAS evaluator from your tests directory
+# Import your custom RAGAS evaluator from your services directory
 try:
     from backend.services.ragas_evaluator import generate_ragas_scorecard
 except ImportError as e:
@@ -163,9 +165,11 @@ async def upload_document(
 
         db.add(db_clause)
         
-    # 5. Trigger RAGAS Evaluation on the dynamic LLM
+    # 5. 🚀 NEW: Trigger RAGAS in an isolated background thread to bypass uvloop!
     try:
-        ragas_scores = generate_ragas_scorecard(extracted_clauses)
+        # Await the execution of generate_ragas_scorecard on a separate thread
+        ragas_scores = await run_in_threadpool(generate_ragas_scorecard, extracted_clauses)
+        
         db_doc.ragas_faithfulness = ragas_scores.get("faithfulness", 0.0)
         db_doc.ragas_answer_relevancy = ragas_scores.get("answer_relevancy", 0.0)
         db_doc.ragas_context_precision = ragas_scores.get("context_precision", 0.0)
