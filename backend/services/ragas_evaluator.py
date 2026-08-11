@@ -7,6 +7,18 @@ import warnings
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+# ==============================================================================
+# 🛑 CRITICAL DEPENDENCY FIX FOR RAGAS + LANGCHAIN
+# ==============================================================================
+import sys
+import types
+if "langchain_community.chat_models.vertexai" not in sys.modules:
+    _vx = types.ModuleType("langchain_community.chat_models.vertexai")
+    class ChatVertexAI: pass
+    _vx.ChatVertexAI = ChatVertexAI
+    sys.modules["langchain_community.chat_models.vertexai"] = _vx
+# ==============================================================================
+
 from ragas import evaluate
 from ragas.metrics import (
     faithfulness,
