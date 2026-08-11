@@ -18,7 +18,6 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-
 class RAGKnowledgeService:
   """Production-grade RAG service using the modern Google GenAI SDK."""
 
@@ -26,15 +25,19 @@ class RAGKnowledgeService:
     self.collection_name = "tata_legal_knowledge"
     self.vector_dim = 768  # Enforced 768-dim vector size
     self.is_seeding = False # Prevent concurrent seeding attempts
-    # Inside __init__:
+    
+    # --- DYNAMIC LLM CONFIGURATION ---
     config = get_llm_config()
     api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
+    
     if api_key:
       self.client = genai.Client(api_key=api_key)
       self.has_api_key = True
     else:
       self.client = None
       self.has_api_key = False
+      print("⚠️ GEMINI_API_KEY missing. Vector search will use zero-vectors.")
+
     os.makedirs(storage_path, exist_ok=True)
     try:
       self.qdrant = QdrantClient(path=storage_path)
@@ -45,15 +48,6 @@ class RAGKnowledgeService:
         self.qdrant = QdrantClient(location=":memory:")
       else:
         raise e
-
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if api_key:
-      self.client = genai.Client(api_key=api_key)
-      self.has_api_key = True
-    else:
-      self.client = None
-      self.has_api_key = False
-      print("⚠️ GEMINI_API_KEY missing. Vector search will use zero-vectors.")
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     self.csv_path = os.path.join(
@@ -101,7 +95,10 @@ class RAGKnowledgeService:
     if not self.has_api_key or not text.strip():
       return [0.0] * self.vector_dim
 
-    candidate_models = ["gemini-embedding-001", "gemini-embedding-2-preview"]
+    # Pull active embedding model from dynamic config
+    config = get_llm_config()
+    active_embedding_model = config.get("embedding_model", "gemini-embedding-001")
+    candidate_models = [active_embedding_model, "gemini-embedding-001"]
 
     for model_name in candidate_models:
       for attempt in range(retries):
@@ -280,7 +277,6 @@ class RAGKnowledgeService:
     if not query_text:
       return []
       
-    # 🛑 CRITICAL FIX: Check if database is empty before searching. If empty, seed it now (Lazy Loading).
     try:
         collection_info = self.qdrant.get_collection(self.collection_name)
         if collection_info.points_count == 0:
