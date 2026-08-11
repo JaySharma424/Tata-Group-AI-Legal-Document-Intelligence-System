@@ -257,9 +257,10 @@ class RAGKnowledgeService:
   def retrieve_context(
       self,
       query_text: str,
-      top_k: int = 4,
+      top_k: int = 3,
       category_filter: Optional[str] = None,
-  ) -> List[Dict[str, str]]:
+  ) -> List[Dict[str, Any]]:
+    """Retrieves top matching legal policies from Qdrant vector database."""
     if not query_text:
       return []
 
@@ -276,17 +277,19 @@ class RAGKnowledgeService:
       )
 
     try:
+      # Retrieve top matching policy chunks directly from Qdrant
       results = self.qdrant.search(
           collection_name=self.collection_name,
           query_vector=query_vector,
           query_filter=query_filter,
           limit=top_k,
-          score_threshold=0.45,
       )
       return [
           {
-              "ref": hit.payload.get("ref", "REF-N/A"),
+              "ref": hit.payload.get("ref", "CLS-GEN-020"),
               "text": hit.payload.get("text", ""),
+              "title": hit.payload.get("title", ""),
+              "category": hit.payload.get("category", ""),
           }
           for hit in results
       ]
