@@ -2,7 +2,7 @@
 
 **Enterprise Document Parsing, RAG Grounding & Risk Governance Portal**
 
-[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/JaySharma424/Tata-Group-AI-Legal-Document-Intelligence-System)
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/TriptiVishwakarma/Tata-Group-AI-Legal-Document-Intelligence-System)
 
 An advanced, full-stack enterprise application designed for corporate legal and compliance teams. This system automates the ingestion, parsing, and risk assessment of legal contracts (like Master Service Agreements, NDAs, etc.) using AI and Retrieval-Augmented Generation (RAG). It provides a secure, isolated workspace for officers to review AI-extracted clauses, log audit actions, and generate certified compliance reports.
 
