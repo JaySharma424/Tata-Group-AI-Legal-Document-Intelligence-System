@@ -24,6 +24,7 @@ from ragas.metrics import (
     context_recall,
     answer_correctness,
 )
+from ragas.run_config import RunConfig  # NEW: Import RunConfig to control rate limits
 
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 
@@ -35,11 +36,12 @@ if not GEMINI_API_KEY:
     raise ValueError("❌ GEMINI_API_KEY environment variable is missing!")
 
 # 1. INITIALIZE GEMINI EVALUATOR MODELS
-# FIX 1: Upgraded from deprecated 1.5 to active gemini-2.5-flash
+# Added max_retries to the LangChain model wrapper for extra safety
 evaluator_llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
     google_api_key=GEMINI_API_KEY,
-    temperature=0
+    temperature=0,
+    max_retries=5 
 )
 
 evaluator_embeddings = GoogleGenerativeAIEmbeddings(
@@ -59,11 +61,12 @@ def load_dataset_for_ragas(file_path: str) -> Dataset:
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
+    # FIX: Ragas v0.4+ demands 'reference' instead of 'ground_truth'
     formatted_data = {
         "user_input": [item["user_input"] for item in data],
         "retrieved_contexts": [item["retrieved_contexts"] for item in data],
         "response": [item["response"] for item in data],
-        "ground_truth": [item["ground_truth"] for item in data],
+        "reference": [item["ground_truth"] for item in data], 
     }
     return Dataset.from_dict(formatted_data)
 
@@ -86,35 +89,43 @@ def run_evaluation():
         if hasattr(metric, 'embeddings') and metric.embeddings is not None:
             metric.embeddings = evaluator_embeddings
 
-    results = evaluate(
-        dataset=dataset,
-        metrics=metrics,
-        llm=evaluator_llm,
-        embeddings=evaluator_embeddings
-    )
+    # FIX: Restrict max_workers to 1 to completely bypass Gemini's 15 RPM Rate Limit
+    config = RunConfig(max_workers=1, max_retries=10)
 
-    df_results = results.to_pandas()
+    try:
+        results = evaluate(
+            dataset=dataset,
+            metrics=metrics,
+            llm=evaluator_llm,
+            embeddings=evaluator_embeddings,
+            run_config=config,
+            raise_exceptions=False # Prevents whole script crash if one row fails
+        )
 
-    # FIX 2: Safely calculate the mean scores directly from the Pandas dataframe
-    f_score = df_results['faithfulness'].mean() if 'faithfulness' in df_results else 0.0
-    ar_score = df_results['answer_relevancy'].mean() if 'answer_relevancy' in df_results else 0.0
-    cp_score = df_results['context_precision'].mean() if 'context_precision' in df_results else 0.0
-    cr_score = df_results['context_recall'].mean() if 'context_recall' in df_results else 0.0
-    ac_score = df_results['answer_correctness'].mean() if 'answer_correctness' in df_results else 0.0
+        df_results = results.to_pandas()
 
-    print("\n=================== TATA AI RAGAS EVALUATION SCORECARD ===================")
-    print(f"📊 Faithfulness (Groundedness):    {f_score:.4f}")
-    print(f"📊 Answer Relevancy:               {ar_score:.4f}")
-    print(f"📊 Context Precision (Retrieval):  {cp_score:.4f}")
-    print(f"📊 Context Recall (KB Coverage):   {cr_score:.4f}")
-    print(f"📊 Answer Correctness (Accuracy):  {ac_score:.4f}")
-    print("==========================================================================\n")
+        f_score = df_results['faithfulness'].mean() if 'faithfulness' in df_results else 0.0
+        ar_score = df_results['answer_relevancy'].mean() if 'answer_relevancy' in df_results else 0.0
+        cp_score = df_results['context_precision'].mean() if 'context_precision' in df_results else 0.0
+        cr_score = df_results['context_recall'].mean() if 'context_recall' in df_results else 0.0
+        ac_score = df_results['answer_correctness'].mean() if 'answer_correctness' in df_results else 0.0
 
-    output_csv = os.path.join(
-        os.path.dirname(__file__), "ragas_gemini_scorecard.csv"
-    )
-    df_results.to_csv(output_csv, index=False)
-    print(f"✅ Full metric evaluation saved to: {output_csv}")
+        print("\n=================== TATA AI RAGAS EVALUATION SCORECARD ===================")
+        print(f"📊 Faithfulness (Groundedness):    {f_score:.4f}")
+        print(f"📊 Answer Relevancy:               {ar_score:.4f}")
+        print(f"📊 Context Precision (Retrieval):  {cp_score:.4f}")
+        print(f"📊 Context Recall (KB Coverage):   {cr_score:.4f}")
+        print(f"📊 Answer Correctness (Accuracy):  {ac_score:.4f}")
+        print("==========================================================================\n")
+
+        output_csv = os.path.join(
+            os.path.dirname(__file__), "ragas_gemini_scorecard.csv"
+        )
+        df_results.to_csv(output_csv, index=False)
+        print(f"✅ Full metric evaluation saved to: {output_csv}")
+
+    except Exception as e:
+        print(f"❌ Ragas Evaluation Failed: {e}")
 
 if __name__ == "__main__":
     run_evaluation()
