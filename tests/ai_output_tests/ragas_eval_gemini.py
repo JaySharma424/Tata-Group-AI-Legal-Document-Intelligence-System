@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import re
 import pandas as pd
 from datasets import Dataset
 from dotenv import load_dotenv
@@ -44,7 +45,7 @@ if not GEMINI_API_KEY:
 # --- 1. DYNAMIC MODEL FALLBACK SELECTION ---
 print("🔍 Discovering available Gemini models...")
 
-llm_candidates = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-3.5-flash", "gemini-3.6-flash"]
+llm_candidates = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash-lite" "gemini-2.0-flash", "gemini-3.6-flash"]
 base_llm = None
 
 for model_name in llm_candidates:
@@ -56,7 +57,6 @@ for model_name in llm_candidates:
             temperature=0,
             max_retries=3
         )
-        # Perform a fast test call to check if model exists (throws 404 if not)
         test_llm.invoke("Test") 
         base_llm = test_llm
         print(f"✅ Successfully locked LLM: {model_name}")
@@ -100,11 +100,21 @@ if not evaluator_embeddings:
     raise RuntimeError("Could not find a working Gemini Embedding model.")
 
 
-# --- 2. RATE LIMIT WRAPPER ---
-# 🛑 CRITICAL FIX: Custom wrapper to force a delay between EVERY API call
+# --- 2. RATE LIMIT & JSON CLEANING WRAPPER ---
+def clean_json_output(text: str) -> str:
+    """Strips markdown formatting from JSON output so Ragas (Pydantic) doesn't crash."""
+    text = text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return text.strip()
+
 class RateLimitedLLM(BaseChatModel):
     llm: BaseChatModel
-    delay: float = 4.0 # Wait 4 seconds between every call (15 requests per minute)
+    delay: float = 4.0 
     
     @property
     def _llm_type(self) -> str:
@@ -117,8 +127,13 @@ class RateLimitedLLM(BaseChatModel):
         run_manager: Any | None = None,
         **kwargs: Any,
     ) -> ChatResult:
-        time.sleep(self.delay) # Force the delay
-        return self.llm._generate(messages, stop, run_manager, **kwargs)
+        time.sleep(self.delay) 
+        result = self.llm._generate(messages, stop, run_manager, **kwargs)
+        # CRITICAL FIX: Clean the JSON before handing it back to Ragas
+        for gen in result.generations:
+            gen.text = clean_json_output(gen.text)
+            gen.message.content = clean_json_output(gen.message.content)
+        return result
         
     async def _agenerate(
         self,
@@ -128,10 +143,14 @@ class RateLimitedLLM(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         import asyncio
-        await asyncio.sleep(self.delay) # Force the async delay
-        return await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+        await asyncio.sleep(self.delay) 
+        result = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+        # CRITICAL FIX: Clean the JSON before handing it back to Ragas
+        for gen in result.generations:
+            gen.text = clean_json_output(gen.text)
+            gen.message.content = clean_json_output(gen.message.content)
+        return result
 
-# Wrap the dynamically selected LLM
 evaluator_llm = RateLimitedLLM(llm=base_llm)
 
 
@@ -158,7 +177,7 @@ def load_dataset_for_ragas(file_path: str) -> Dataset:
 
 # --- 4. RUN RAGAS EVALUATION PIPELINE ---
 def run_evaluation():
-    print("🚀 Starting Tata AI Legal RAGAS Evaluation (Throttled + Dynamic Models)...")
+    print("🚀 Starting Tata AI Legal RAGAS Evaluation (Throttled + Clean JSON)...")
 
     dataset = load_dataset_for_ragas(EVAL_DATASET_PATH)
 
@@ -175,7 +194,6 @@ def run_evaluation():
         if hasattr(metric, 'embeddings') and metric.embeddings is not None:
             metric.embeddings = evaluator_embeddings
 
-    # Enforce strict sequential processing
     config = RunConfig(max_workers=1, max_retries=10, timeout=120)
 
     try:
@@ -185,7 +203,7 @@ def run_evaluation():
             llm=evaluator_llm,
             embeddings=evaluator_embeddings,
             run_config=config,
-            raise_exceptions=False
+            raise_exceptions=False 
         )
 
         df_results = results.to_pandas()
