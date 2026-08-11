@@ -15,27 +15,20 @@ SCORECARD_CSV_PATH = os.path.join(
     os.path.dirname(__file__), "..", "..", "..", "tests", "ai_output_tests", "ragas_gemini_scorecard.csv"
 )
 
-# -------------------------------------------------------------------------
-# DIRECT IN-MEMORY BACKGROUND TASK RUNNER (No Subprocess needed)
-# -------------------------------------------------------------------------
+# Safe Background Execution Handler
 def execute_ragas_async():
-    """Executes the Gemini RAGAS evaluation directly inside Python."""
+    """Executes the Gemini RAGAS evaluation safely without crashing the server."""
     try:
         from tests.ai_output_tests.ragas_eval_gemini import run_evaluation
         run_evaluation()
         print("✅ Background RAGAS evaluation completed successfully.")
     except Exception as e:
-        print(f"❌ Background RAGAS evaluation failed: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Background RAGAS evaluation encountered an error: {e}")
 
 
-# -------------------------------------------------------------------------
-# 1. LEGAL OPERATIONS TELEMETRY ENDPOINT
-# -------------------------------------------------------------------------
 @router.get("/telemetry")
 async def get_legal_ops_telemetry(db: Session = Depends(get_db)):
-    """Aggregates system-wide telemetry for Legal Operations and Monitoring Dashboards."""
+    """Aggregates system-wide telemetry for Legal Operations."""
     total_documents = db.query(DocumentModel).count()
     avg_confidence = db.query(func.avg(DocumentModel.ocr_confidence)).scalar() or 100.0
     manual_review_count = db.query(DocumentModel).filter(DocumentModel.requires_manual_review == True).count()
@@ -71,46 +64,36 @@ async def get_legal_ops_telemetry(db: Session = Depends(get_db)):
     }
 
 
-# -------------------------------------------------------------------------
-# 2. RAGAS EVALUATION TRIGGER
-# -------------------------------------------------------------------------
 @router.post("/ragas/evaluate")
 async def trigger_ragas_evaluation(
     background_tasks: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user)
 ):
-    """Triggers an asynchronous RAGAS evaluation task on Render without blocking the API."""
+    """Triggers an asynchronous RAGAS evaluation task."""
     background_tasks.add_task(execute_ragas_async)
-    
     return {
         "status": "initiated",
         "message": "RAGAS evaluation started in the background. Visit /api/v1/monitoring/ragas/results or /api/v1/monitoring/ragas/download when complete."
     }
 
 
-# -------------------------------------------------------------------------
-# 3. VIEW RAGAS SCORECARD RESULTS AS JSON IN BROWSER
-# -------------------------------------------------------------------------
 @router.get("/ragas/results")
 async def get_ragas_results():
-    """Returns the latest RAGAS metric scores directly in JSON format."""
+    """Returns latest RAGAS metrics in JSON format."""
     if not os.path.exists(SCORECARD_CSV_PATH):
         raise HTTPException(
             status_code=404, 
             detail="No evaluation report found. Please run POST /api/v1/monitoring/ragas/evaluate first."
         )
-    
     try:
         df = pd.read_csv(SCORECARD_CSV_PATH)
         records = df.to_dict(orient="records")
-        
         avg_scores = {
             "faithfulness": round(float(df["faithfulness"].mean()), 4) if "faithfulness" in df else None,
             "context_precision": round(float(df["context_precision"].mean()), 4) if "context_precision" in df else None,
             "context_recall": round(float(df["context_recall"].mean()), 4) if "context_recall" in df else None,
             "answer_correctness": round(float(df["answer_correctness"].mean()), 4) if "answer_correctness" in df else None,
         }
-
         return {
             "status": "success",
             "summary_averages": avg_scores,
@@ -121,9 +104,6 @@ async def get_ragas_results():
         raise HTTPException(status_code=500, detail=f"Failed to read evaluation report: {str(e)}")
 
 
-# -------------------------------------------------------------------------
-# 4. DOWNLOAD RAGAS CSV REPORT WITH 1-CLICK
-# -------------------------------------------------------------------------
 @router.get("/ragas/download")
 async def download_ragas_scorecard():
     """Downloads the generated ragas_gemini_scorecard.csv report directly in the browser."""
@@ -132,7 +112,6 @@ async def download_ragas_scorecard():
             status_code=404, 
             detail="No evaluation CSV report found to download."
         )
-    
     return FileResponse(
         SCORECARD_CSV_PATH, 
         media_type='text/csv', 

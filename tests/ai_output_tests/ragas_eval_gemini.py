@@ -4,6 +4,21 @@ import pandas as pd
 from datasets import Dataset
 from dotenv import load_dotenv
 
+# ==============================================================================
+# 🛑 CRITICAL DEPENDENCY FIX FOR RAGAS + LANGCHAIN v1.0+
+# Modern LangChain removed 'chat_models.vertexai', causing Ragas to crash on import.
+# We inject a dummy mock into sys.modules so Ragas bypasses the ModuleNotFoundError.
+# ==============================================================================
+import sys
+import types
+if "langchain_community.chat_models.vertexai" not in sys.modules:
+    _vx = types.ModuleType("langchain_community.chat_models.vertexai")
+    class ChatVertexAI: pass
+    _vx.ChatVertexAI = ChatVertexAI
+    sys.modules["langchain_community.chat_models.vertexai"] = _vx
+# ==============================================================================
+
+# Now we can safely import Ragas without it crashing!
 from ragas import evaluate
 from ragas.metrics import (
     faithfulness,
@@ -29,7 +44,7 @@ evaluator_llm = ChatGoogleGenerativeAI(
     temperature=0
 )
 
-# UPDATED: Use models/text-embedding-004 (Active Google GenAI Model)
+# Use models/text-embedding-004 (Active Google GenAI Model)
 evaluator_embeddings = GoogleGenerativeAIEmbeddings(
     model="models/text-embedding-004",
     google_api_key=GEMINI_API_KEY
@@ -86,7 +101,7 @@ def run_evaluation():
     print("\n=================== TATA AI RAGAS EVALUATION SCORECARD ===================")
     print(f"📊 Faithfulness (Groundedness):    {results.get('faithfulness', 0):.4f}")
     print(f"📊 Context Precision (Retrieval):  {results.get('context_precision', 0):.4f}")
-    print(f"📊 Context Recall (KB Coverage):    {results.get('context_recall', 0):.4f}")
+    print(f"📊 Context Recall (KB Coverage):   {results.get('context_recall', 0):.4f}")
     print(f"📊 Answer Correctness (Accuracy):  {results.get('answer_correctness', 0):.4f}")
     print("==========================================================================\n")
 
