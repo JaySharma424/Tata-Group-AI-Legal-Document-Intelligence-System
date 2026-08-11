@@ -19,7 +19,7 @@ if "langchain_community.chat_models.vertexai" not in sys.modules:
 from ragas import evaluate
 from ragas.metrics import (
     faithfulness,
-    answer_relevancy,  # FIX: Spelled with a 'y'
+    answer_relevancy,
     context_precision,
     context_recall,
     answer_correctness,
@@ -35,13 +35,13 @@ if not GEMINI_API_KEY:
     raise ValueError("❌ GEMINI_API_KEY environment variable is missing!")
 
 # 1. INITIALIZE GEMINI EVALUATOR MODELS
+# FIX 1: Upgraded from deprecated 1.5 to active gemini-2.5-flash
 evaluator_llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash",
     google_api_key=GEMINI_API_KEY,
     temperature=0
 )
 
-# Use the latest active model gemini-embedding-001
 evaluator_embeddings = GoogleGenerativeAIEmbeddings(
     model="gemini-embedding-001",
     google_api_key=GEMINI_API_KEY
@@ -75,7 +75,7 @@ def run_evaluation():
 
     metrics = [
         faithfulness,
-        answer_relevancy,  # FIX: Spelled with a 'y'
+        answer_relevancy,
         context_precision,
         context_recall,
         answer_correctness,
@@ -95,12 +95,19 @@ def run_evaluation():
 
     df_results = results.to_pandas()
 
+    # FIX 2: Safely calculate the mean scores directly from the Pandas dataframe
+    f_score = df_results['faithfulness'].mean() if 'faithfulness' in df_results else 0.0
+    ar_score = df_results['answer_relevancy'].mean() if 'answer_relevancy' in df_results else 0.0
+    cp_score = df_results['context_precision'].mean() if 'context_precision' in df_results else 0.0
+    cr_score = df_results['context_recall'].mean() if 'context_recall' in df_results else 0.0
+    ac_score = df_results['answer_correctness'].mean() if 'answer_correctness' in df_results else 0.0
+
     print("\n=================== TATA AI RAGAS EVALUATION SCORECARD ===================")
-    print(f"📊 Faithfulness (Groundedness):    {results.get('faithfulness', 0):.4f}")
-    print(f"📊 Answer Relevancy:               {results.get('answer_relevancy', 0):.4f}")
-    print(f"📊 Context Precision (Retrieval):  {results.get('context_precision', 0):.4f}")
-    print(f"📊 Context Recall (KB Coverage):   {results.get('context_recall', 0):.4f}")
-    print(f"📊 Answer Correctness (Accuracy):  {results.get('answer_correctness', 0):.4f}")
+    print(f"📊 Faithfulness (Groundedness):    {f_score:.4f}")
+    print(f"📊 Answer Relevancy:               {ar_score:.4f}")
+    print(f"📊 Context Precision (Retrieval):  {cp_score:.4f}")
+    print(f"📊 Context Recall (KB Coverage):   {cr_score:.4f}")
+    print(f"📊 Answer Correctness (Accuracy):  {ac_score:.4f}")
     print("==========================================================================\n")
 
     output_csv = os.path.join(
