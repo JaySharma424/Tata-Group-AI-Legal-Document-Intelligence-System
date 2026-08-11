@@ -277,7 +277,7 @@ class RAGKnowledgeService:
       )
 
     try:
-      # Retrieve top matching policy chunks directly from Qdrant
+      # Search Qdrant vector store
       results = self.qdrant.search(
           collection_name=self.collection_name,
           query_vector=query_vector,
