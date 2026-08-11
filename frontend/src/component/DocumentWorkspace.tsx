@@ -3,8 +3,9 @@ import axios from 'axios';
 import { 
   Upload, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap, 
   AlertTriangle, ArchiveX, CheckCircle, XCircle, Award, FileSearch, 
-  Sparkles, BookOpen, Eye, Layers, FileText, Check, Hash
+  Sparkles, BookOpen, Eye, Layers, FileText, Hash
 } from 'lucide-react';
+import { PipelineVisualizer } from './PipelineVisualizer';
 
 interface DocumentWorkspaceProps {
   selectedHistoryJobId?: string | null;
@@ -238,93 +239,98 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Upload Form Panel */}
-        <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 shadow-2xl relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-[#003B73]/10 rounded-full blur-2xl pointer-events-none"></div>
-          
-          <div>
-            <h2 className="text-xs font-black uppercase tracking-widest text-[#00A3E0] mb-5 flex items-center gap-2">
-              <Upload className="w-4 h-4 text-[#00A3E0]" /> Upload Legal Contract
-            </h2>
+        {/* Upload Form Panel & Pipeline Visualizer Wrapper */}
+        <div className="flex flex-col gap-6">
+          <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 shadow-2xl relative overflow-hidden flex flex-col justify-between">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-[#003B73]/10 rounded-full blur-2xl pointer-events-none"></div>
             
-            <form onSubmit={handleUpload} className="space-y-4 text-sm relative z-10">
-              <div className="space-y-1.5">
-                <label className="block text-slate-300 text-xs font-bold uppercase tracking-wider">
-                  Select Document File
-                </label>
-                <input 
-                  type="file" 
-                  onChange={(e) => setFile(e.target.files?.[0] || null)} 
-                  className="w-full text-slate-300 bg-[#001021] p-2.5 rounded-xl border border-[#002B49] focus:border-[#00A3E0] transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#002B49] file:text-[#00A3E0] hover:file:bg-[#003B73] cursor-pointer" 
-                />
-              </div>
+            <div>
+              <h2 className="text-xs font-black uppercase tracking-widest text-[#00A3E0] mb-5 flex items-center gap-2">
+                <Upload className="w-4 h-4 text-[#00A3E0]" /> Upload Legal Contract
+              </h2>
               
-              <div className="grid grid-cols-2 gap-3">
+              <form onSubmit={handleUpload} className="space-y-4 text-sm relative z-10">
                 <div className="space-y-1.5">
-                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Business Unit</label>
-                  <select value={businessUnit} onChange={(e) => setBusinessUnit(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 focus:border-[#00A3E0] outline-none text-xs font-medium">
-                    <option value="Procurement">Procurement</option>
-                    <option value="Legal">Legal & Compliance</option>
-                    <option value="Corporate Strategy">Corporate Strategy</option>
-                  </select>
+                  <label className="block text-slate-300 text-xs font-bold uppercase tracking-wider">
+                    Select Document File
+                  </label>
+                  <input 
+                    type="file" 
+                    onChange={(e) => setFile(e.target.files?.[0] || null)} 
+                    className="w-full text-slate-300 bg-[#001021] p-2.5 rounded-xl border border-[#002B49] focus:border-[#00A3E0] transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#002B49] file:text-[#00A3E0] hover:file:bg-[#003B73] cursor-pointer" 
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Business Unit</label>
+                    <select value={businessUnit} onChange={(e) => setBusinessUnit(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 focus:border-[#00A3E0] outline-none text-xs font-medium">
+                      <option value="Procurement">Procurement</option>
+                      <option value="Legal">Legal & Compliance</option>
+                      <option value="Corporate Strategy">Corporate Strategy</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Category</label>
+                    <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 focus:border-[#00A3E0] outline-none text-xs" />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Category</label>
-                  <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 focus:border-[#00A3E0] outline-none text-xs" />
-                </div>
-              </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider">Doc Type</label>
+                    <input type="text" value={documentType} onChange={(e) => setDocumentType(e.target.value)} placeholder="e.g. MSA" className="w-full bg-[#001021] p-2 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none" />
+                  </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1.5">
-                  <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider">Doc Type</label>
-                  <input type="text" value={documentType} onChange={(e) => setDocumentType(e.target.value)} placeholder="e.g. MSA" className="w-full bg-[#001021] p-2 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none" />
-                </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider">Counterparty</label>
+                    <input type="text" value={counterparty} onChange={(e) => setCounterparty(e.target.value)} placeholder="e.g. Acme Inc" className="w-full bg-[#001021] p-2 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none" />
+                  </div>
 
-                <div className="space-y-1.5">
-                  <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider">Counterparty</label>
-                  <input type="text" value={counterparty} onChange={(e) => setCounterparty(e.target.value)} placeholder="e.g. Acme Inc" className="w-full bg-[#001021] p-2 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none" />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider">Jurisdiction</label>
-                  <input type="text" value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} placeholder="e.g. Global" className="w-full bg-[#001021] p-2 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Confidentiality</label>
-                  <select value={confidentiality} onChange={(e) => setConfidentiality(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none">
-                    <option value="Confidential">Confidential</option>
-                    <option value="Restricted">Restricted</option>
-                    <option value="Standard">Standard</option>
-                  </select>
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider">Jurisdiction</label>
+                    <input type="text" value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} placeholder="e.g. Global" className="w-full bg-[#001021] p-2 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none" />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Review Priority</label>
-                  <select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none">
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Normal">Normal</option>
-                  </select>
-                </div>
-              </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Confidentiality</label>
+                    <select value={confidentiality} onChange={(e) => setConfidentiality(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none">
+                      <option value="Confidential">Confidential</option>
+                      <option value="Restricted">Restricted</option>
+                      <option value="Standard">Standard</option>
+                    </select>
+                  </div>
 
-              <button 
-                type="submit" 
-                disabled={loading} 
-                className="w-full mt-4 bg-[#00A3E0] hover:bg-[#0082B3] text-[#001021] font-black py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-[#00A3E0]/20 disabled:opacity-50 cursor-pointer uppercase tracking-wider text-xs"
-              >
-                {loading ? (
-                  <><CheckCircle2 className="w-4 h-4 animate-spin text-[#001021]" /> Executing Analysis Pipeline...</>
-                ) : (
-                  <>Analyze Document <ArrowRight className="w-4 h-4 text-[#001021]" /></>
-                )}
-              </button>
-            </form>
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider">Review Priority</label>
+                    <select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full bg-[#001021] p-2.5 rounded-xl border border-[#002B49] text-slate-200 text-xs outline-none">
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Normal">Normal</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={loading} 
+                  className="w-full mt-4 bg-[#00A3E0] hover:bg-[#0082B3] text-[#001021] font-black py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-[#00A3E0]/20 disabled:opacity-50 cursor-pointer uppercase tracking-wider text-xs"
+                >
+                  {loading ? (
+                    <><CheckCircle2 className="w-4 h-4 animate-spin text-[#001021]" /> Executing Analysis Pipeline...</>
+                  ) : (
+                    <>Analyze Document <ArrowRight className="w-4 h-4 text-[#001021]" /></>
+                  )}
+                </button>
+              </form>
+            </div>
           </div>
+          
+          {/* Dynamic Pipeline Visualizer triggers when loading state is true */}
+          <PipelineVisualizer isAnalyzing={loading} />
         </div>
 
         {/* Processing Metric KPI Cards */}
