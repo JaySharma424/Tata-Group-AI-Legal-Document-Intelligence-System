@@ -40,19 +40,39 @@ normalization_service = ClauseNormalizationService()
 reasoning_service = LegalReasoningService()
 
 
+def deduplicate_extracted_clauses(clauses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+  """Deduplicates extracted clauses based on normalized clause type and text content."""
+  seen_keys = set()
+  unique_clauses = []
+
+  for clause in clauses:
+    raw_text = clause.get("extracted_text", "").strip()
+    clause_type = clause.get("clause_type", "").strip()
+    
+    # Create composite key using lowercased type and normalized text snippet
+    norm_text_snippet = re.sub(r"\s+", " ", raw_text.lower())[:150]
+    norm_key = (clause_type.lower(), norm_text_snippet)
+
+    if norm_text_snippet and norm_key not in seen_keys:
+      seen_keys.add(norm_key)
+      unique_clauses.append(clause)
+
+  return unique_clauses
+
+
 # --- 3. Define StateGraph Nodes ---
 @traceable(name="RAG Context Retrieval Node")
 def retrieve_rag_context_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Retrieves relevant corporate policies from Qdrant vector database using Gemini embeddings."""
+  """Retrieves relevant corporate policies & statutory rules from Qdrant vector database."""
   try:
     references = rag_service.retrieve_context(state["ocr_text"])
   except Exception as e:
     print(f"⚠️ RAG retrieval error in node: {e}")
     references = [{
-        "ref": "TAX-1",
+        "ref": "POL-IND-2026-01",
         "text": (
-            "All vendor agreements must mandate explicit confidentiality"
-            " obligations and liability caps."
+            "All third-party vendors must adhere strictly to Tata Group confidentiality"
+            " standards and liability capping policies."
         ),
     }]
 
@@ -61,51 +81,53 @@ def retrieve_rag_context_node(state: LegalPipelineState) -> Dict[str, Any]:
 
 @traceable(name="LLM Clause Extraction Node")
 def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Extracts raw legal clauses using Gemini strictly grounded in retrieved KB Ref IDs."""
+  """Extracts unique legal clauses using Gemini, grounded strictly in retrieved KB Ref IDs."""
   rag_context = state.get("rag_context", [])
   ocr_text = state.get("ocr_text", "")
   business_unit = state.get("business_unit", "Enterprise")
   user_role = state.get("user_role", "Senior Reviewer")
 
-  # Extract exact valid payload Ref IDs retrieved from Qdrant vector store
-  valid_ref_ids = [item.get("ref") for item in rag_context if item.get("ref") and item.get("ref") != "REF-N/A"]
-  default_ref = valid_ref_ids[0] if valid_ref_ids else "TAX-1"
+  # Extract exact valid payload Ref IDs retrieved from Qdrant (e.g., CLS-LIAB-001, REG-COMP-001, POL-IND-2026-01)
+  valid_ref_ids = [
+      item.get("ref") for item in rag_context if item.get("ref") and item.get("ref") != "REF-N/A"
+  ]
+  if not valid_ref_ids:
+    valid_ref_ids = ["POL-IND-2026-01"]
+  default_ref = valid_ref_ids[0]
 
   formatted_rag_policies = ""
   for idx, item in enumerate(rag_context, 1):
-    ref_id = item.get("ref", f"TAX-{idx}")
+    ref_id = item.get("ref", f"KB-REF-{idx}")
     policy_text = item.get("text", "")
-    formatted_rag_policies += f"\n--- POLICY CHUNK #{idx} [EXACT KB REF ID: {ref_id}] ---\n{policy_text}\n"
+    formatted_rag_policies += f"\n--- [GROUNDED KB REF ID: {ref_id}] ---\n{policy_text}\n"
 
   prompt = f"""
     You are Aadhya, Enterprise Legal Intelligence AI for Tata Group.
     Analyze the document text for Business Unit: '{business_unit}' and User Role: '{user_role}'.
     
-    APPROVED ENTERPRISE RAG POLICIES (FROM QDRANT KNOWLEDGE BASE):
+    APPROVED TATA LEGAL KNOWLEDGE BASE CONTEXT (FROM QDRANT VECTOR STORE):
     {formatted_rag_policies}
 
-    ALLOWED KNOWLEDGE BASE REFERENCE IDs:
+    WHITELIST OF VALID KNOWLEDGE BASE REFERENCE IDs:
     {valid_ref_ids}
 
     DOCUMENT TEXT TO ANALYZE:
     {ocr_text[:8000]}
 
-    STRICT CITATION RULES:
-    1. In 'rag_reference_used', you MUST ONLY output an EXACT Reference ID string from the ALLOWED KNOWLEDGE BASE REFERENCE IDs list above {valid_ref_ids}.
-    2. DO NOT invent, hallucinate, or abbreviate new codes (e.g., DO NOT generate 'POL-PROC-001', 'CLS-LIAB-001', or 'FIN-PAY-002' unless they are explicitly in {valid_ref_ids}).
-    3. Match each extracted clause to the closest relevant policy chunk and copy its EXACT 'EXACT KB REF ID'.
+    STRICT RULES FOR EXTRACTION & CITATION:
+    1. Extract UNIQUE legal clauses present in the text (e.g., Scope, Fees/Payment, Confidentiality, Indemnification, Limitation of Liability, Termination, Governing Law, IP Rights). DO NOT extract duplicate or overlapping clauses for the same section.
+    2. In 'rag_reference_used', you MUST ONLY output an EXACT Reference ID string from the WHITELIST OF VALID KNOWLEDGE BASE REFERENCE IDs: {valid_ref_ids}.
+    3. DO NOT invent, abbreviate, or fabricate hallucinated codes. You MUST select exclusively from {valid_ref_ids}.
+    4. Match each extracted clause to the closest relevant policy/statutory chunk and copy its EXACT Ref ID.
 
-    INSTRUCTIONS:
-    Extract ALL distinct legal clauses present in the text (e.g., Scope, Fees/Payment, Confidentiality, Indemnification, Limitation of Liability, Termination, Governing Law, IP Rights).
-    
     Return ONLY a valid JSON array where each object contains these EXACT keys:
     - "clause_type": (string, e.g., "Indemnification", "Limitation of Liability", "Governing Law")
     - "extracted_text": (exact text quote from document)
     - "confidence_score": MUST BE A FLOAT NUMBER between 0.0 and 1.0 (e.g. 0.95).
     - "risk_level": "HIGH", "MEDIUM", or "LOW"
-    - "risk_rationale": (detailed legal rationale comparing against approved RAG policies)
+    - "risk_rationale": (detailed legal rationale comparing against approved KB policies)
     - "involved_party": (parties involved)
-    - "rag_reference_used": (MUST BE AN EXACT STRING MATCH FROM {valid_ref_ids})
+    - "rag_reference_used": (MUST BE AN EXACT MATCH FROM {valid_ref_ids})
     - "page_reference": (e.g., "Section 4" or "Section 5")
     - "obligation_owner": (responsible entity)
     - "recommended_action": (e.g., "Escalate to Legal", "Accept Standard Term", "Request Revision")
@@ -139,7 +161,7 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
         if isinstance(parsed, list) and len(parsed) > 0:
           raw_clauses = parsed
           print(
-              f"✅ Successfully extracted {len(raw_clauses)} clauses using"
+              f"✅ Successfully extracted {len(raw_clauses)} raw clauses using"
               f" model: {model_name}"
           )
           break
@@ -172,27 +194,30 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
         "recommended_action": "Review Document",
     }]
 
-  # --- POST-PROCESSING VALIDATION: GUARANTEE GROUNDED KB REFERENCE IDs ---
-  for clause in raw_clauses:
+  # --- POST-PROCESSING 1: STRICT DEDUPLICATION ---
+  unique_clauses = deduplicate_extracted_clauses(raw_clauses)
+
+  # --- POST-PROCESSING 2: REFERENCE ID GROUNDING ENFORCEMENT ---
+  for clause in unique_clauses:
     cited_ref = clause.get("rag_reference_used", "")
     if valid_ref_ids and cited_ref not in valid_ref_ids:
-      # If LLM generated a non-existent code, map it to the top retrieved KB payload ID
       clause["rag_reference_used"] = default_ref
 
-  return {"raw_clauses": raw_clauses}
+  return {"raw_clauses": unique_clauses}
 
 
 @traceable(name="Clause Normalization Node")
 def normalize_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Standardizes raw clause headings to enterprise taxonomy and enforces float type safety."""
+  """Standardizes raw clause headings to enterprise taxonomy, enforces float safety, and deduplicates."""
   raw_clauses = state.get("raw_clauses", [])
   normalized = normalization_service.normalize_clauses(raw_clauses)
-  return {"normalized_clauses": normalized}
+  unique_normalized = deduplicate_extracted_clauses(normalized)
+  return {"normalized_clauses": unique_normalized}
 
 
 @traceable(name="Legal Reasoning & Risk Assessment Node")
 def legal_reasoning_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Applies dedicated risk evaluation pass with per-clause model cascading."""
+  """Applies dedicated risk evaluation pass with per-clause model cascading and deduplication."""
   normalized_clauses = state.get("normalized_clauses", [])
   business_unit = state.get("business_unit", "Enterprise")
   user_role = state.get("user_role", "Senior Reviewer")
@@ -202,7 +227,8 @@ def legal_reasoning_node(state: LegalPipelineState) -> Dict[str, Any]:
       business_unit=business_unit,
       user_role=user_role,
   )
-  return {"final_clauses": final_clauses}
+  unique_final = deduplicate_extracted_clauses(final_clauses)
+  return {"final_clauses": unique_final}
 
 
 # --- 4. Build and Compile StateGraph ---
