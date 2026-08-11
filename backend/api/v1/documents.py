@@ -112,7 +112,7 @@ async def upload_document(
         extracted_clauses = []
         rag_context = []
 
-    # Extract default fallback ref from retrieved vector store context
+    # Extract default fallback reference from retrieved vector store context
     default_kb_ref = "TAX-1"
     if rag_context and isinstance(rag_context, list) and len(rag_context) > 0:
         default_kb_ref = rag_context[0].get("ref") or "TAX-1"
@@ -134,7 +134,7 @@ async def upload_document(
             }
         ]
 
-    # 4. Save Extracted Clauses with Grounded KB Reference IDs
+    # 4. Save Extracted Clauses (Shielded against Schema Kwarg TypeErrors)
     for clause in extracted_clauses:
         db_clause = ClauseModel(
             job_id=job_id,
@@ -146,9 +146,15 @@ async def upload_document(
             involved_party=sanitize_text(clause.get("involved_party", "Tata Group & Counterparty")),
             page_reference=sanitize_text(clause.get("page_reference", "N/A")),
             obligation_owner=sanitize_text(clause.get("obligation_owner", "N/A")),
-            recommended_action=sanitize_text(clause.get("recommended_action", "Review")),
-            rag_reference_used=sanitize_text(clause.get("rag_reference_used", default_kb_ref))
+            recommended_action=sanitize_text(clause.get("recommended_action", "Review"))
         )
+
+        # Safely assign RAG Reference ID if supported by ClauseModel attributes
+        ref_val = sanitize_text(clause.get("rag_reference_used", default_kb_ref))
+        for attr in ["rag_reference_used", "rag_reference", "policy_citation", "reference_id"]:
+            if hasattr(ClauseModel, attr):
+                setattr(db_clause, attr, ref_val)
+
         db.add(db_clause)
     
     db.commit()
@@ -252,7 +258,12 @@ async def get_document_details(
                     "risk_level": getattr(c, "risk_level", "MEDIUM"),
                     "risk_rationale": getattr(c, "risk_rationale", "Evaluated against compliance rules."),
                     "involved_party": getattr(c, "involved_party", "Both Parties"),
-                    "rag_reference_used": getattr(c, "rag_reference_used", "TAX-1"),
+                    "rag_reference_used": (
+                        getattr(c, "rag_reference_used", None) or 
+                        getattr(c, "rag_reference", None) or 
+                        getattr(c, "policy_citation", None) or 
+                        "TAX-1"
+                    ),
                     "page_reference": getattr(c, "page_reference", "Section 1"),
                     "obligation_owner": getattr(c, "obligation_owner", "Both Parties"),
                     "recommended_action": getattr(c, "recommended_action", "Review")
