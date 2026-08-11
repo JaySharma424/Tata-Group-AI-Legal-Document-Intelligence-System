@@ -1,7 +1,7 @@
 import os
 import json
 
-CONFIG_FILE_PATH = "./backend/storage/llm_config.json"
+CONFIG_FILE_PATH = "./backend/services/llm_config.json"
 
 DEFAULT_CONFIG = {
     "llm_model": "gemini-3.5-flash",
