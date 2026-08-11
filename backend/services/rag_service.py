@@ -85,11 +85,12 @@ class RAGKnowledgeService:
       self._seed_structured_policies()
 
   def _get_embedding(self, text: str, retries: int = 3) -> List[float]:
-    """Generates strictly 768-dim vector embeddings with rate-limit backoff."""
+    """Generates strictly 768-dim vector embeddings using robust fallback models."""
     if not self.has_api_key or not text.strip():
       return [0.0] * self.vector_dim
 
-    candidate_models = ["text-embedding-004", "embedding-001"]
+    # CRITICAL FIX: Prioritize embedding-001 to prevent 404 Not Found errors on v1beta
+    candidate_models = ["models/embedding-001", "embedding-001", "text-embedding-004"]
 
     for model_name in candidate_models:
       for attempt in range(retries):
@@ -113,17 +114,14 @@ class RAGKnowledgeService:
           err_msg = str(e)
           if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
             wait_time = 2 * (attempt + 1)
-            print(
-                f"⏳ Gemini Rate Limit hit. Backing off for {wait_time}s..."
-            )
+            print(f"⏳ Gemini Rate Limit hit. Backing off for {wait_time}s...")
             time.sleep(wait_time)
             continue
           else:
-            if not hasattr(self, "_embedding_error_logged"):
-              print(f"⚠️ Embedding notice ({model_name}): {e}")
-              self._embedding_error_logged = True
-            break
+            print(f"⚠️ Embedding failed for {model_name}: {err_msg}. Trying next model...")
+            break # Break out of retries for THIS model, but continue to the next model in candidate_models
 
+    print("❌ All embedding models failed. Returning zero-vector fallback.")
     return [0.0] * self.vector_dim
 
   def _parse_structured_policy_file(
@@ -265,6 +263,11 @@ class RAGKnowledgeService:
       return []
 
     query_vector = self._get_embedding(query_text[:1000])
+    
+    # If a zero-vector is returned due to API failure, abort search to prevent false positive matches
+    if all(v == 0.0 for v in query_vector):
+        print("⚠️ Aborting Qdrant search due to zero-vector embedding failure.")
+        return []
 
     query_filter = None
     if category_filter:
@@ -277,7 +280,6 @@ class RAGKnowledgeService:
       )
 
     try:
-      # Search Qdrant vector store
       results = self.qdrant.search(
           collection_name=self.collection_name,
           query_vector=query_vector,
