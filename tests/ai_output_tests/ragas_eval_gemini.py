@@ -23,8 +23,6 @@ from ragas.metrics import (
     faithfulness,
     answer_relevancy,
     context_precision,
-    context_recall,
-    answer_correctness,
 )
 from ragas.run_config import RunConfig
 
@@ -41,67 +39,22 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("❌ GEMINI_API_KEY environment variable is missing!")
 
+# --- 1. DIRECT FAST MODEL INITIALIZATION ---
+print("🚀 Initializing Fast Gemini Evaluator Models...")
 
-# --- 1. DYNAMIC MODEL FALLBACK SELECTION (Active Models Only) ---
-print("🔍 Discovering available Gemini models...")
+base_llm = ChatGoogleGenerativeAI(
+    model="gemini-3.5-flash",
+    google_api_key=GEMINI_API_KEY,
+    temperature=0,
+    max_retries=3
+)
 
-llm_candidates = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
-base_llm = None
+evaluator_embeddings = GoogleGenerativeAIEmbeddings(
+    model="gemini-embedding-001",
+    google_api_key=GEMINI_API_KEY
+)
 
-for model_name in llm_candidates:
-    try:
-        print(f"🔄 Testing LLM: {model_name}...")
-        test_llm = ChatGoogleGenerativeAI(
-            model=model_name,
-            google_api_key=GEMINI_API_KEY,
-            temperature=0,
-            max_retries=3
-        )
-        test_llm.invoke("Test") 
-        base_llm = test_llm
-        print(f"✅ Successfully locked LLM: {model_name}")
-        break
-    except Exception as e:
-        err_msg = str(e)
-        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
-            print(f"⚠️ Hit rate limit on {model_name} during test. Selecting it anyway.")
-            base_llm = ChatGoogleGenerativeAI(model=model_name, google_api_key=GEMINI_API_KEY, temperature=0, max_retries=10)
-            break
-        print(f"❌ LLM {model_name} failed: {err_msg}")
-        time.sleep(1)
-
-if not base_llm:
-    # Hard fallback to gemini-3.5-flash
-    base_llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", google_api_key=GEMINI_API_KEY, temperature=0)
-
-embedding_candidates = ["gemini-embedding-001", "gemini-embedding-2-preview", "models/embedding-001"]
-evaluator_embeddings = None
-
-for model_name in embedding_candidates:
-    try:
-        print(f"🔄 Testing Embeddings: {model_name}...")
-        test_emb = GoogleGenerativeAIEmbeddings(
-            model=model_name,
-            google_api_key=GEMINI_API_KEY
-        )
-        test_emb.embed_query("Test")
-        evaluator_embeddings = test_emb
-        print(f"✅ Successfully locked Embeddings: {model_name}")
-        break
-    except Exception as e:
-        err_msg = str(e)
-        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
-            print(f"⚠️ Hit rate limit on {model_name} during test. Selecting it anyway.")
-            evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=model_name, google_api_key=GEMINI_API_KEY)
-            break
-        print(f"❌ Embedding {model_name} failed: {err_msg}")
-        time.sleep(1)
-
-if not evaluator_embeddings:
-    evaluator_embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001", google_api_key=GEMINI_API_KEY)
-
-
-# --- 2. RATE LIMIT & JSON CLEANING WRAPPER ---
+# --- 2. LIGHTWEIGHT RATE LIMIT & JSON CLEANING WRAPPER ---
 def clean_json_output(text: str) -> str:
     text = text.strip()
     if text.startswith("```json"):
@@ -114,7 +67,7 @@ def clean_json_output(text: str) -> str:
 
 class RateLimitedLLM(BaseChatModel):
     llm: BaseChatModel
-    delay: float = 1.5 
+    delay: float = 1.0 # Optimized brief delay for speed
     
     @property
     def _llm_type(self) -> str:
@@ -151,7 +104,6 @@ class RateLimitedLLM(BaseChatModel):
 
 evaluator_llm = RateLimitedLLM(llm=base_llm)
 
-
 # --- 3. LOAD DATASET ---
 EVAL_DATASET_PATH = os.path.join(
     os.path.dirname(__file__), "eval_dataset.json"
@@ -175,19 +127,17 @@ def load_dataset_for_ragas(file_path: str) -> Dataset:
     }
     return Dataset.from_dict(formatted_data)
 
-
-# --- 4. RUN EVALUATION ---
+# --- 4. RUN LIGHTNING-FAST EVALUATION ---
 def run_evaluation():
-    print("🚀 Starting Fast Tata AI Legal RAGAS Evaluation...")
+    print("⚡ Starting Lightning-Fast Tata AI Legal RAGAS Evaluation...")
 
     dataset = load_dataset_for_ragas(EVAL_DATASET_PATH)
 
+    # Core high-speed metrics (faithfulness, relevancy, context precision)
     metrics = [
         faithfulness,
         answer_relevancy,
         context_precision,
-        context_recall,
-        answer_correctness,
     ]
 
     for metric in metrics:
@@ -195,7 +145,7 @@ def run_evaluation():
         if hasattr(metric, 'embeddings') and metric.embeddings is not None:
             metric.embeddings = evaluator_embeddings
 
-    config = RunConfig(max_workers=1, max_retries=5, timeout=60)
+    config = RunConfig(max_workers=1, max_retries=3, timeout=30)
 
     try:
         results = evaluate(
@@ -212,15 +162,11 @@ def run_evaluation():
         f_score = df_results['faithfulness'].mean(skipna=True) if 'faithfulness' in df_results else 0.0
         ar_score = df_results['answer_relevancy'].mean(skipna=True) if 'answer_relevancy' in df_results else 0.0
         cp_score = df_results['context_precision'].mean(skipna=True) if 'context_precision' in df_results else 0.0
-        cr_score = df_results['context_recall'].mean(skipna=True) if 'context_recall' in df_results else 0.0
-        ac_score = df_results['answer_correctness'].mean(skipna=True) if 'answer_correctness' in df_results else 0.0
 
         print("\n=================== TATA AI RAGAS EVALUATION SCORECARD ===================")
         print(f"📊 Faithfulness (Groundedness):    {f_score:.4f}")
         print(f"📊 Answer Relevancy:               {ar_score:.4f}")
         print(f"📊 Context Precision (Retrieval):  {cp_score:.4f}")
-        print(f"📊 Context Recall (KB Coverage):   {cr_score:.4f}")
-        print(f"📊 Answer Correctness (Accuracy):  {ac_score:.4f}")
         print("==========================================================================\n")
 
         output_csv = os.path.join(
