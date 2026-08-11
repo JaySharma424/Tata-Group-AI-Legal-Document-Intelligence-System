@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import pandas as pd
 from datasets import Dataset
 from dotenv import load_dotenv
@@ -24,9 +25,13 @@ from ragas.metrics import (
     context_recall,
     answer_correctness,
 )
-from ragas.run_config import RunConfig  # NEW: Import RunConfig to control rate limits
+from ragas.run_config import RunConfig
 
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+from langchain_core.outputs import ChatResult
+from typing import Any
 
 load_dotenv()
 
@@ -35,21 +40,102 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("❌ GEMINI_API_KEY environment variable is missing!")
 
-# 1. INITIALIZE GEMINI EVALUATOR MODELS
-# Added max_retries to the LangChain model wrapper for extra safety
-evaluator_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=GEMINI_API_KEY,
-    temperature=0,
-    max_retries=5 
-)
 
-evaluator_embeddings = GoogleGenerativeAIEmbeddings(
-    model="gemini-embedding-001",
-    google_api_key=GEMINI_API_KEY
-)
+# --- 1. DYNAMIC MODEL FALLBACK SELECTION ---
+print("🔍 Discovering available Gemini models...")
 
-# 2. LOAD & PREPARE EVALUATION DATASET
+llm_candidates = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-3.5-flash", "gemini-3.6-flash"]
+base_llm = None
+
+for model_name in llm_candidates:
+    try:
+        print(f"🔄 Testing LLM: {model_name}...")
+        test_llm = ChatGoogleGenerativeAI(
+            model=model_name,
+            google_api_key=GEMINI_API_KEY,
+            temperature=0,
+            max_retries=3
+        )
+        # Perform a fast test call to check if model exists (throws 404 if not)
+        test_llm.invoke("Test") 
+        base_llm = test_llm
+        print(f"✅ Successfully locked LLM: {model_name}")
+        break
+    except Exception as e:
+        err_msg = str(e)
+        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            print(f"⚠️ Hit rate limit on {model_name} during test. Selecting it anyway.")
+            base_llm = ChatGoogleGenerativeAI(model=model_name, google_api_key=GEMINI_API_KEY, temperature=0, max_retries=10)
+            break
+        print(f"❌ LLM {model_name} failed: {err_msg}")
+        time.sleep(1)
+
+if not base_llm:
+    raise RuntimeError("Could not find a working Gemini LLM model.")
+
+embedding_candidates = ["gemini-embedding-001", "gemini-embedding-2-preview", "models/embedding-001"]
+evaluator_embeddings = None
+
+for model_name in embedding_candidates:
+    try:
+        print(f"🔄 Testing Embeddings: {model_name}...")
+        test_emb = GoogleGenerativeAIEmbeddings(
+            model=model_name,
+            google_api_key=GEMINI_API_KEY
+        )
+        test_emb.embed_query("Test")
+        evaluator_embeddings = test_emb
+        print(f"✅ Successfully locked Embeddings: {model_name}")
+        break
+    except Exception as e:
+        err_msg = str(e)
+        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            print(f"⚠️ Hit rate limit on {model_name} during test. Selecting it anyway.")
+            evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=model_name, google_api_key=GEMINI_API_KEY)
+            break
+        print(f"❌ Embedding {model_name} failed: {err_msg}")
+        time.sleep(1)
+
+if not evaluator_embeddings:
+    raise RuntimeError("Could not find a working Gemini Embedding model.")
+
+
+# --- 2. RATE LIMIT WRAPPER ---
+# 🛑 CRITICAL FIX: Custom wrapper to force a delay between EVERY API call
+class RateLimitedLLM(BaseChatModel):
+    llm: BaseChatModel
+    delay: float = 4.0 # Wait 4 seconds between every call (15 requests per minute)
+    
+    @property
+    def _llm_type(self) -> str:
+        return "rate_limited_llm"
+        
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        time.sleep(self.delay) # Force the delay
+        return self.llm._generate(messages, stop, run_manager, **kwargs)
+        
+    async def _agenerate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        import asyncio
+        await asyncio.sleep(self.delay) # Force the async delay
+        return await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+
+# Wrap the dynamically selected LLM
+evaluator_llm = RateLimitedLLM(llm=base_llm)
+
+
+# --- 3. LOAD & PREPARE EVALUATION DATASET ---
 EVAL_DATASET_PATH = os.path.join(
     os.path.dirname(__file__), "eval_dataset.json"
 )
@@ -61,7 +147,6 @@ def load_dataset_for_ragas(file_path: str) -> Dataset:
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # FIX: Ragas v0.4+ demands 'reference' instead of 'ground_truth'
     formatted_data = {
         "user_input": [item["user_input"] for item in data],
         "retrieved_contexts": [item["retrieved_contexts"] for item in data],
@@ -70,9 +155,10 @@ def load_dataset_for_ragas(file_path: str) -> Dataset:
     }
     return Dataset.from_dict(formatted_data)
 
-# 3. RUN RAGAS EVALUATION PIPELINE
+
+# --- 4. RUN RAGAS EVALUATION PIPELINE ---
 def run_evaluation():
-    print("🚀 Starting Tata AI Legal RAGAS Evaluation...")
+    print("🚀 Starting Tata AI Legal RAGAS Evaluation (Throttled + Dynamic Models)...")
 
     dataset = load_dataset_for_ragas(EVAL_DATASET_PATH)
 
@@ -89,8 +175,8 @@ def run_evaluation():
         if hasattr(metric, 'embeddings') and metric.embeddings is not None:
             metric.embeddings = evaluator_embeddings
 
-    # FIX: Restrict max_workers to 1 to completely bypass Gemini's 15 RPM Rate Limit
-    config = RunConfig(max_workers=1, max_retries=10)
+    # Enforce strict sequential processing
+    config = RunConfig(max_workers=1, max_retries=10, timeout=120)
 
     try:
         results = evaluate(
@@ -99,7 +185,7 @@ def run_evaluation():
             llm=evaluator_llm,
             embeddings=evaluator_embeddings,
             run_config=config,
-            raise_exceptions=False # Prevents whole script crash if one row fails
+            raise_exceptions=False
         )
 
         df_results = results.to_pandas()
