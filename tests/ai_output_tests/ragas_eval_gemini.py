@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import re
 import pandas as pd
 from datasets import Dataset
 from dotenv import load_dotenv
@@ -41,23 +42,66 @@ if not GEMINI_API_KEY:
     raise ValueError("❌ GEMINI_API_KEY environment variable is missing!")
 
 
-# --- 1. MODEL INITIALIZATION ---
-print("🔄 Initializing Gemini Evaluator Models...")
+# --- 1. DYNAMIC MODEL FALLBACK SELECTION (Active Models Only) ---
+print("🔍 Discovering available Gemini models...")
 
-base_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=GEMINI_API_KEY,
-    temperature=0,
-    max_retries=3
-)
+llm_candidates = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+base_llm = None
 
-evaluator_embeddings = GoogleGenerativeAIEmbeddings(
-    model="gemini-embedding-001",
-    google_api_key=GEMINI_API_KEY
-)
+for model_name in llm_candidates:
+    try:
+        print(f"🔄 Testing LLM: {model_name}...")
+        test_llm = ChatGoogleGenerativeAI(
+            model=model_name,
+            google_api_key=GEMINI_API_KEY,
+            temperature=0,
+            max_retries=3
+        )
+        test_llm.invoke("Test") 
+        base_llm = test_llm
+        print(f"✅ Successfully locked LLM: {model_name}")
+        break
+    except Exception as e:
+        err_msg = str(e)
+        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            print(f"⚠️ Hit rate limit on {model_name} during test. Selecting it anyway.")
+            base_llm = ChatGoogleGenerativeAI(model=model_name, google_api_key=GEMINI_API_KEY, temperature=0, max_retries=10)
+            break
+        print(f"❌ LLM {model_name} failed: {err_msg}")
+        time.sleep(1)
+
+if not base_llm:
+    # Hard fallback to gemini-3.5-flash
+    base_llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", google_api_key=GEMINI_API_KEY, temperature=0)
+
+embedding_candidates = ["gemini-embedding-001", "gemini-embedding-2-preview", "models/embedding-001"]
+evaluator_embeddings = None
+
+for model_name in embedding_candidates:
+    try:
+        print(f"🔄 Testing Embeddings: {model_name}...")
+        test_emb = GoogleGenerativeAIEmbeddings(
+            model=model_name,
+            google_api_key=GEMINI_API_KEY
+        )
+        test_emb.embed_query("Test")
+        evaluator_embeddings = test_emb
+        print(f"✅ Successfully locked Embeddings: {model_name}")
+        break
+    except Exception as e:
+        err_msg = str(e)
+        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            print(f"⚠️ Hit rate limit on {model_name} during test. Selecting it anyway.")
+            evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=model_name, google_api_key=GEMINI_API_KEY)
+            break
+        print(f"❌ Embedding {model_name} failed: {err_msg}")
+        time.sleep(1)
+
+if not evaluator_embeddings:
+    evaluator_embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001", google_api_key=GEMINI_API_KEY)
 
 
-# --- 2. LIGHTWEIGHT RATE LIMIT & JSON CLEANING WRAPPER ---
+# --- 2. RATE LIMIT & JSON CLEANING WRAPPER ---
 def clean_json_output(text: str) -> str:
     text = text.strip()
     if text.startswith("```json"):
@@ -70,7 +114,7 @@ def clean_json_output(text: str) -> str:
 
 class RateLimitedLLM(BaseChatModel):
     llm: BaseChatModel
-    delay: float = 1.5 # Balanced delay to prevent rate limits without timing out
+    delay: float = 1.5 
     
     @property
     def _llm_type(self) -> str:
