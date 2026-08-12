@@ -7,6 +7,9 @@ import google.generativeai as genai
 from langgraph.graph import END, START, StateGraph
 from langsmith import traceable
 
+# Import dynamic PostgreSQL LLM config service
+from backend.services.llm_config import get_llm_config
+
 # Import modular pipeline services
 from backend.document_pipeline.clause_extraction.reasoning_service import (
     LegalReasoningService,
@@ -15,11 +18,6 @@ from backend.document_pipeline.normalization.normalization_service import (
     ClauseNormalizationService,
 )
 from backend.services.rag_service import RAGKnowledgeService
-
-# Configure Gemini API key if present
-api_key = os.getenv("GEMINI_API_KEY", "")
-if api_key:
-  genai.configure(api_key=api_key)
 
 
 # --- 1. Define Graph State Schema ---
@@ -63,10 +61,18 @@ def deduplicate_extracted_clauses(clauses: List[Dict[str, Any]]) -> List[Dict[st
 
 @traceable(name="LLM Clause Extraction Node")
 def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Extracts distinct legal clauses from OCR text using Gemini."""
+  """Extracts distinct legal clauses from OCR text using Gemini with dynamic database LLM configuration."""
   ocr_text = state.get("ocr_text", "")
   business_unit = state.get("business_unit", "Enterprise")
   user_role = state.get("user_role", "Senior Reviewer")
+
+  # 🚀 DYNAMIC LLM CONFIGURATION (Pulls fresh API Key & Model from PostgreSQL)
+  config = get_llm_config()
+  api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY", "")
+  selected_llm = config.get("llm_model", "gemini-3.5-flash")
+
+  if api_key:
+    genai.configure(api_key=api_key)
 
   prompt = f"""
     You are Aadhya, Enterprise Legal Intelligence AI for Tata Group.
@@ -90,10 +96,19 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     - "recommended_action": (e.g., "Review Document")
     """
 
-  model_candidates = ["gemini-2.0-flash", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash-lite"]
+  # Prioritize the model selected by the Admin from the PostgreSQL settings
+  model_candidates = [selected_llm, "gemini-3.5-flash", "gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash-lite"]
+
+  # Preserve candidate ordering while deduplicating
+  seen_models = set()
+  ordered_candidates = []
+  for m in model_candidates:
+    if m not in seen_models:
+      seen_models.add(m)
+      ordered_candidates.append(m)
 
   raw_clauses = []
-  for model_name in model_candidates:
+  for model_name in ordered_candidates:
     try:
       model = genai.GenerativeModel(model_name)
       response = model.generate_content(prompt)
@@ -153,8 +168,6 @@ def ground_clauses_with_rag_node(state: LegalPipelineState) -> Dict[str, Any]:
 
     grounded_clauses.append(clause)
     
-    # 🛑 CRITICAL FIX: 2-second delay prevents Gemini API Rate Limits (429 Error)
-    # This guarantees Qdrant gets real vectors instead of zero-vectors.
     time.sleep(2)
 
   return {
@@ -184,8 +197,6 @@ def legal_reasoning_node(state: LegalPipelineState) -> Dict[str, Any]:
       user_role=user_role,
   )
 
-  # 🛑 CRITICAL FIX: Bulletproof Index-Based Citation Lock
-  # Mathematically guarantees the exact Qdrant ID is applied, even if LLM hallucinated
   for i, fc in enumerate(final_clauses):
       if i < len(normalized_clauses):
           fc["rag_reference_used"] = normalized_clauses[i].get("rag_reference_used", "CLS-GEN-020")
