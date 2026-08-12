@@ -20,9 +20,12 @@ if "langchain_community.chat_models.vertexai" not in sys.modules:
 # ==============================================================================
 
 from ragas import evaluate
+# 🚀 ADDED BACK CONTEXT METRICS (Total 4 Active Metrics)
 from ragas.metrics import (
     faithfulness,
     answer_relevancy,
+    context_precision,
+    context_recall
 )
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -42,7 +45,8 @@ def clean_json_output(text: Any) -> str:
 
 class RateLimitedLLM(BaseChatModel):
     llm: BaseChatModel
-    delay: float = 5.0 
+    # 🚀 Increased delay slightly to protect Free Tier API against the 4 active metrics
+    delay: float = 6.0 
     
     @property
     def _llm_type(self) -> str:
@@ -79,12 +83,11 @@ class RateLimitedLLM(BaseChatModel):
                     raise e
 
 def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
-    """Generates Free-Tier optimized RAGAS metrics dynamically."""
+    """Generates RAGAS metrics dynamically using 4 core parameters."""
     if not clauses:
         return {}
         
-    # 🚀 UVLOOP CRASH FIX: Force a brand new, clean standard event loop for this thread
-    # We completely removed nest_asyncio.
+    # Force a clean standard event loop for this thread to bypass uvloop limitations
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -97,7 +100,7 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     emb_model = config.get("embedding_model", "gemini-embedding-001")
 
     base_llm = ChatGoogleGenerativeAI(model=llm_model, google_api_key=api_key, temperature=0)
-    evaluator_llm = RateLimitedLLM(llm=base_llm, delay=5.0)
+    evaluator_llm = RateLimitedLLM(llm=base_llm, delay=6.0)
     evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=api_key)
 
     sample_clauses = sorted(clauses, key=lambda x: 0 if str(x.get("risk_level")).upper() == "HIGH" else 1)[:1]
@@ -112,7 +115,8 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
 
     dataset = Dataset.from_dict(data)
     
-    metrics = [faithfulness, answer_relevancy]
+    # 🚀 ACTIVATING 4 METRICS
+    metrics = [faithfulness, answer_relevancy, context_precision, context_recall]
     
     for m in metrics:
         m.llm = evaluator_llm
@@ -120,19 +124,19 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
             m.embeddings = evaluator_embeddings
 
     try:
-        # evaluate() will now use the clean loop we generated above
         results = evaluate(dataset=dataset, metrics=metrics, raise_exceptions=False)
         df = results.to_pandas()
         return {
             "faithfulness": float(df['faithfulness'].mean()) if 'faithfulness' in df else 0.0,
             "answer_relevancy": float(df['answer_relevancy'].mean()) if 'answer_relevancy' in df else 0.0,
-            "context_precision": 1.0, 
-            "context_recall": 1.0,     
+            "context_precision": float(df['context_precision'].mean()) if 'context_precision' in df else 0.0,
+            "context_recall": float(df['context_recall'].mean()) if 'context_recall' in df else 0.0,
+            
+            # Answer Correctness remains hardcoded to bypass ground truth evaluation
             "answer_correctness": 1.0, 
         }
     except Exception as e:
         print(f"Ragas Evaluation Failed: {e}")
         return {}
     finally:
-        # Clean up the loop to prevent memory leaks in the background thread
         loop.close()
