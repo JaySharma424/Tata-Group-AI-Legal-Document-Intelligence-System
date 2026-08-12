@@ -75,8 +75,12 @@ class DocumentModel(Base):
     ragas_context_recall = Column(Float, nullable=True, default=0.0)
     ragas_answer_correctness = Column(Float, nullable=True, default=0.0)
     
+    llm_model_used = Column(String, default="gemini-3.5-flash")
+    api_key_masked = Column(String, default="...fkkQ")
+    
     uploaded_by = Column(String, ForeignKey("users.email", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
     
     uploader = relationship("UserModel", back_populates="documents_uploaded")
     clauses = relationship("ClauseModel", back_populates="document", cascade="all, delete-orphan")
@@ -159,7 +163,7 @@ class SystemConfigModel(Base):
     
 # ==================== AUTOMATIC SCHEMA MIGRATION ====================
 # Forces PostgreSQL to add the missing RAGAS columns to your existing 
-# 'documents' table without deleting your historical data.
+# ==================== AUTOMATIC SCHEMA MIGRATION ====================
 from backend.database import engine
 from sqlalchemy import text
 
@@ -170,6 +174,8 @@ try:
         conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_context_precision FLOAT;"))
         conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_context_recall FLOAT;"))
         conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_answer_correctness FLOAT;"))
-        print("✅ Database schema migration complete: RAGAS columns verified.")
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS llm_model_used VARCHAR DEFAULT 'gemini-3.5-flash';"))
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS api_key_masked VARCHAR DEFAULT '...fkkQ';"))
+        print("✅ Database schema migration complete: All governance columns verified.")
 except Exception as e:
     print(f"⚠️ Notice during migration: {e}")
