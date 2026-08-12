@@ -28,7 +28,6 @@ const getSessionUser = () => {
 };
 
 export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHistoryJobId }) => {
-  // Navigation Tabs State: 'clauses' | 'ocr' | 'parsing' | 'ragas'
   const [activeTab, setActiveTab] = useState<'clauses' | 'ocr' | 'parsing' | 'ragas'>('clauses');
 
   const [file, setFile] = useState<File | null>(null);
@@ -94,12 +93,17 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       const safeMetrics = response.data?.metrics || {};
 
       setActiveJobId(response.data?.job_id || null);
-      setAnalysisResult({ ...response.data, metrics: safeMetrics });
+      
+      // Store complete response including the new tracking variables
+      setAnalysisResult({ 
+        ...response.data, 
+        metrics: safeMetrics,
+        llm_model_used: response.data?.llm_model_used,
+        api_key_masked: response.data?.api_key_masked 
+      });
       setClauses(safeClauses);
 
       window.dispatchEvent(new Event('audit_updated'));
-      
-      // Auto-switch to RAGAS tab upon completion
       setActiveTab('ragas');
 
     } catch (error) {
@@ -120,9 +124,10 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
       setActiveJobId(response.data?.document?.job_id || null);
       
-      // Format response to extract saved RAGAS scores
       setAnalysisResult({ 
         metrics: response.data?.document || {},
+        llm_model_used: response.data?.document?.llm_model_used,
+        api_key_masked: response.data?.document?.api_key_masked,
         ragas_scores: {
             faithfulness: response.data?.document?.ragas_faithfulness,
             answer_relevancy: response.data?.document?.ragas_answer_relevancy,
@@ -450,7 +455,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           )}
         </div>
 
-        {/* TAB 1: RAGAS SCORECARD (NEW!) */}
+        {/* TAB 1: RAGAS SCORECARD WITH KEY TRACKING */}
         {activeTab === 'ragas' && (
           <div className="space-y-6">
             <div className="bg-[#001021] p-5 rounded-xl border border-[#002B49] flex justify-between items-center text-xs shadow-md">
@@ -458,7 +463,10 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
                 <span className="text-white font-black uppercase tracking-wider flex items-center gap-2 text-base">
                   <BarChart3 className="w-5 h-5 text-[#00A3E0]"/> Document AI Evaluation Report
                 </span>
-                <p className="text-[11px] text-slate-400 mt-1 font-mono">Scores evaluated dynamically against Ground Truth using the configured LLM engine.</p>
+                <p className="text-[11px] text-slate-400 mt-1 font-mono">
+                  Engine: <strong className="text-[#00A3E0]">{analysisResult?.llm_model_used || analysisResult?.document?.llm_model_used || 'gemini-3.5-flash'}</strong>
+                  {' • '} Active Key: <strong className="text-emerald-400">{analysisResult?.api_key_masked || analysisResult?.document?.api_key_masked || '...N/A'}</strong>
+                </p>
               </div>
               <span className="text-emerald-400 font-mono font-bold bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/30">
                 Live Evaluation Complete

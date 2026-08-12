@@ -1,11 +1,12 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
-from fastapi.concurrency import run_in_threadpool  # 🚀 NEW: Import the thread pool manager!
+from fastapi.concurrency import run_in_threadpool
 
 from backend.database import get_db
 from backend.models import DocumentModel, ClauseModel, AuditLogModel, UserModel
 from backend.api.v1.auth import get_current_user, SECRET_KEY, ALGORITHM
+from backend.services.llm_config import get_llm_config  # 🚀 IMPORT ADDED
 import jwt
 import shutil
 import os
@@ -19,7 +20,6 @@ from backend.document_pipeline.parsing.parsing_service import ParsingService
 from backend.document_pipeline.reporting.report_service import ReportService
 from backend.document_pipeline.legal_graph import legal_pipeline_graph
 
-# Import your custom RAGAS evaluator from your services directory
 try:
     from backend.services.ragas_evaluator import generate_ragas_scorecard
 except ImportError as e:
@@ -44,6 +44,12 @@ def sanitize_text(val: str) -> str:
         return val.replace('\x00', '')
     return val
 
+# 🚀 NEW: Helper to securely mask the API key
+def mask_key_suffix(key_str: str) -> str:
+    if not key_str or len(key_str) < 4:
+        return "...N/A"
+    return f"...{key_str[-4:]}"
+
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -67,6 +73,11 @@ async def upload_document(
     with open(file_path, "wb") as f:
         f.write(contents)
 
+    # 🚀 NEW: Fetch active LLM & API key suffix from PostgreSQL
+    active_config = get_llm_config()
+    active_model = active_config.get("llm_model", "gemini-3.5-flash")
+    active_key_suffix = mask_key_suffix(active_config.get("api_key", ""))
+
     # 1. OCR Extraction & Metrics
     raw_ocr_text = ocr_service.extract_text(file_path)
     ocr_text = sanitize_text(raw_ocr_text) if raw_ocr_text else ""
@@ -80,7 +91,7 @@ async def upload_document(
 
     entities_count = len(parsed_sections) * 15 + 12 if isinstance(parsed_sections, (list, dict)) else 14
 
-    # 2. Save Document Metadata
+    # 2. Save Document Metadata (Including Model and Key Tracker)
     db_doc = DocumentModel(
         job_id=job_id,
         filename=clean_filename,
@@ -95,7 +106,9 @@ async def upload_document(
         pages=metrics.get("pages", len(file_path)),
         entities_detected=entities_count,
         requires_manual_review=metrics.get("requires_manual_review", False),
-        uploaded_by=current_user.email 
+        uploaded_by=current_user.email,
+        llm_model_used=active_model,       # 🚀 NEW
+        api_key_masked=active_key_suffix   # 🚀 NEW
     )
     db.add(db_doc)
     db.commit()
@@ -165,9 +178,8 @@ async def upload_document(
 
         db.add(db_clause)
         
-    # 5. 🚀 NEW: Trigger RAGAS in an isolated background thread to bypass uvloop!
+    # 5. Trigger RAGAS in an isolated background thread
     try:
-        # Await the execution of generate_ragas_scorecard on a separate thread
         ragas_scores = await run_in_threadpool(generate_ragas_scorecard, extracted_clauses)
         
         db_doc.ragas_faithfulness = ragas_scores.get("faithfulness", 0.0)
@@ -184,6 +196,8 @@ async def upload_document(
     return {
         "message": "Document successfully processed via LangGraph.",
         "job_id": job_id,
+        "llm_model_used": active_model,        # 🚀 RETURNED TO UI
+        "api_key_masked": active_key_suffix,   # 🚀 RETURNED TO UI
         "metrics": {
             "ocr_confidence": metrics.get("ocr_confidence", 100.0),
             "pages": metrics.get("pages", 1),
@@ -217,6 +231,8 @@ async def get_document_history(
             "pages": doc.pages,
             "entities_detected": doc.entities_detected,
             "created_at": doc.created_at.isoformat() if doc.created_at else None,
+            "llm_model_used": getattr(doc, "llm_model_used", "gemini-3.5-flash"), # 🚀 NEW
+            "api_key_masked": getattr(doc, "api_key_masked", "...N/A"),           # 🚀 NEW
             "ragas_scores": {
                 "faithfulness": getattr(doc, "ragas_faithfulness", 0.0),
                 "answer_relevancy": getattr(doc, "ragas_answer_relevancy", 0.0),
@@ -279,6 +295,8 @@ async def get_document_details(
                 "created_at": str(getattr(doc, "created_at", "")),
                 "ocr_confidence": getattr(doc, "ocr_confidence", 0.97),
                 "pages_processed": getattr(doc, "pages", 1),
+                "llm_model_used": getattr(doc, "llm_model_used", "gemini-3.5-flash"), # 🚀 NEW
+                "api_key_masked": getattr(doc, "api_key_masked", "...N/A"),           # 🚀 NEW
                 "ragas_faithfulness": getattr(doc, "ragas_faithfulness", 0.0),
                 "ragas_answer_relevancy": getattr(doc, "ragas_answer_relevancy", 0.0),
                 "ragas_context_precision": getattr(doc, "ragas_context_precision", 0.0),
