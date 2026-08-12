@@ -154,3 +154,22 @@ class SystemConfigModel(Base):
     api_key = Column(String, nullable=True) # Securely stores the active key
     
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    
+    
+# ==================== AUTOMATIC SCHEMA MIGRATION ====================
+# Forces PostgreSQL to add the missing RAGAS columns to your existing 
+# 'documents' table without deleting your historical data.
+from backend.database import engine
+from sqlalchemy import text
+
+try:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_faithfulness FLOAT;"))
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_answer_relevancy FLOAT;"))
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_context_precision FLOAT;"))
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_context_recall FLOAT;"))
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_answer_correctness FLOAT;"))
+        print("✅ Database schema migration complete: RAGAS columns verified.")
+except Exception as e:
+    print(f"⚠️ Notice during migration: {e}")
