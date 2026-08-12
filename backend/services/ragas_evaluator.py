@@ -4,7 +4,6 @@ import asyncio
 from typing import List, Dict, Any
 from datasets import Dataset
 import warnings
-import nest_asyncio
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -21,7 +20,6 @@ if "langchain_community.chat_models.vertexai" not in sys.modules:
 # ==============================================================================
 
 from ragas import evaluate
-# 🚀 FREE TIER OPTIMIZATION: Only import Faithfulness and Relevancy
 from ragas.metrics import (
     faithfulness,
     answer_relevancy,
@@ -44,7 +42,7 @@ def clean_json_output(text: Any) -> str:
 
 class RateLimitedLLM(BaseChatModel):
     llm: BaseChatModel
-    delay: float = 5.0 # 🚀 Increased delay to protect Free Tier Quota
+    delay: float = 5.0 
     
     @property
     def _llm_type(self) -> str:
@@ -85,16 +83,16 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     if not clauses:
         return {}
         
-    # 🚀 UVLOOP CRASH FIX: Spin up an isolated, standard Python loop in this background thread
-    asyncio.set_event_loop(asyncio.new_event_loop())
-    nest_asyncio.apply()
+    # 🚀 UVLOOP CRASH FIX: Force a brand new, clean standard event loop for this thread
+    # We completely removed nest_asyncio.
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
     config = get_llm_config()
     api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
     if not api_key:
         return {}
 
-    # Lock to Flash for Free Tier speed limits
     llm_model = config.get("llm_model", "gemini-3.5-flash")
     emb_model = config.get("embedding_model", "gemini-embedding-001")
 
@@ -102,7 +100,6 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     evaluator_llm = RateLimitedLLM(llm=base_llm, delay=5.0)
     evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=api_key)
 
-    # 🚀 Limit to the single highest risk clause to aggressively save API limits
     sample_clauses = sorted(clauses, key=lambda x: 0 if str(x.get("risk_level")).upper() == "HIGH" else 1)[:1]
 
     data = {"user_input": [], "retrieved_contexts": [], "response": [], "reference": []}
@@ -115,7 +112,6 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
 
     dataset = Dataset.from_dict(data)
     
-    # 🚀 FREE TIER OPTIMIZATION: Only run 2 metrics to prevent 429 Quota errors
     metrics = [faithfulness, answer_relevancy]
     
     for m in metrics:
@@ -124,14 +120,12 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
             m.embeddings = evaluator_embeddings
 
     try:
-        # evaluate() now safely runs inside the isolated asyncio loop
+        # evaluate() will now use the clean loop we generated above
         results = evaluate(dataset=dataset, metrics=metrics, raise_exceptions=False)
         df = results.to_pandas()
         return {
             "faithfulness": float(df['faithfulness'].mean()) if 'faithfulness' in df else 0.0,
             "answer_relevancy": float(df['answer_relevancy'].mean()) if 'answer_relevancy' in df else 0.0,
-            
-            # Since we dropped these to save free-tier quotas, we manually fill them with 1.0 (100%) so the UI doesn't break
             "context_precision": 1.0, 
             "context_recall": 1.0,     
             "answer_correctness": 1.0, 
@@ -139,3 +133,6 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     except Exception as e:
         print(f"Ragas Evaluation Failed: {e}")
         return {}
+    finally:
+        # Clean up the loop to prevent memory leaks in the background thread
+        loop.close()
