@@ -1,6 +1,9 @@
 import os
-from backend.database import SessionLocal
+from backend.database import SessionLocal, engine  # 🚀 NEW: Imported engine
 from backend.models import SystemConfigModel
+
+# 🚀 NEW: Force PostgreSQL to physically create the table if it is missing
+SystemConfigModel.__table__.create(bind=engine, checkfirst=True)
 
 def get_llm_config():
     """Retrieves active LLM configuration from the PostgreSQL database."""
