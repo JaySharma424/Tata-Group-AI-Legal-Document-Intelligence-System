@@ -94,7 +94,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
       setActiveJobId(response.data?.job_id || null);
       
-      // Store complete response including the new tracking variables
       setAnalysisResult({ 
         ...response.data, 
         metrics: safeMetrics,
@@ -133,7 +132,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
             answer_relevancy: response.data?.document?.ragas_answer_relevancy,
             context_precision: response.data?.document?.ragas_context_precision,
             context_recall: response.data?.document?.ragas_context_recall,
-            answer_correctness: response.data?.document?.ragas_answer_correctness
         }
       });
       
@@ -473,13 +471,12 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { label: 'Faithfulness', score: analysisResult?.ragas_scores?.faithfulness, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
                 { label: 'Answer Relevancy', score: analysisResult?.ragas_scores?.answer_relevancy, color: 'text-blue-400', bg: 'bg-blue-500/10' },
                 { label: 'Context Precision', score: analysisResult?.ragas_scores?.context_precision, color: 'text-purple-400', bg: 'bg-purple-500/10' },
                 { label: 'Context Recall', score: analysisResult?.ragas_scores?.context_recall, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-                { label: 'Answer Correctness', score: analysisResult?.ragas_scores?.answer_correctness, color: 'text-rose-400', bg: 'bg-rose-500/10' },
               ].map((metric, idx) => (
                 <div key={idx} className="bg-[#001021] border border-[#002B49] rounded-xl p-5 shadow-lg flex flex-col items-center text-center space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{metric.label}</span>
