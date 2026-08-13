@@ -325,10 +325,7 @@ Tata-Group-AI-Legal-Document-Intelligence-System/
 │   │   ├── ocr/                # Multimodal OCR & PyMuPDF Engine 
 │   │   ├── parsing/            # Structural text chunking 
 │   │   ├── reporting/          # ReportLab PDF Generator
-│   │   └── summary/            # automatically generate an executive-level summary of a contract using Gemini
 │   │   └── legal_graph.py      # LangGraph State Graph Orchestrator
-│   └── governance/
-│   │   └── governance_service.py  # Who reviewed this contract, what did they do, when did they do it, and what did they change?
 │   ├── services/
 │   │   ├── llm_config.py       # PostgreSQL dynamic key management 
 │   │   ├── rag_service.py      # Qdrant Vector Search & Gemini Embeddings 
@@ -362,7 +359,6 @@ Tata-Group-AI-Legal-Document-Intelligence-System/
 │   │   │   └── PipelineVisualizer.tsx     # LangGraph status visualizer
 │   │   │   └── DocumentHistorySidebar.tsx # Document history for each user
 │   │   │   └── LegalChatWidget.tsx        # Aadhya Chatbot
-│   │   │   └── LegalOpsDashboard.tsx      # So this component itself doesn't calculate the legal metrics. It gets them from the backend.
 │   │   │   └── AdminPortal.tsx            # The admin ui or frontend
 │   │   ├── component/
 │   │   │   └── hero.png
