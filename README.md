@@ -1,42 +1,42 @@
-# 🏛️ Tata AI Legal Intelligence[cite: 1]
+# 🏛️ Tata AI Legal Intelligence
 
-**Enterprise Document Parsing, RAG Grounding & Risk Governance Portal**[cite: 1]
+**Enterprise Document Parsing, RAG Grounding & Risk Governance Portal** 
 
-[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/JaySharma424/Tata-Group-AI-Legal-Document-Intelligence-System)[cite: 1]
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/JaySharma424/Tata-Group-AI-Legal-Document-Intelligence-System) 
 
-An advanced, full-stack enterprise application designed for corporate legal and compliance teams.[cite: 1] This system automates the ingestion, parsing, and risk assessment of legal contracts, such as Master Service Agreements and NDAs, by utilizing AI and Retrieval-Augmented Generation (RAG).[cite: 1] It provides a secure, isolated workspace for officers to review AI-extracted clauses, log audit actions, and generate certified compliance reports.[cite: 1]
-
----
-
-## 🏢 Executive Overview[cite: 1]
-
-In large enterprise environments, evaluating operational and legal contracts requires meticulous, secure, and standardized review.[cite: 1] Relying on manual oversight can lead to inconsistencies and missed risk vectors.[cite: 1] 
-
-This platform provides:[cite: 1]
-* **Grounded AI Synthesis:** Evaluates extracted clauses against enterprise policy via Vector DB grounding.[cite: 1] This ensures AI rationales are strictly tied to approved internal guidelines.[cite: 1]
-* **Automated Risk Assessment:** Highlights risks (HIGH/MEDIUM/LOW) with generated AI rationales directly linked to extracted contract clauses.[cite: 1]
-* **Strict RBAC & Governance:** Features a secure, human-in-the-loop workflow allowing officers to 'ACCEPT' or 'REJECT' documents.[cite: 1] This securely logs all decisions into an immutable audit trail.[cite: 1]
-* **Certified Reporting:** Generates certified compliance reports and Executive Audit Packages dynamically.[cite: 1]
+An advanced, full-stack enterprise application designed for corporate legal and compliance teams.  This system automates the ingestion, parsing, and risk assessment of legal contracts, such as Master Service Agreements and NDAs, by utilizing AI and Retrieval-Augmented Generation (RAG).  It provides a secure, isolated workspace for officers to review AI-extracted clauses, log audit actions, and generate certified compliance reports. 
 
 ---
 
-## ✨ Key Enterprise Capabilities[cite: 1]
+## 🏢 Executive Overview 
 
-* **🔒 Role-Based Multi-Tenant Access:** Secured via OAuth2 JWT Bearer tokens with strict data isolation across business units, such as Enterprise Legal, Procurement, Executive Office, and Compliance & Risk.[cite: 1]
-* **📄 Multimodal Document Ingestion:** Features native parsing of PDFs (`pypdf`, PyMuPDF), Word documents (`python-docx`), and scanned images via Gemini Vision Multimodal OCR with automated page-level confidence scoring.[cite: 1]
-* **🧠 LangGraph State Machine:** Executes deterministic workflows: OCR Extraction -> Clause Identification -> Vector RAG Retrieval -> Taxonomy Normalization -> Constrained Legal Reasoning.[cite: 1]
-* **📚 Grounded RAG Policy Knowledge Base:** Cross-references contract text against `risk_taxonomy.csv` and corporate policies.[cite: 1] These are stored in an in-memory Qdrant Vector DB using 384-dimensional `all-MiniLM-L6-v2` dense embeddings.[cite: 1]
-* **⚖️ Human-in-the-Loop Governance:** Enforces legal accountability through explicit review actions (`ACCEPT`, `REJECT`, `EDIT`, `ESCALATE`), logging every decision to an immutable PostgreSQL audit trail.[cite: 1]
-* **📊 Executive PDF Reporting & Operations Telemetry:** Generates color-coded Executive Compliance Reports via ReportLab.[cite: 1] It visualizes throughput metrics, turnaround times, and high-risk distributions in real time.[cite: 1]
-* **💬 Aadhya Legal AI Assistant:** A context-aware interactive assistant providing document Q&A, out-of-domain question deflection, and multi-turn conversational memory.[cite: 1]
+In large enterprise environments, evaluating operational and legal contracts requires meticulous, secure, and standardized review.  Relying on manual oversight can lead to inconsistencies and missed risk vectors.  
+
+This platform provides: 
+* **Grounded AI Synthesis:** Evaluates extracted clauses against enterprise policy via Vector DB grounding.  This ensures AI rationales are strictly tied to approved internal guidelines. 
+* **Automated Risk Assessment:** Highlights risks (HIGH/MEDIUM/LOW) with generated AI rationales directly linked to extracted contract clauses. 
+* **Strict RBAC & Governance:** Features a secure, human-in-the-loop workflow allowing officers to 'ACCEPT' or 'REJECT' documents.  This securely logs all decisions into an immutable audit trail. 
+* **Certified Reporting:** Generates certified compliance reports and Executive Audit Packages dynamically. 
 
 ---
 
-## 🏗️ Enterprise System Architecture Blueprint[cite: 1]
+## ✨ Key Enterprise Capabilities 
 
-### 1. Multi-Tier Layered System Topology[cite: 1]
+* **🔒 Role-Based Multi-Tenant Access:** Secured via OAuth2 JWT Bearer tokens with strict data isolation across business units, such as Enterprise Legal, Procurement, Executive Office, and Compliance & Risk. 
+* **📄 Multimodal Document Ingestion:** Features native parsing of PDFs (`pypdf`, PyMuPDF), Word documents (`python-docx`), and scanned images via Gemini Vision Multimodal OCR with automated page-level confidence scoring. 
+* **🧠 LangGraph State Machine:** Executes deterministic workflows: OCR Extraction -> Clause Identification -> Vector RAG Retrieval -> Taxonomy Normalization -> Constrained Legal Reasoning. 
+* **📚 Grounded RAG Policy Knowledge Base:** Cross-references contract text against `risk_taxonomy.csv` and corporate policies.  These are stored in an in-memory Qdrant Vector DB using 384-dimensional `all-MiniLM-L6-v2` dense embeddings. 
+* **⚖️ Human-in-the-Loop Governance:** Enforces legal accountability through explicit review actions (`ACCEPT`, `REJECT`, `EDIT`, `ESCALATE`), logging every decision to an immutable PostgreSQL audit trail. 
+* **📊 Executive PDF Reporting & Operations Telemetry:** Generates color-coded Executive Compliance Reports via ReportLab.  It visualizes throughput metrics, turnaround times, and high-risk distributions in real time. 
+* **💬 Aadhya Legal AI Assistant:** A context-aware interactive assistant providing document Q&A, out-of-domain question deflection, and multi-turn conversational memory. 
 
-The architecture is divided into distinct layers, from the React SPA frontend down to the PostgreSQL and Qdrant persistence engines, connected via a FastAPI REST Gateway.[cite: 1]
+---
+
+## 🏗️ Enterprise System Architecture Blueprint 
+
+### 1. Multi-Tier Layered System Topology 
+
+The architecture is divided into distinct layers, from the React SPA frontend down to the PostgreSQL and Qdrant persistence engines, connected via a FastAPI REST Gateway. 
 
 ```text
 ╔═════════════════════════════════════════════════════════════════════════════════════════════════════════╗
