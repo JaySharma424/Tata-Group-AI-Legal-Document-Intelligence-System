@@ -1,4 +1,4 @@
-# 🏛️ Tata AI Legal Intelligence
+  # 🏛️ Tata AI Legal Intelligence
 
 **Enterprise Document Parsing, RAG Grounding & Risk Governance Portal**
 
