@@ -25,7 +25,7 @@ This platform provides:
 * **🔒 Role-Based Multi-Tenant Access:** Secured via OAuth2 JWT Bearer tokens with strict data isolation across business units, such as Enterprise Legal, Procurement, Executive Office, and Compliance & Risk. 
 * **📄 Multimodal Document Ingestion:** Features native parsing of PDFs (`pypdf`, PyMuPDF), Word documents (`python-docx`), and scanned images via Gemini Vision Multimodal OCR with automated page-level confidence scoring. 
 * **🧠 LangGraph State Machine:** Executes deterministic workflows: OCR Extraction -> Clause Identification -> Vector RAG Retrieval -> Taxonomy Normalization -> Constrained Legal Reasoning. 
-* **📚 Grounded RAG Policy Knowledge Base:** Cross-references contract text against `risk_taxonomy.csv` and corporate policies.  These are stored in an in-memory Qdrant Vector DB using 384-dimensional `all-MiniLM-L6-v2` dense embeddings. 
+* **📚 Grounded RAG Policy Knowledge Base:** Cross-references contract text against `risk_taxonomy.csv` and corporate policies stored in an in-memory **Qdrant** Vector DB using Google's native **`gemini-embedding-001`** dense embeddings. 
 * **⚖️ Human-in-the-Loop Governance:** Enforces legal accountability through explicit review actions (`ACCEPT`, `REJECT`, `EDIT`, `ESCALATE`), logging every decision to an immutable PostgreSQL audit trail. 
 * **📊 Executive PDF Reporting & Operations Telemetry:** Generates color-coded Executive Compliance Reports via ReportLab.  It visualizes throughput metrics, turnaround times, and high-risk distributions in real time. 
 * **💬 Aadhya Legal AI Assistant:** A context-aware interactive assistant providing document Q&A, out-of-domain question deflection, and multi-turn conversational memory. 
@@ -230,7 +230,7 @@ To guarantee 99.8%+ system availability without breaking API contracts during ra
 
 
 
-* **Embedding Model:** `all-MiniLM-L6-v2` generating 384-dimensional dense vectors.
+* **Embedding Model:** `gemini-embedding-001` generating dense vectors.
 
 
 * **Chunking Strategy:** Knowledge base `.txt` policy files are split using LangChain's `RecursiveCharacterTextSplitter` (`chunk_size=1000`, `chunk_overlap=150`).
