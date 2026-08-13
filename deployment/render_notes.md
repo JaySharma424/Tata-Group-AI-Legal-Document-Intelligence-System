@@ -70,4 +70,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+```
 🚀 Pre-Deployment Verification Checklist[ ] render.yaml specifies ./frontend/dist as staticPublishPath.[ ] Environment variable VITE_API_BASE_URL points to live Render backend endpoint.[ ] FastAPI CORS middleware includes https://tata-ai-frontend.onrender.com.[ ] Client-side rewrite rule (/* $\rightarrow$ /index.html) is added under Render Static Site settings.
+```
