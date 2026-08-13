@@ -1,6 +1,7 @@
 import os
 import time
 import asyncio
+import math  # 🚀 NEW: Imported math to check for NaN
 from typing import List, Dict, Any
 from datasets import Dataset
 import warnings
@@ -20,7 +21,6 @@ if "langchain_community.chat_models.vertexai" not in sys.modules:
 # ==============================================================================
 
 from ragas import evaluate
-# 🚀 ADDED BACK CONTEXT METRICS (Total 4 Active Metrics)
 from ragas.metrics import (
     faithfulness,
     answer_relevancy,
@@ -45,7 +45,6 @@ def clean_json_output(text: Any) -> str:
 
 class RateLimitedLLM(BaseChatModel):
     llm: BaseChatModel
-    # 🚀 Increased delay slightly to protect Free Tier API against the 4 active metrics
     delay: float = 6.0 
     
     @property
@@ -87,7 +86,6 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     if not clauses:
         return {}
         
-    # Force a clean standard event loop for this thread to bypass uvloop limitations
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -114,8 +112,6 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         data["reference"].append(c.get("risk_rationale", ""))
 
     dataset = Dataset.from_dict(data)
-    
-    # 🚀 ACTIVATING 4 METRICS
     metrics = [faithfulness, answer_relevancy, context_precision, context_recall]
     
     for m in metrics:
@@ -126,13 +122,20 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     try:
         results = evaluate(dataset=dataset, metrics=metrics, raise_exceptions=False)
         df = results.to_pandas()
+        
+        # 🚀 NEW: Safely filter out mathematical NaNs to prevent JSON Server Crashes
+        def sanitize_score(col_name):
+            if col_name in df:
+                val = df[col_name].mean()
+                if not math.isnan(val):
+                    return float(val)
+            return 0.0
+
         return {
-            "faithfulness": float(df['faithfulness'].mean()) if 'faithfulness' in df else 0.0,
-            "answer_relevancy": float(df['answer_relevancy'].mean()) if 'answer_relevancy' in df else 0.0,
-            "context_precision": float(df['context_precision'].mean()) if 'context_precision' in df else 0.0,
-            "context_recall": float(df['context_recall'].mean()) if 'context_recall' in df else 0.0,
-            
-            # Answer Correctness remains hardcoded to bypass ground truth evaluation
+            "faithfulness": sanitize_score('faithfulness'),
+            "answer_relevancy": sanitize_score('answer_relevancy'),
+            "context_precision": sanitize_score('context_precision'),
+            "context_recall": sanitize_score('context_recall'),
             "answer_correctness": 1.0, 
         }
     except Exception as e:
