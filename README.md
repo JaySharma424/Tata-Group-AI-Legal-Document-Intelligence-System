@@ -1,6 +1,3 @@
-Here is the completely rewritten and consolidated `README.md` file based on your provided reference. You can copy the code block below and save it directly as your `README.md` file.
-
-```markdown
 # 🏛️ Tata AI Legal Intelligence[cite: 1]
 
 **Enterprise Document Parsing, RAG Grounding & Risk Governance Portal**[cite: 1]
@@ -447,9 +444,3 @@ The project includes a repository-level `render.yaml` Blueprint configuration fo
 
 
 3. **Out-of-Domain Conversational Deflection:** Ask Aadhya "What is the weather in Mumbai?". The assistant politely declines and redirects focus to corporate contract compliance.
-
-
-
-```
-
-```
