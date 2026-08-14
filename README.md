@@ -1302,7 +1302,7 @@ The supplied project README identifies the following deployment targets:
 - **Backend API / Swagger:** `https://tata-ai-backend-og7t.onrender.com/docs`
 - **Backend Health:** `https://tata-ai-backend-og7t.onrender.com/`
 
-> Replace these URLs if the deployment environment changes.
+>
 
 ---
 
