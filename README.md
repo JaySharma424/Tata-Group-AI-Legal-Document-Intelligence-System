@@ -15,6 +15,9 @@
 
 ---
 
+## Video_Presentation _link :- https://drive.google.com/file/d/1eA83tzfHt-yk__iCNbwww4Ht69fUWrT4/view?usp=sharing
+
+
 ## 📌 Overview
 
 The **Tata Group AI Legal Document Intelligence System** is an enterprise-oriented AI platform designed to reduce the manual burden of first-pass legal document review while keeping **human legal professionals in control of interpretation, approval, escalation, and final decisions**.
