@@ -26,7 +26,7 @@ The system transforms uploaded contracts, vendor agreements, policy documents, r
 The product is intentionally designed as a **governed document-intelligence system rather than a generic chatbot**. Every material AI output should remain connected to document evidence, retrieved approved context, confidence information, and reviewer decisions.
 
 **Source:** *Tata Group: AI Legal Document Intelligence System*, Executive Overview and product vision, pp. 1–2, 4–5.  
-**PDF citation:** fileciteturn1file0L11-L25
+**Citation:** fileciteturn1file0L11-L25
 
 ---
 
@@ -54,7 +54,7 @@ Manual first-pass review can delay procurement, vendor onboarding, negotiations,
 The objective is therefore not to replace legal judgment, but to provide a **common intelligence layer** that helps legal teams identify important clauses, compare obligations, surface deviations, and prioritize high-risk items for expert review.
 
 **Source:** Product Dossier, Executive Overview and "Why This Release Is Time-Critical", pp. 1–2.  
-**PDF citation:** fileciteturn1file0L26-L42
+**Citation:** fileciteturn1file0L26-L42
 
 ---
 
@@ -80,7 +80,7 @@ The core principle is:
 **AI accelerates legal analysis; authorized legal professionals retain final authority.**
 
 **Source:** Product Dossier, Product Vision, p. 4.  
-**PDF citation:** fileciteturn1file3L177-L193
+**Citation:** fileciteturn1file3L177-L193
 
 ---
 
@@ -97,7 +97,7 @@ The core principle is:
 | Deployment Readiness | Provide a repeatable, reviewable enterprise workflow |
 
 **Source:** Product Dossier, Leadership Expectations, p. 3.  
-**PDF citation:** fileciteturn1file2L71-L124
+**Citation:** fileciteturn1file2L71-L124
 
 ---
 
@@ -154,8 +154,8 @@ The core principle is:
 The product dossier describes the same lifecycle as a legal document job moving through upload, OCR, parsing, clause extraction, retrieval, reasoning, summarization, risk classification and human review, with structured outputs and errors retained at each stage.
 
 **Source:** Product Dossier, Technical Architecture, pp. 7–9.  
-**PDF citation:** fileciteturn1file5L348-L351  
-**PDF citation:** fileciteturn1file9L475-L491
+**Citation:** fileciteturn1file5L348-L351  
+**Citation:** fileciteturn1file9L475-L491
 
 ---
 
@@ -212,7 +212,7 @@ The product dossier describes the same lifecycle as a legal document job moving 
 The intended workflow requires material risk flags to be supported by extracted document evidence and, where applicable, retrieved approved context.
 
 **Source:** Product Dossier, architecture and validation requirements, pp. 4, 6, 12–13.  
-**PDF citation:** fileciteturn1file4L206-L245
+**Citation:** fileciteturn1file4L206-L245
 
 ---
 
@@ -238,7 +238,7 @@ The upload workflow captures:
 Unsupported, incomplete, unreadable, or invalid documents should generate clear user-facing errors.
 
 **Source:** Product Dossier, Detailed Product Requirements, p. 6.  
-**PDF citation:** fileciteturn0file1L245-L255
+**Citation:** fileciteturn0file1L245-L255
 
 ---
 
@@ -266,7 +266,7 @@ The OCR and parsing layer is responsible for converting documents into structure
 Low-confidence pages should be explicitly flagged rather than silently treated as reliable input.
 
 **Source:** Product Dossier, OCR and Parsing Pipeline, p. 6.  
-**PDF citation:** fileciteturn0file1L251-L255
+**Citation:** fileciteturn0file1L251-L255
 
 ---
 
@@ -305,7 +305,7 @@ Each extracted clause should contain structured metadata such as:
 The system should also identify expected clauses that are missing for a particular document type or business context.
 
 **Source:** Product Dossier, Clause Extraction and Normalization, p. 6.  
-**PDF citation:** fileciteturn0file1L256-L262
+**Citation:** fileciteturn0file1L256-L262
 
 ---
 
@@ -335,7 +335,7 @@ Retrieved references should be ranked using available metadata such as:
 Outdated or unapproved references should not be treated as high-confidence legal context.
 
 **Source:** Product Dossier, RAG Retrieval and Knowledge Context, p. 6.  
-**PDF citation:** fileciteturn0file1L263-L270
+**Citation:** fileciteturn0file1L263-L270
 
 ---
 
@@ -369,7 +369,7 @@ Every material risk flag should ideally contain:
 The system must not present an AI-generated legal conclusion as a final approved legal decision before authorized human review.
 
 **Source:** Product Dossier, Legal Reasoning and Risk Flagging, p. 6.  
-**PDF citation:** fileciteturn0file1L271-L277
+**Citation:** fileciteturn0file1L271-L277
 
 ---
 
@@ -392,7 +392,7 @@ Generated summaries should retain clause citations and disclose low OCR/extracti
 Summaries must remain editable before approval and should preserve version history.
 
 **Source:** Product Dossier, Summarization and Review Output, p. 6.  
-**PDF citation:** fileciteturn0file1L278-L282
+**Citation:** fileciteturn0file1L278-L282
 
 ---
 
@@ -415,7 +415,7 @@ Approval status should be visible at document, clause and risk levels where appr
 Reviewer identity, timestamp, decision and rationale must be captured for auditability.
 
 **Source:** Product Dossier, Human Review and Approval Layer, p. 6.  
-**PDF citation:** fileciteturn0file1L283-L287
+**Citation:** fileciteturn0file1L283-L287
 
 ---
 
@@ -466,7 +466,7 @@ The vector layer stores embeddings for:
 The product dossier explicitly recommends a vector database for embeddings and metadata-aware retrieval.
 
 **Source:** Product Dossier, Data Assets and Technical Architecture, pp. 9–10.  
-**PDF citation:** fileciteturn0file1L445-L461
+**Citation:** fileciteturn0file1L445-L461
 
 ---
 
@@ -501,7 +501,7 @@ The following stack reflects the implementation represented in the supplied proj
 The product dossier lists FastAPI, React, OCR tooling, spaCy/PyMuPDF/pdfplumber, Qdrant/Chroma/pgvector, Gemini, LangChain/LangGraph, PostgreSQL, deployment services, and structured logging as suitable technology choices.
 
 **Source:** Product Dossier, Recommended Technology Choices, p. 9.  
-**PDF citation:** fileciteturn0file1L390-L444
+**Citation:** fileciteturn0file1L390-L444
 
 ---
 
@@ -982,7 +982,7 @@ Review contract summaries, obligation maps, risk narratives and comparison notes
 Monitor document volume, turnaround time, risk categories, escalations and approval outcomes.
 
 **Source:** Product Dossier, Product Surfaces, p. 4.  
-**PDF citation:** fileciteturn1file3L183-L195
+**Citation:** fileciteturn1file3L183-L195
 
 ---
 
@@ -1008,7 +1008,7 @@ Representative endpoints:
 The product dossier calls for endpoints covering upload, OCR jobs, clause extraction, retrieval, summary generation, review actions and audit retrieval.
 
 **Source:** Product Dossier, API/engineering discussion, p. 4.  
-**PDF citation:** fileciteturn1file4L220-L227
+**Citation:** fileciteturn1file4L220-L227
 
 ---
 
@@ -1031,8 +1031,8 @@ The project should evaluate:
 The project now implements these evaluation requirements through a dedicated RAGAS evaluator, while the broader test suite can validate clause extraction, risk classification, citations and workflow behavior. The product dossier explicitly recommends test documents with known expected clauses and risks.
 
 **Source:** Product Dossier, AI Engineering and Evaluation requirements, p. 4 and testing approach, p. 13.  
-**PDF citation:** fileciteturn1file4L213-L223  
-**PDF citation:** fileciteturn1file7L396-L405
+**Citation:** fileciteturn1file4L213-L223  
+**Citation:** fileciteturn1file7L396-L405
 
 ---
 
@@ -1210,7 +1210,7 @@ Audit Retrieval
 Failures should be visible, actionable, and preserve partial outputs where useful.
 
 **Source:** Product Dossier, Testing Approach, p. 13.  
-**PDF citation:** fileciteturn1file7L396-L405
+**Citation:** fileciteturn1file7L396-L405
 
 ---
 
@@ -1235,7 +1235,7 @@ The system should therefore enforce:
 Sensitive document content should not be exposed through frontend logs or uncontrolled telemetry.
 
 **Source:** Product Dossier, Security, Logging and Observability + Non-Functional Expectations, pp. 7–8.  
-**PDF citation:** fileciteturn1file5L273-L327
+**Citation:** fileciteturn1file5L273-L327
 
 ---
 
@@ -1258,7 +1258,7 @@ Operational monitoring should capture:
 This provides a traceable path from the original document through AI processing to the final human decision.
 
 **Source:** Product Dossier, Security, Logging and Observability, p. 7.  
-**PDF citation:** fileciteturn1file5L273-L277
+**Citation:** fileciteturn1file5L273-L277
 
 ---
 
@@ -1290,7 +1290,7 @@ This provides a traceable path from the original document through AI processing 
 The product dossier recommends deploying the frontend through services such as Vercel/Netlify and the backend through hosted API services such as Render/Railway, with credentials stored in environment variables.
 
 **Source:** Product Dossier, Deployment Approach, p. 11.  
-**PDF citation:** fileciteturn1file6L363-L369
+**Citation:** fileciteturn1file6L363-L369
 
 ---
 
@@ -1338,7 +1338,7 @@ Do not commit real credentials.
 The product dossier explicitly requires model, OCR, database, vector database, storage and authentication credentials to be supplied through environment variables.
 
 **Source:** Product Dossier, Deployment Approach, p. 11.  
-**PDF citation:** fileciteturn1file6L363-L369
+**Citation:** fileciteturn1file6L363-L369
 
 ---
 
@@ -1518,8 +1518,8 @@ Recommended demo scenarios include:
 3. **High-Risk Clause Escalation** — demonstrate risk identification and senior-review routing.
 
 **Source:** Product Dossier, Primary User Journeys and Demo Requirements, pp. 5 and 11.  
-**PDF citation:** fileciteturn1file8L417-L463  
-**PDF citation:** fileciteturn1file6L362-L369
+**Citation:** fileciteturn1file8L417-L463  
+**Citation:** fileciteturn1file6L362-L369
 
 ---
 
@@ -1534,7 +1534,7 @@ Recommended demo scenarios include:
 | Senior Legal Escalation | High-risk/uncertain item | Package evidence and rationale | Escalation-ready review record |
 
 **Source:** Product Dossier, Primary User Journeys, p. 5.  
-**PDF citation:** fileciteturn1file8L417-L463
+**Citation:** fileciteturn1file8L417-L463
 
 ---
 
@@ -1573,7 +1573,7 @@ Expose confidence and source locations to reviewers.
 Persist model outputs, retrieval references and reviewer decisions.
 
 **Source:** Product Dossier, AI workflow validation and governance requirements, pp. 12–13.  
-**PDF citation:** fileciteturn1file7L381-L405
+**Citation:** fileciteturn1file7L381-L405
 
 ---
 
@@ -1631,7 +1631,7 @@ Recommended techniques include:
 - Cost alerts
 
 **Source:** Product Dossier, Non-Functional Expectations, pp. 7–8.  
-**PDF citation:** fileciteturn1file5L288-L347
+**Citation:** fileciteturn1file5L288-L347
 
 ---
 
@@ -1652,7 +1652,7 @@ Future extensions can include:
 The product dossier explicitly positions these capabilities as later expansion areas after the core upload-to-human-approval workflow is proven.
 
 **Source:** Product Dossier, Leadership Discussion and Product Vision, p. 4.  
-**PDF citation:** fileciteturn1file3L169-L182
+**Citation:** fileciteturn1file3L169-L182
 
 ---
 
@@ -1665,8 +1665,8 @@ It should **not** be represented as an autonomous legal decision-maker.
 AI-generated outputs must remain clearly identifiable as system-generated and should remain pending authorized legal review until approved.
 
 **Source:** Product Dossier, Human Approval and Governance requirements, pp. 3, 4 and 6.  
-**PDF citation:** fileciteturn1file2L106-L117  
-**PDF citation:** fileciteturn1file4L232-L245
+**Citation:** fileciteturn1file2L106-L117  
+**Citation:** fileciteturn1file4L232-L245
 
 ---
 
@@ -1771,4 +1771,4 @@ The core success criterion is not simply generating a good-looking AI answer. Th
 This traceability-first approach follows the product dossier's central requirement for evidence-grounded AI with human approval and auditability.
 
 **Source:** Product Dossier, Executive Overview, Technical Architecture and Governance requirements.  
-**PDF citation:** fileciteturn1file0L18-L25
+**Citation:** fileciteturn1file0L18-L25
