@@ -24,7 +24,7 @@ Spins up PostgreSQL, FastAPI Backend, and React Frontend in isolated local conta
    cd Tata-Group-AI-Legal-Document-Intelligence-System
 Configure local environment variables:Bashcp .env.example .env
 Add your GEMINI_API_KEY into .env.Start the containers:Bashdocker-compose up -d --build
-Access local services:Frontend: http://localhost:5173Backend API / Docs: http://localhost:8000/docs💻 Manual Setup Option 2: Native Workstation SetupStep 1: Environment Variables SetupCreate a .env file in the root directory:Code snippetDATABASE_URL=postgresql://postgres:1234@localhost:5432/tata_ai_legal
+Access local services:Frontend: http://localhost:5173Backend API / Docs: http://localhost:8000/docs💻 Manual Setup Option 2: Native Workstation SetupStep 1: Environment Variables SetupCreate a .env file in the root directory:Code snippetDATABASE_URL=postgresql://postgres:YourPassword@localhost:5432/tata_ai_legal
 SECRET_KEY=your_secure_development_jwt_secret_key
 GEMINI_API_KEY=your_gemini_api_key_here
 VITE_API_BASE_URL=http://localhost:8000
