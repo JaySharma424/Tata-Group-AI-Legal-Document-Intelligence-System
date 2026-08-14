@@ -26,7 +26,7 @@ The system transforms uploaded contracts, vendor agreements, policy documents, r
 The product is intentionally designed as a **governed document-intelligence system rather than a generic chatbot**. Every material AI output should remain connected to document evidence, retrieved approved context, confidence information, and reviewer decisions.
 
 **Source:** *Tata Group: AI Legal Document Intelligence System*, Executive Overview and product vision, pp. 1–2, 4–5.  
-**Citation:** fileciteturn1file0L11-L25
+**PDF citation:** fileciteturn1file0L11-L25
 
 ---
 
@@ -54,7 +54,7 @@ Manual first-pass review can delay procurement, vendor onboarding, negotiations,
 The objective is therefore not to replace legal judgment, but to provide a **common intelligence layer** that helps legal teams identify important clauses, compare obligations, surface deviations, and prioritize high-risk items for expert review.
 
 **Source:** Product Dossier, Executive Overview and "Why This Release Is Time-Critical", pp. 1–2.  
-**Citation:** fileciteturn1file0L26-L42
+**PDF citation:** fileciteturn1file0L26-L42
 
 ---
 
@@ -80,7 +80,7 @@ The core principle is:
 **AI accelerates legal analysis; authorized legal professionals retain final authority.**
 
 **Source:** Product Dossier, Product Vision, p. 4.  
-**Citation:** fileciteturn1file3L177-L193
+**PDF citation:** fileciteturn1file3L177-L193
 
 ---
 
@@ -97,7 +97,7 @@ The core principle is:
 | Deployment Readiness | Provide a repeatable, reviewable enterprise workflow |
 
 **Source:** Product Dossier, Leadership Expectations, p. 3.  
-**Citation:** fileciteturn1file2L71-L124
+**PDF citation:** fileciteturn1file2L71-L124
 
 ---
 
@@ -141,7 +141,7 @@ The core principle is:
                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                 HUMAN REVIEW & GOVERNANCE                        │
-│          Accept • Reject • Escalate • Comment                    │
+│          Accept • Edit • Reject • Escalate • Comment             │
 └───────────────────────────────┬──────────────────────────────────┘
                                 │
                                 ▼
@@ -154,8 +154,8 @@ The core principle is:
 The product dossier describes the same lifecycle as a legal document job moving through upload, OCR, parsing, clause extraction, retrieval, reasoning, summarization, risk classification and human review, with structured outputs and errors retained at each stage.
 
 **Source:** Product Dossier, Technical Architecture, pp. 7–9.  
-**Citation:** fileciteturn1file5L348-L351  
-**Citation:** fileciteturn1file9L475-L491
+**PDF citation:** fileciteturn1file5L348-L351  
+**PDF citation:** fileciteturn1file9L475-L491
 
 ---
 
@@ -200,6 +200,7 @@ The product dossier describes the same lifecycle as a legal document job moving 
 11. Human Review
        │
        ├── ACCEPT
+       ├── EDIT
        ├── REJECT
        ├── ESCALATE
        └── COMMENT
@@ -211,7 +212,7 @@ The product dossier describes the same lifecycle as a legal document job moving 
 The intended workflow requires material risk flags to be supported by extracted document evidence and, where applicable, retrieved approved context.
 
 **Source:** Product Dossier, architecture and validation requirements, pp. 4, 6, 12–13.  
-**Citation:** fileciteturn1file4L206-L245
+**PDF citation:** fileciteturn1file4L206-L245
 
 ---
 
@@ -237,7 +238,7 @@ The upload workflow captures:
 Unsupported, incomplete, unreadable, or invalid documents should generate clear user-facing errors.
 
 **Source:** Product Dossier, Detailed Product Requirements, p. 6.  
-**Citation:** fileciteturn0file1L245-L255
+**PDF citation:** fileciteturn0file1L245-L255
 
 ---
 
@@ -265,7 +266,7 @@ The OCR and parsing layer is responsible for converting documents into structure
 Low-confidence pages should be explicitly flagged rather than silently treated as reliable input.
 
 **Source:** Product Dossier, OCR and Parsing Pipeline, p. 6.  
-**Citation:** fileciteturn0file1L251-L255
+**PDF citation:** fileciteturn0file1L251-L255
 
 ---
 
@@ -304,7 +305,7 @@ Each extracted clause should contain structured metadata such as:
 The system should also identify expected clauses that are missing for a particular document type or business context.
 
 **Source:** Product Dossier, Clause Extraction and Normalization, p. 6.  
-**Citation:** fileciteturn0file1L256-L262
+**PDF citation:** fileciteturn0file1L256-L262
 
 ---
 
@@ -334,7 +335,7 @@ Retrieved references should be ranked using available metadata such as:
 Outdated or unapproved references should not be treated as high-confidence legal context.
 
 **Source:** Product Dossier, RAG Retrieval and Knowledge Context, p. 6.  
-**Citation:** fileciteturn0file1L263-L270
+**PDF citation:** fileciteturn0file1L263-L270
 
 ---
 
@@ -368,7 +369,7 @@ Every material risk flag should ideally contain:
 The system must not present an AI-generated legal conclusion as a final approved legal decision before authorized human review.
 
 **Source:** Product Dossier, Legal Reasoning and Risk Flagging, p. 6.  
-**Citation:** fileciteturn0file1L271-L277
+**PDF citation:** fileciteturn0file1L271-L277
 
 ---
 
@@ -391,7 +392,7 @@ Generated summaries should retain clause citations and disclose low OCR/extracti
 Summaries must remain editable before approval and should preserve version history.
 
 **Source:** Product Dossier, Summarization and Review Output, p. 6.  
-**Citation:** fileciteturn0file1L278-L282
+**PDF citation:** fileciteturn0file1L278-L282
 
 ---
 
@@ -414,7 +415,7 @@ Approval status should be visible at document, clause and risk levels where appr
 Reviewer identity, timestamp, decision and rationale must be captured for auditability.
 
 **Source:** Product Dossier, Human Review and Approval Layer, p. 6.  
-**Citation:** fileciteturn0file1L283-L287
+**PDF citation:** fileciteturn0file1L283-L287
 
 ---
 
@@ -465,7 +466,7 @@ The vector layer stores embeddings for:
 The product dossier explicitly recommends a vector database for embeddings and metadata-aware retrieval.
 
 **Source:** Product Dossier, Data Assets and Technical Architecture, pp. 9–10.  
-**Citation:** fileciteturn0file1L445-L461
+**PDF citation:** fileciteturn0file1L445-L461
 
 ---
 
@@ -482,7 +483,8 @@ The following stack reflects the implementation represented in the supplied proj
 | Embeddings | Gemini embedding model |
 | RAG | Qdrant |
 | Relational DB | PostgreSQL |
-| ORM | SQLAlchemy |
+| ORM / Schema | SQLAlchemy ORM |
+| Database Governance | Foreign keys, relationships, audit records, RAGAS persistence |
 | PDF Processing | PyMuPDF / fitz |
 | DOCX Processing | python-docx |
 | NLP | spaCy |
@@ -499,7 +501,7 @@ The following stack reflects the implementation represented in the supplied proj
 The product dossier lists FastAPI, React, OCR tooling, spaCy/PyMuPDF/pdfplumber, Qdrant/Chroma/pgvector, Gemini, LangChain/LangGraph, PostgreSQL, deployment services, and structured logging as suitable technology choices.
 
 **Source:** Product Dossier, Recommended Technology Choices, p. 9.  
-**Citation:** fileciteturn0file1L390-L444
+**PDF citation:** fileciteturn0file1L390-L444
 
 ---
 
@@ -575,6 +577,385 @@ The product dossier requires backend-controlled secrets, secure environment vari
 
 ---
 
+
+# 🗃️ PostgreSQL Database Schema
+
+The backend uses **SQLAlchemy ORM with PostgreSQL** to persist users, sessions, uploaded-document metadata, extracted clauses, review/audit events, and dynamic AI configuration.
+
+The database model is deliberately connected to the legal-review workflow: a document belongs to an uploader, contains extracted clauses, can accumulate audit/review actions, and stores RAGAS evaluation results and the LLM configuration used for its analysis.
+
+**Implementation source:** `models.py`. fileciteturn3file0L1-L5
+
+## Entity Relationship Overview
+
+```text
+                           ┌─────────────────────┐
+                           │      UserModel      │
+                           │       users         │
+                           ├─────────────────────┤
+                           │ PK id               │
+                           │ full_name            │
+                           │ email (unique)        │
+                           │ business_unit        │
+                           │ role                 │
+                           │ is_active            │
+                           │ created_at           │
+                           │ updated_at           │
+                           │ last_login           │
+                           └──────┬───────┬───────┘
+                                  │       │
+                    1:N           │       │ 1:N
+                                  │       │
+                    ┌─────────────▼─┐   ┌─▼─────────────────┐
+                    │ SessionModel  │   │   AuditLogModel    │
+                    │   sessions    │   │    audit_logs      │
+                    ├───────────────┤   ├────────────────────┤
+                    │ PK id         │   │ PK id              │
+                    │ FK user_id    │   │ FK job_id          │
+                    │ token         │   │ FK user_email      │
+                    │ refresh_token │   │ action             │
+                    │ created_at    │   │ notes              │
+                    │ expires_at    │   │ reviewer_comment   │
+                    │ is_active     │   │ escalation_status  │
+                    └───────────────┘   │ timestamp          │
+                                        └──────────┬─────────┘
+                                                   │
+                                                   │ N:1
+                                                   │
+                           ┌───────────────────────▼─────────┐
+                           │         DocumentModel            │
+                           │             documents            │
+                           ├──────────────────────────────────┤
+                           │ PK job_id                         │
+                           │ filename                          │
+                           │ business_unit                    │
+                           │ document_category                 │
+                           │ document_type                     │
+                           │ counterparty                      │
+                           │ jurisdiction                      │
+                           │ confidentiality_level             │
+                           │ review_priority                   │
+                           │ OCR confidence / pages            │
+                           │ manual-review flag                │
+                           │ RAGAS scorecard                   │
+                           │ llm_model_used                    │
+                           │ api_key_masked                    │
+                           │ FK uploaded_by → users.email      │
+                           │ created_at                        │
+                           └──────────────┬───────────────────┘
+                                          │
+                                          │ 1:N
+                                          ▼
+                           ┌──────────────────────────────────┐
+                           │          ClauseModel             │
+                           │        extracted_clauses         │
+                           ├──────────────────────────────────┤
+                           │ PK id                             │
+                           │ FK job_id → documents.job_id     │
+                           │ clause_type                       │
+                           │ extracted_text                    │
+                           │ confidence_score                  │
+                           │ risk_level                        │
+                           │ risk_rationale                    │
+                           │ involved_party                    │
+                           │ page_reference                    │
+                           │ obligation_owner                  │
+                           │ recommended_action                │
+                           │ edited_text                       │
+                           │ edited_at                         │
+                           │ FK edited_by → users.id           │
+                           └──────────────────────────────────┘
+
+                           ┌──────────────────────────────────┐
+                           │       SystemConfigModel          │
+                           │         system_config             │
+                           ├──────────────────────────────────┤
+                           │ PK id                             │
+                           │ config_key (unique)               │
+                           │ llm_model                         │
+                           │ embedding_model                   │
+                           │ api_key                           │
+                           │ updated_at                        │
+                           └──────────────────────────────────┘
+```
+
+## 1. `users`
+
+Stores application users and their enterprise access information.
+
+| Column | Type | Role |
+|---|---|---|
+| `id` | Integer | Primary key |
+| `full_name` | String | User name |
+| `email` | String | Unique/indexed user identifier |
+| `password` | String | Stores hashed password |
+| `business_unit` | String | Business-unit access context |
+| `role` | String | Application role |
+| `is_active` | Boolean | Account status |
+| `created_at` | DateTime | Account creation |
+| `updated_at` | DateTime | Last profile update |
+| `last_login` | DateTime | Last successful login |
+
+The model also relates users to sessions, audit records and uploaded documents.
+
+**Implementation source:** `UserModel`. fileciteturn3file0L8-L28
+
+---
+
+## 2. `sessions`
+
+Stores login sessions and JWT/refresh-token lifecycle information.
+
+| Column | Type | Role |
+|---|---|---|
+| `id` | Integer | Primary key |
+| `user_id` | Integer | FK → `users.id` |
+| `token` | Text | Access token |
+| `refresh_token` | Text | Refresh token |
+| `created_at` | DateTime | Session creation |
+| `expires_at` | DateTime | Expiration timestamp |
+| `is_active` | Boolean | Session status |
+
+The relationship is configured with `ondelete="CASCADE"` from sessions to the user.
+
+**Implementation source:** `SessionModel`. fileciteturn3file0L31-L46
+
+---
+
+## 3. `documents`
+
+This is the central legal-document table.
+
+It stores document metadata, OCR quality, review controls, RAGAS scores, and the active model information used for processing.
+
+| Column | Type | Role |
+|---|---|---|
+| `job_id` | String | Primary key / processing job ID |
+| `filename` | String | Uploaded filename |
+| `business_unit` | String | Business-unit scope |
+| `document_category` | String | Legal document category |
+| `document_type` | String | Document type |
+| `counterparty` | String | Contract counterparty |
+| `jurisdiction` | String | Governing/target jurisdiction |
+| `confidentiality_level` | String | Confidentiality classification |
+| `review_priority` | String | Review priority |
+| `ocr_confidence` | Float | Overall OCR confidence |
+| `pages` | Integer | Page count |
+| `entities_detected` | Integer | Detected entity count |
+| `requires_manual_review` | Boolean | Human-review indicator |
+| `ragas_faithfulness` | Float | RAGAS Faithfulness |
+| `ragas_answer_relevancy` | Float | RAGAS Answer Relevancy |
+| `ragas_context_precision` | Float | RAGAS Context Precision |
+| `ragas_context_recall` | Float | RAGAS Context Recall |
+| `ragas_answer_correctness` | Float | RAGAS Answer Correctness |
+| `llm_model_used` | String | Model used for analysis |
+| `api_key_masked` | String | Masked configuration identifier |
+| `uploaded_by` | String | FK → `users.email` |
+| `created_at` | DateTime | Upload timestamp |
+
+The table is linked to clauses and audit logs, making the document itself the anchor for downstream legal intelligence and governance records.
+
+**Implementation source:** `DocumentModel`. fileciteturn3file0L51-L87
+
+### Why the RAGAS fields matter
+
+The document record stores the evaluation scorecard alongside the processed document:
+
+```text
+Document
+   │
+   ├── RAGAS Faithfulness
+   ├── RAGAS Answer Relevancy
+   ├── RAGAS Context Precision
+   ├── RAGAS Context Recall
+   └── RAGAS Answer Correctness
+```
+
+This creates a persistent quality record that can be surfaced in document review, monitoring and evaluation workflows.
+
+**Implementation source:** RAGAS columns in `DocumentModel`. fileciteturn3file0L66-L79
+
+---
+
+## 4. `extracted_clauses`
+
+Stores normalized clause-level intelligence extracted from each document.
+
+| Column | Type | Role |
+|---|---|---|
+| `id` | Integer | Primary key |
+| `job_id` | String | FK → `documents.job_id` |
+| `clause_type` | String | Normalized clause category |
+| `extracted_text` | String | Original extracted clause |
+| `confidence_score` | Float | Extraction confidence |
+| `risk_level` | String | Risk severity |
+| `risk_rationale` | String | Explanation for the risk |
+| `involved_party` | String | Party affected by clause |
+| `page_reference` | String | Document/page location |
+| `obligation_owner` | String | Party responsible for obligation |
+| `recommended_action` | String | Reviewer recommendation |
+| `edited_text` | Text | Reviewer-edited interpretation |
+| `edited_at` | DateTime | Edit timestamp |
+| `edited_by` | Integer | FK → `users.id` |
+
+The strict foreign key from `job_id` to `documents.job_id` gives every clause a document-level parent and supports cascading deletion.
+
+**Implementation source:** `ClauseModel`. fileciteturn3file0L90-L118
+
+---
+
+## 5. `audit_logs`
+
+Stores human-review and governance events associated with a document.
+
+| Column | Type | Role |
+|---|---|---|
+| `id` | Integer | Primary key |
+| `job_id` | String | FK → `documents.job_id` |
+| `user_email` | String | FK → `users.email` |
+| `action` | String | Review action, e.g. approved/rejected/escalated |
+| `notes` | String | General notes |
+| `reviewer_comment` | String | Reviewer explanation |
+| `escalation_status` | Boolean | Escalation state |
+| `timestamp` | DateTime | Event timestamp |
+
+This table provides the persistent audit trail required for human approval and governance.
+
+**Implementation source:** `AuditLogModel`. fileciteturn3file0L123-L144
+
+---
+
+## 6. `system_config`
+
+Stores dynamic AI configuration used across the application.
+
+| Column | Type | Role |
+|---|---|---|
+| `id` | Integer | Primary key |
+| `config_key` | String | Unique configuration key |
+| `llm_model` | String | Active LLM |
+| `embedding_model` | String | Active embedding model |
+| `api_key` | String | Active API key |
+| `updated_at` | DateTime | Configuration update time |
+
+The default configuration is aligned with the project's runtime LLM service:
+
+```text
+llm_model        = gemini-3.5-flash
+embedding_model  = gemini-embedding-001
+```
+
+**Implementation source:** `SystemConfigModel`. fileciteturn3file0L146-L160
+
+---
+
+# 🔗 Database Relationships
+
+```text
+UserModel
+   │
+   ├─────────────── 1:N ───────────────► SessionModel
+   │
+   ├─────────────── 1:N ───────────────► DocumentModel
+   │                                      │
+   │                                      ├── 1:N ──► ClauseModel
+   │                                      │
+   │                                      └── 1:N ──► AuditLogModel
+   │
+   └─────────────── 1:N ───────────────► AuditLogModel
+
+ClauseModel
+   │
+   └── edited_by ──► UserModel.id
+
+SystemConfigModel
+   │
+   └── Runtime AI configuration
+       ├── LLM model
+       ├── Embedding model
+       └── API key
+```
+
+### Referential integrity
+
+The implementation uses explicit foreign keys and deletion behavior:
+
+- `sessions.user_id → users.id` with `CASCADE`
+- `documents.uploaded_by → users.email` with `SET NULL`
+- `extracted_clauses.job_id → documents.job_id` with `CASCADE`
+- `extracted_clauses.edited_by → users.id` with `SET NULL`
+- `audit_logs.job_id → documents.job_id` with `CASCADE`
+- `audit_logs.user_email → users.email` with `CASCADE`
+
+These relationships connect the document lifecycle to access control, clause intelligence and audit governance.
+
+**Implementation source:** `models.py` relationship and foreign-key definitions. fileciteturn3file0L25-L28 fileciteturn3file0L31-L46 fileciteturn3file0L81-L87 fileciteturn3file0L96-L118 fileciteturn3file0L129-L144
+
+---
+
+# 🧬 Database + AI Evaluation Architecture
+
+One of the strongest aspects of the implementation is that the database links **legal processing, RAGAS evaluation, LLM configuration and human governance**.
+
+```text
+                      ┌──────────────────────┐
+                      │      Document        │
+                      │      job_id           │
+                      └──────────┬───────────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              │                  │                  │
+              ▼                  ▼                  ▼
+      ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+      │   Clauses    │   │    RAGAS     │   │  Audit Logs  │
+      │ risk + text  │   │ scorecard    │   │ review trail │
+      └──────────────┘   └──────────────┘   └──────────────┘
+                                 │
+                                 │ evaluated using
+                                 ▼
+                         ┌────────────────┐
+                         │ RAG / Qdrant   │
+                         │ policy context │
+                         └───────┬────────┘
+                                 │
+                                 ▼
+                         ┌────────────────┐
+                         │ LLM Config     │
+                         │ PostgreSQL     │
+                         └────────────────┘
+```
+
+This is consistent with the product dossier's requirement to retain document metadata, clause records, retrieval references, risk flags, reviewer decisions and processing logs, while making AI outputs traceable and reviewable.
+
+**PDF source:** Data assets and technical architecture, p. 9. fileciteturn0file1L445-L461  
+**PDF source:** Human review, evidence traceability and audit requirements, pp. 4–8. fileciteturn1file2L106-L117
+
+---
+
+# 🔄 Automatic Database Schema Migration
+
+The current `models.py` also contains a lightweight PostgreSQL migration block that checks for the RAGAS and model-tracking columns on the `documents` table and adds them when missing.
+
+The migration explicitly verifies:
+
+```text
+ragas_faithfulness
+ragas_answer_relevancy
+ragas_context_precision
+ragas_context_recall
+ragas_answer_correctness
+llm_model_used
+api_key_masked
+```
+
+This allows an existing database schema to be brought forward without requiring the entire table to be recreated.
+
+**Implementation source:** automatic schema migration block in `models.py`. fileciteturn3file0L164-L180
+
+> **Operational note:** this README documents the implementation as provided. For a production database, migration tooling such as Alembic may be preferable to executing schema changes during module import.
+
+---
+
 # 🧩 Core Product Surfaces
 
 The application is organized around the following user-facing workspaces:
@@ -601,7 +982,7 @@ Review contract summaries, obligation maps, risk narratives and comparison notes
 Monitor document volume, turnaround time, risk categories, escalations and approval outcomes.
 
 **Source:** Product Dossier, Product Surfaces, p. 4.  
-**Citation:** fileciteturn1file3L183-L195
+**PDF citation:** fileciteturn1file3L183-L195
 
 ---
 
@@ -627,7 +1008,7 @@ Representative endpoints:
 The product dossier calls for endpoints covering upload, OCR jobs, clause extraction, retrieval, summary generation, review actions and audit retrieval.
 
 **Source:** Product Dossier, API/engineering discussion, p. 4.  
-**Citation:** fileciteturn1file4L220-L227
+**PDF citation:** fileciteturn1file4L220-L227
 
 ---
 
@@ -650,8 +1031,8 @@ The project should evaluate:
 The project now implements these evaluation requirements through a dedicated RAGAS evaluator, while the broader test suite can validate clause extraction, risk classification, citations and workflow behavior. The product dossier explicitly recommends test documents with known expected clauses and risks.
 
 **Source:** Product Dossier, AI Engineering and Evaluation requirements, p. 4 and testing approach, p. 13.  
-**Citation:** fileciteturn1file4L213-L223  
-**Citation:** fileciteturn1file7L396-L405
+**PDF citation:** fileciteturn1file4L213-L223  
+**PDF citation:** fileciteturn1file7L396-L405
 
 ---
 
@@ -829,7 +1210,7 @@ Audit Retrieval
 Failures should be visible, actionable, and preserve partial outputs where useful.
 
 **Source:** Product Dossier, Testing Approach, p. 13.  
-**Citation:** fileciteturn1file7L396-L405
+**PDF citation:** fileciteturn1file7L396-L405
 
 ---
 
@@ -854,7 +1235,7 @@ The system should therefore enforce:
 Sensitive document content should not be exposed through frontend logs or uncontrolled telemetry.
 
 **Source:** Product Dossier, Security, Logging and Observability + Non-Functional Expectations, pp. 7–8.  
-**Citation:** fileciteturn1file5L273-L327
+**PDF citation:** fileciteturn1file5L273-L327
 
 ---
 
@@ -877,7 +1258,7 @@ Operational monitoring should capture:
 This provides a traceable path from the original document through AI processing to the final human decision.
 
 **Source:** Product Dossier, Security, Logging and Observability, p. 7.  
-**Citation:** fileciteturn1file5L273-L277
+**PDF citation:** fileciteturn1file5L273-L277
 
 ---
 
@@ -909,7 +1290,7 @@ This provides a traceable path from the original document through AI processing 
 The product dossier recommends deploying the frontend through services such as Vercel/Netlify and the backend through hosted API services such as Render/Railway, with credentials stored in environment variables.
 
 **Source:** Product Dossier, Deployment Approach, p. 11.  
-**Citation:** fileciteturn1file6L363-L369
+**PDF citation:** fileciteturn1file6L363-L369
 
 ---
 
@@ -957,7 +1338,7 @@ Do not commit real credentials.
 The product dossier explicitly requires model, OCR, database, vector database, storage and authentication credentials to be supplied through environment variables.
 
 **Source:** Product Dossier, Deployment Approach, p. 11.  
-**Citation:** fileciteturn1file6L363-L369
+**PDF citation:** fileciteturn1file6L363-L369
 
 ---
 
@@ -1052,8 +1433,8 @@ Tata-Group-AI-Legal-Document-Intelligence-System/
 │   │   └── ragas_evaluator.py     # RAGAS quality scoring with rate-limit resilience
 │   │
 │   ├── storage/
-│   ├── database.py
-│   ├── models.py
+│   ├── database.py              # SQLAlchemy engine, Base and database session
+│   ├── models.py                # PostgreSQL ORM models and schema migration
 │   ├── main.py
 │   └── requirements.txt
 │
@@ -1137,8 +1518,8 @@ Recommended demo scenarios include:
 3. **High-Risk Clause Escalation** — demonstrate risk identification and senior-review routing.
 
 **Source:** Product Dossier, Primary User Journeys and Demo Requirements, pp. 5 and 11.  
-**Citation:** fileciteturn1file8L417-L463  
-**Citation:** fileciteturn1file6L362-L369
+**PDF citation:** fileciteturn1file8L417-L463  
+**PDF citation:** fileciteturn1file6L362-L369
 
 ---
 
@@ -1153,7 +1534,7 @@ Recommended demo scenarios include:
 | Senior Legal Escalation | High-risk/uncertain item | Package evidence and rationale | Escalation-ready review record |
 
 **Source:** Product Dossier, Primary User Journeys, p. 5.  
-**Citation:** fileciteturn1file8L417-L463
+**PDF citation:** fileciteturn1file8L417-L463
 
 ---
 
@@ -1192,7 +1573,7 @@ Expose confidence and source locations to reviewers.
 Persist model outputs, retrieval references and reviewer decisions.
 
 **Source:** Product Dossier, AI workflow validation and governance requirements, pp. 12–13.  
-**Citation:** fileciteturn1file7L381-L405
+**PDF citation:** fileciteturn1file7L381-L405
 
 ---
 
@@ -1250,7 +1631,7 @@ Recommended techniques include:
 - Cost alerts
 
 **Source:** Product Dossier, Non-Functional Expectations, pp. 7–8.  
-**Citation:** fileciteturn1file5L288-L347
+**PDF citation:** fileciteturn1file5L288-L347
 
 ---
 
@@ -1271,7 +1652,7 @@ Future extensions can include:
 The product dossier explicitly positions these capabilities as later expansion areas after the core upload-to-human-approval workflow is proven.
 
 **Source:** Product Dossier, Leadership Discussion and Product Vision, p. 4.  
-**Citation:** fileciteturn1file3L169-L182
+**PDF citation:** fileciteturn1file3L169-L182
 
 ---
 
@@ -1284,8 +1665,8 @@ It should **not** be represented as an autonomous legal decision-maker.
 AI-generated outputs must remain clearly identifiable as system-generated and should remain pending authorized legal review until approved.
 
 **Source:** Product Dossier, Human Approval and Governance requirements, pp. 3, 4 and 6.  
-**Citation:** fileciteturn1file2L106-L117  
-**Citation:** fileciteturn1file4L232-L245
+**PDF citation:** fileciteturn1file2L106-L117  
+**PDF citation:** fileciteturn1file4L232-L245
 
 ---
 
@@ -1390,4 +1771,4 @@ The core success criterion is not simply generating a good-looking AI answer. Th
 This traceability-first approach follows the product dossier's central requirement for evidence-grounded AI with human approval and auditability.
 
 **Source:** Product Dossier, Executive Overview, Technical Architecture and Governance requirements.  
-**Citation:** fileciteturn1file0L18-L25
+**PDF citation:** fileciteturn1file0L18-L25
