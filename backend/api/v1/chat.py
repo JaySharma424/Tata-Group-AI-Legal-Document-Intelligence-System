@@ -21,25 +21,30 @@ rag_service = RAGKnowledgeService()
 # 🚀 NEW: DYNAMIC LLM ROUTER FOR AADHYA CHAT
 # =====================================================================
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    """Dynamically routes chat queries to NVIDIA, OpenAI, Anthropic, or Gemini."""
+    """Dynamically routes tasks to NVIDIA, OpenAI, Anthropic, Groq, or Gemini."""
     model_lower = model_name.lower()
     
-    if "gpt" in model_lower:
+    # 🚀 NVIDIA ROUTING: Catches all NVIDIA NIM endpoints via API Key prefix
+    if api_key.startswith("nvapi-") or "nvidia" in model_lower or "nemotron" in model_lower:
+        from langchain_nvidia_ai_endpoints import ChatNVIDIA
+        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+        
+    elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0.2).invoke(prompt).content
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+        
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0.2).invoke(prompt).content
-    elif "nvidia" in model_lower or "nemotron" in model_lower:
-        from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0.2).invoke(prompt).content
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+        
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         from langchain_groq import ChatGroq
-        return ChatGroq(model=model_name, api_key=api_key, temperature=0.2).invoke(prompt).content
+        return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+        
     else:
-        # Default to Gemini
+        # Default fallback to Google Gemini
         from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0.2).invoke(prompt).content
+        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt).content
 # =====================================================================
 
 class ChatMessage(BaseModel):
