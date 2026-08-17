@@ -2,20 +2,37 @@ import json
 import os
 import re
 from typing import Any, Dict, List
-import google.generativeai as genai
 
+# Import dynamic PostgreSQL LLM config service
+from backend.services.llm_config import get_llm_config
+
+# =====================================================================
+# 🚀 NEW: DYNAMIC LLM ROUTER
+# =====================================================================
+def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
+    """Dynamically routes reasoning tasks to NVIDIA, OpenAI, Anthropic, or Gemini."""
+    model_lower = model_name.lower()
+    
+    if "gpt" in model_lower:
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    elif "claude" in model_lower:
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    elif "nvidia" in model_lower or "nemotron" in model_lower:
+        from langchain_nvidia_ai_endpoints import ChatNVIDIA
+        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
+        from langchain_groq import ChatGroq
+        return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    else:
+        # Default to Gemini
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt).content
+# =====================================================================
 
 class LegalReasoningService:
-  """Executes dedicated legal reasoning and risk flagging pass using Gemini and RAG context.
-
-  Uses batch prompt evaluation to process all clauses in a single API call,
-  dramatically reducing quota consumption.
-  """
-
-  def __init__(self):
-    api_key = os.getenv("GEMINI_API_KEY", "")
-    if api_key:
-      genai.configure(api_key=api_key)
+  """Executes dedicated legal reasoning and risk flagging pass using Dynamic LLMs and RAG context."""
 
   def evaluate_risk_and_reasoning(
       self,
@@ -23,11 +40,15 @@ class LegalReasoningService:
       business_unit: str,
       user_role: str,
   ) -> List[Dict[str, Any]]:
-    """Applies legal reasoning to all normalized clauses in a single batch LLM call."""
+    
     if not normalized_clauses:
       return []
 
-    # 1. Prepare Batch Prompt containing all clauses
+    # Get Active Admin LLM Settings
+    config = get_llm_config()
+    api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY", "")
+    selected_llm = config.get("llm_model", "gemini-3.5-flash")
+
     clauses_json_str = json.dumps(normalized_clauses, indent=2)
 
     prompt = f"""
@@ -40,29 +61,20 @@ class LegalReasoningService:
         Perform a rigorous legal reasoning evaluation for EVERY clause in the array:
         1. Determine the risk level strictly as: "HIGH", "MEDIUM", or "LOW".
         2. Provide a professional legal rationale explaining exposure or compliance alignment against Tata policies.
-        3. Specify the appropriate RAG policy reference ID cited from the context (e.g., "CLS-LIAB-001", "RISK-IND-101", "CLS-NDA-003", "LAW-MUM-001", or "POL-IND-2026-01").
+        3. Specify the appropriate RAG policy reference ID cited from the context.
         4. Suggest a recommended action (e.g., "Escalate to Legal", "Accept Standard Term", "Request Revision").
         
         Return ONLY a valid JSON array matching the exact length and order of the input clauses. Each object in the array MUST contain these exact keys:
         ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"]
         """
 
-    # 2. Active Model Candidates Cascade
-    model_candidates = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-3.5-flash",
-        "gemini-3.6-flash"
-    ]
+    # Model Cascade: Tries the Admin-selected model, then falls back to reliable defaults if it fails
+    model_candidates = [selected_llm, "gemini-3.5-flash", "gemini-2.5-flash"]
 
     for model_name in model_candidates:
       try:
-        model = genai.GenerativeModel(model_name)
-        response = model.generate_content(prompt)
-        text_res = response.text.strip()
+        text_res = _invoke_dynamic_llm(prompt, model_name, api_key).strip()
 
-        # Clean markdown code blocks if present
         if text_res.startswith("```json"):
           text_res = text_res[7:]
         if text_res.startswith("```"):
@@ -74,31 +86,16 @@ class LegalReasoningService:
         if match:
           evaluated_array = json.loads(match.group(0))
 
-          if (
-              isinstance(evaluated_array, list)
-              and len(evaluated_array) == len(normalized_clauses)
-          ):
-            print(
-                f"✅ Successfully batch-evaluated all {len(evaluated_array)}"
-                f" clauses in 1 call using model: {model_name}"
-            )
+          if isinstance(evaluated_array, list) and len(evaluated_array) == len(normalized_clauses):
+            print(f"✅ Successfully batch-evaluated all {len(evaluated_array)} clauses in 1 call using model: {model_name}")
             return evaluated_array
           elif isinstance(evaluated_array, list) and len(evaluated_array) > 0:
-            print(
-                f"✅ Batch evaluated {len(evaluated_array)} clauses using"
-                f" model: {model_name}"
-            )
+            print(f"✅ Batch evaluated {len(evaluated_array)} clauses using model: {model_name}")
             return evaluated_array
+            
       except Exception as e:
-        print(
-            f"⚠️ Batch reasoning model {model_name} failed: {e}. Trying next"
-            " candidate in cascade..."
-        )
+        print(f"⚠️ Batch reasoning model {model_name} failed: {e}. Trying next candidate in cascade...")
         continue
 
-    # 3. Local Fallback if cloud APIs fail
-    print(
-        "⚡ All reasoning models rate-limited or unavailable. Retaining"
-        " normalized clause defaults."
-    )
+    print("⚡ All reasoning models rate-limited or unavailable. Retaining normalized clause defaults.")
     return normalized_clauses
