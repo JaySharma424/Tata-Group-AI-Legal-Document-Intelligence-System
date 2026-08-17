@@ -501,7 +501,7 @@ export const AdminPortal: React.FC = () => {
                 className="w-full bg-[#001021] border border-[#002B49] rounded-xl p-3 text-sm text-white focus:border-[#00A3E0] outline-none font-medium cursor-pointer"
               >
                 <optgroup label="NVIDIA NIM (Enterprise Endpoints)">
-                  <option value="nvidia/nemotron-4-340b-instruct">NVIDIA Nemotron-4 340B (Enterprise Grade)</option>
+                  <option value="nvidia/nemotron-3.5-lightning-30b-a3b">NVIDIA Nemotron 3.5 Lightning 30B (Free Endpoint)</option>
                   <option value="nvidia/llama-3.1-nemotron-70b-instruct">Llama-3.1-Nemotron 70B (Instruct)</option>
                   <option value="meta/llama-3.1-405b-instruct">NVIDIA Hosted: Llama 3.1 405B</option>
                   <option value="meta/llama-3.1-70b-instruct">NVIDIA Hosted: Llama 3.1 70B</option>
