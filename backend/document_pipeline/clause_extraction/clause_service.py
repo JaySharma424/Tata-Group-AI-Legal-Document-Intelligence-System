@@ -5,37 +5,45 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import google.generativeai as genai
 from PIL import Image, PngImagePlugin
 from backend.services.rag_service import RAGKnowledgeService
-
-# NEW: Import your normalization and reasoning services
 from backend.document_pipeline.normalization.normalization_service import ClauseNormalizationService
 from backend.document_pipeline.clause_extraction.reasoning_service import LegalReasoningService
+from backend.services.llm_config import get_llm_config
 
-api_key = os.environ.get("GEMINI_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
+# =====================================================================
+# 🚀 NEW: DYNAMIC LLM ROUTER
+# =====================================================================
+def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
+    """Dynamically routes text extraction tasks to NVIDIA, OpenAI, Anthropic, or Gemini."""
+    model_lower = model_name.lower()
+    
+    if "gpt" in model_lower:
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    elif "claude" in model_lower:
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    elif "nvidia" in model_lower or "nemotron" in model_lower:
+        from langchain_nvidia_ai_endpoints import ChatNVIDIA
+        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
+        from langchain_groq import ChatGroq
+        return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    else:
+        # Default to Gemini
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt).content
+# =====================================================================
 
 class ClauseService:
     def __init__(self):
-        # Active supported Gemini models
-        self.model_candidates = [
-            "gemini-3.5-flash",
-            "gemini-3.6-flash",
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro"
-        ]
         self.rag_service = RAGKnowledgeService()
         self.normalization_service = ClauseNormalizationService()
         self.reasoning_service = LegalReasoningService()
 
     def _dynamic_fallback_evaluation(self, ocr_text: str, user_role: str):
-        """Dynamically computes confidence and risk metrics if all LLM models fail or quota is reached."""
         text_lower = ocr_text.lower() if ocr_text else ""
-        
         base_confidence = 0.78
         length_bonus = min(len(text_lower) / 4000, 0.18)
         confidence_score = round(base_confidence + length_bonus, 2)
@@ -71,9 +79,15 @@ class ClauseService:
         ]
 
     def extract_clauses(self, ocr_text: str, file_path: str = None, user_role: str = "Senior Reviewer", business_unit: str = "Enterprise"):
-        # Retrieve grounding context from Qdrant
         retrieved_references = self.rag_service.retrieve_context(ocr_text)
         rag_context_str = json.dumps(retrieved_references, indent=2)
+
+        config = get_llm_config()
+        api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY", "")
+        selected_llm = config.get("llm_model", "gemini-3.5-flash")
+        
+        # Priority fallback chain
+        model_candidates = [selected_llm, "gemini-3.5-flash", "gemini-2.5-flash"]
 
         prompt = f"""
         You are Aadhya, an expert Enterprise Legal Intelligence AI for Tata Group.
@@ -88,36 +102,28 @@ class ClauseService:
 
         1. (Contract Summary & Obligations): The FIRST object MUST be a "Document Summary" mapping out parties, key dates, and core obligations.
         2. (Missing Clauses): The SECOND object MUST be type "Missing Expected Clauses". Identify standard legal protections (e.g., Indemnity, Data Privacy) that are dangerously absent based on the document type.
-        3. (Risk Extraction): Extract 2 to 4 material clauses. Evaluate risk (HIGH/MEDIUM/LOW) against the RAG Context. Distinguish between ambiguous language, conflicting obligations, or non-standard wording.
+        3. (Risk Extraction): Extract 2 to 4 material clauses. Evaluate risk (HIGH/MEDIUM/LOW) against the RAG Context.
 
         Each JSON object in the array must contain exactly these keys:
-           - "clause_type" (e.g., "Summary", "Missing Expected Clauses", "Indemnification")
-           - "extracted_text" (The exact text, summary, or description of missing items)
-           - "confidence_score" (Float between 0.70 and 0.99)
-           - "risk_level" ("HIGH", "MEDIUM", "LOW", or "INFO")
-           - "risk_rationale" (Detailed explanation distinguishing the exact type of risk)
-           - "involved_party" (Who is impacted)
-           - "rag_reference_used" (Policy ID cited, or "N/A")
-           - "page_reference" (Guess the section or page number, e.g., "Section 4" or "Page 2")
-           - "obligation_owner" (Which party is responsible for fulfilling this)
-           - "recommended_action" (e.g., "Escalate to Legal", "Accept Standard Term", "Request Revision")
+           - "clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"
 
         Document Text to Analyze:
         {ocr_text}
         """
 
         raw_clauses = []
-        for model_name in self.model_candidates:
+        for model_name in model_candidates:
             try:
-                model = genai.GenerativeModel(model_name)
-                
+                # 🛑 SAFETY GUARD: If processing an image, force Gemini Vision Model
                 if file_path and os.path.exists(file_path) and file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
-                    image = Image.open(file_path)
-                    response = model.generate_content([image, prompt])
+                    import google.generativeai as genai
+                    genai.configure(api_key=api_key)
+                    model = genai.GenerativeModel("gemini-1.5-flash") 
+                    response = model.generate_content([Image.open(file_path), prompt])
+                    raw_text = response.text.strip()
                 else:
-                    response = model.generate_content(prompt)
-
-                raw_text = response.text.strip()
+                    # ✅ Text document: Route to user's selected Nvidia/OpenAI model
+                    raw_text = _invoke_dynamic_llm(prompt, model_name, api_key).strip()
                 
                 match = re.search(r'\[.*\]', raw_text, re.DOTALL)
                 if match:
@@ -132,15 +138,11 @@ class ClauseService:
             except Exception as e:
                 print(f"Model {model_name} failed: {e}. Trying next available model...")
 
-        # If LLM extraction failed entirely, use fallback evaluation
         if not raw_clauses:
             print("All cloud models failed or rate limited. Executing local fallback evaluation.")
             raw_clauses = self._dynamic_fallback_evaluation(ocr_text, user_role)
 
-        # STEP 2: Apply Clause Normalization Service (from backend/document_pipeline/normalization/normalization_service.py)
         normalized_clauses = self.normalization_service.normalize_clauses(raw_clauses)
-
-        # STEP 3: Apply Separate Legal Reasoning & Risk Flagging Layer
         final_evaluated_clauses = self.reasoning_service.evaluate_risk_and_reasoning(
             normalized_clauses, business_unit=business_unit, user_role=user_role
         )
