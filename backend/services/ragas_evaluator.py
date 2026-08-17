@@ -21,14 +21,14 @@ if "langchain_community.chat_models.vertexai" not in sys.modules:
 # ==============================================================================
 
 from ragas import evaluate
-from ragas.run_config import RunConfig  # 🚀 IMPORTED to stop TimeoutErrors
+from ragas.run_config import RunConfig
 from ragas.metrics import (
     faithfulness,
     answer_relevancy,
     context_precision,
     context_recall
 )
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
@@ -79,6 +79,32 @@ class RateLimitedLLM(BaseChatModel):
                 else:
                     raise e
 
+def get_dynamic_llm(model_name: str, api_key: str) -> BaseChatModel:
+    """Dynamically routes to the correct LangChain LLM provider."""
+    model_lower = model_name.lower()
+    
+    if "gpt" in model_lower:
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0)
+        
+    elif "claude" in model_lower:
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0)
+        
+    elif "nvidia" in model_lower or "nemotron" in model_lower:
+        from langchain_nvidia_ai_endpoints import ChatNVIDIA
+        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0)
+        
+    elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
+        from langchain_groq import ChatGroq
+        return ChatGroq(model=model_name, api_key=api_key, temperature=0)
+        
+    else:
+        # Default to Google Gemini
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0)
+
+
 def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     """Generates RAGAS metrics by evaluating Uploaded Document Clauses against Qdrant KB Policies."""
     if not clauses:
@@ -88,16 +114,25 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     asyncio.set_event_loop(loop)
 
     config = get_llm_config()
-    api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
-    if not api_key:
+    
+    # DYNAMIC API KEY (Used for Reasoning Model)
+    reasoning_api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
+    
+    # STRICT GEMINI API KEY (Used exclusively to preserve Qdrant Embeddings)
+    embedding_api_key = os.getenv("GEMINI_API_KEY") or reasoning_api_key
+    
+    if not reasoning_api_key:
         return {}
 
-    llm_model = config.get("llm_model", "gemini-2.5-flash")
+    llm_model = config.get("llm_model", "gemini-3.5-flash")
     emb_model = config.get("embedding_model", "gemini-embedding-001")
 
-    base_llm = ChatGoogleGenerativeAI(model=llm_model, google_api_key=api_key, temperature=0)
+    # Route to the correct provider dynamically
+    base_llm = get_dynamic_llm(model_name=llm_model, api_key=reasoning_api_key)
     evaluator_llm = RateLimitedLLM(llm=base_llm)
-    evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=api_key)
+    
+    # Embeddings stay strictly Gemini
+    evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=embedding_api_key)
 
     # Select high-risk clause for targeted evaluation
     sample_clauses = sorted(clauses, key=lambda x: 0 if str(x.get("risk_level")).upper() == "HIGH" else 1)[:1]
@@ -108,16 +143,9 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         extracted_clause = c.get('extracted_text', '')
         kb_policy_text = c.get('matched_policy_text') or c.get('risk_rationale', 'Standard enterprise compliance parameters.')
 
-        # 1. USER INPUT: The Extracted Contract Clause from uploaded document
         data["user_input"].append(f"Evaluate compliance risk for clause: {extracted_clause}")
-        
-        # 2. RETRIEVED CONTEXTS: The Knowledge Base Policy retrieved from Qdrant
         data["retrieved_contexts"].append([kb_policy_text])
-        
-        # 3. RESPONSE: The AI's generated risk rationale
         data["response"].append(c.get("risk_rationale", ""))
-        
-        # 4. REFERENCE: The KB Policy acting as the Ground Truth compliance standard
         data["reference"].append(kb_policy_text)
 
     dataset = Dataset.from_dict(data)
@@ -128,7 +156,6 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         if hasattr(m, 'embeddings'):
             m.embeddings = evaluator_embeddings
 
-    # 🚀 Extended timeout configuration prevents RAGAS TimeoutErrors on Render
     run_config = RunConfig(timeout=180, max_retries=3, max_workers=1)
 
     try:
