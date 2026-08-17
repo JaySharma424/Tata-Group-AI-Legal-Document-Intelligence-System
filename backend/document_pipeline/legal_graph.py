@@ -3,7 +3,6 @@ import os
 import re
 import time
 from typing import Any, Dict, List, TypedDict
-import google.generativeai as genai
 from langgraph.graph import END, START, StateGraph
 from langsmith import traceable
 
@@ -11,16 +10,35 @@ from langsmith import traceable
 from backend.services.llm_config import get_llm_config
 
 # Import modular pipeline services
-from backend.document_pipeline.clause_extraction.reasoning_service import (
-    LegalReasoningService,
-)
-from backend.document_pipeline.normalization.normalization_service import (
-    ClauseNormalizationService,
-)
+from backend.document_pipeline.clause_extraction.reasoning_service import LegalReasoningService
+from backend.document_pipeline.normalization.normalization_service import ClauseNormalizationService
 from backend.services.rag_service import RAGKnowledgeService
 
+# =====================================================================
+# 🚀 NEW: DYNAMIC LLM ROUTER FOR MULTI-PROVIDER SUPPORT
+# =====================================================================
+def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
+    """Dynamically routes extraction tasks to NVIDIA, OpenAI, Anthropic, or Gemini."""
+    model_lower = model_name.lower()
+    
+    if "gpt" in model_lower:
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    elif "claude" in model_lower:
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    elif "nvidia" in model_lower or "nemotron" in model_lower:
+        from langchain_nvidia_ai_endpoints import ChatNVIDIA
+        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
+        from langchain_groq import ChatGroq
+        return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+    else:
+        # Default to Gemini (keeps backwards compatibility)
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt).content
+# =====================================================================
 
-# --- 1. Define Graph State Schema ---
 class LegalPipelineState(TypedDict):
   ocr_text: str
   file_path: str
@@ -31,48 +49,33 @@ class LegalPipelineState(TypedDict):
   normalized_clauses: List[Dict[str, Any]]
   final_clauses: List[Dict[str, Any]]
 
-
-# --- 2. Instantiate Singleton Pipeline Services ---
 rag_service = RAGKnowledgeService()
 normalization_service = ClauseNormalizationService()
 reasoning_service = LegalReasoningService()
 
-
 def deduplicate_extracted_clauses(clauses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-  """Deduplicates extracted clauses based on normalized clause type and text content."""
   seen_keys = set()
   unique_clauses = []
-
   for clause in clauses:
     raw_text = clause.get("extracted_text", "").strip()
     clause_type = clause.get("clause_type", "").strip()
-    
     norm_text_snippet = re.sub(r"\s+", " ", raw_text.lower())[:150]
     norm_key = (clause_type.lower(), norm_text_snippet)
-
     if norm_text_snippet and norm_key not in seen_keys:
       seen_keys.add(norm_key)
       unique_clauses.append(clause)
-
   return unique_clauses
 
 
-# --- 3. Define StateGraph Nodes ---
-
 @traceable(name="LLM Clause Extraction Node")
 def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Extracts distinct legal clauses from OCR text using Gemini with dynamic database LLM configuration."""
   ocr_text = state.get("ocr_text", "")
   business_unit = state.get("business_unit", "Enterprise")
   user_role = state.get("user_role", "Senior Reviewer")
 
-  # 🚀 DYNAMIC LLM CONFIGURATION (Pulls fresh API Key & Model from PostgreSQL)
   config = get_llm_config()
   api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY", "")
   selected_llm = config.get("llm_model", "gemini-3.5-flash")
-
-  if api_key:
-    genai.configure(api_key=api_key)
 
   prompt = f"""
     You are Aadhya, Enterprise Legal Intelligence AI for Tata Group.
@@ -96,23 +99,13 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     - "recommended_action": (e.g., "Review Document")
     """
 
-  # Prioritize the model selected by the Admin from the PostgreSQL settings
-  model_candidates = [selected_llm, "gemini-3.5-flash", "gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash-lite"]
-
-  # Preserve candidate ordering while deduplicating
-  seen_models = set()
-  ordered_candidates = []
-  for m in model_candidates:
-    if m not in seen_models:
-      seen_models.add(m)
-      ordered_candidates.append(m)
+  # Try user's selected model first, then safely cascade back to Gemini if it fails (e.g., bad API key)
+  ordered_candidates = [selected_llm, "gemini-3.5-flash", "gemini-2.5-flash"]
 
   raw_clauses = []
   for model_name in ordered_candidates:
     try:
-      model = genai.GenerativeModel(model_name)
-      response = model.generate_content(prompt)
-      text_res = response.text.strip()
+      text_res = _invoke_dynamic_llm(prompt, model_name, api_key).strip()
 
       if text_res.startswith("```json"): text_res = text_res[7:]
       if text_res.startswith("```"): text_res = text_res[3:]
@@ -124,7 +117,8 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
         if isinstance(parsed, list) and len(parsed) > 0:
           raw_clauses = parsed
           break
-    except Exception:
+    except Exception as e:
+      print(f"Extraction failed for model {model_name}: {e}")
       continue
 
   if not raw_clauses:
@@ -143,10 +137,8 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
   unique_clauses = deduplicate_extracted_clauses(raw_clauses)
   return {"raw_clauses": unique_clauses}
 
-
 @traceable(name="RAG Per-Clause Grounding Node")
 def ground_clauses_with_rag_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Queries Qdrant Vector DB for EACH clause with rate-limit protection."""
   raw_clauses = state.get("raw_clauses", [])
   grounded_clauses = []
   all_retrieved_context = []
@@ -167,7 +159,6 @@ def ground_clauses_with_rag_node(state: LegalPipelineState) -> Dict[str, Any]:
       clause["rag_reference_used"] = "CLS-GEN-020"
 
     grounded_clauses.append(clause)
-    
     time.sleep(2)
 
   return {
@@ -178,15 +169,12 @@ def ground_clauses_with_rag_node(state: LegalPipelineState) -> Dict[str, Any]:
 
 @traceable(name="Clause Normalization Node")
 def normalize_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Standardizes raw clause headings to enterprise taxonomy."""
   raw_clauses = state.get("raw_clauses", [])
   normalized = normalization_service.normalize_clauses(raw_clauses)
   return {"normalized_clauses": normalized}
 
-
 @traceable(name="Legal Reasoning & Risk Assessment Node")
 def legal_reasoning_node(state: LegalPipelineState) -> Dict[str, Any]:
-  """Applies risk evaluation AND forcefully locks the RAG citations by index."""
   normalized_clauses = state.get("normalized_clauses", [])
   business_unit = state.get("business_unit", "Enterprise")
   user_role = state.get("user_role", "Senior Reviewer")
@@ -204,7 +192,6 @@ def legal_reasoning_node(state: LegalPipelineState) -> Dict[str, Any]:
   return {"final_clauses": final_clauses}
 
 
-# --- 4. Build and Compile StateGraph ---
 workflow = StateGraph(LegalPipelineState)
 
 workflow.add_node("extract_clauses", extract_clauses_node)
