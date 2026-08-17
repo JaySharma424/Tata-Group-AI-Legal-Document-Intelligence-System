@@ -15,30 +15,45 @@ from backend.services.llm_config import get_llm_config
 # 🚀 NEW: DYNAMIC LLM ROUTER
 # =====================================================================
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    """Dynamically routes tasks to NVIDIA, OpenAI, Anthropic, Groq, or Gemini."""
+    """Dynamically routes tasks while strictly isolating provider API keys."""
+    import os
     model_lower = model_name.lower()
     
-    # 🚀 NVIDIA ROUTING: Catches all NVIDIA NIM endpoints via API Key prefix
-    if api_key.startswith("nvapi-") or "nvidia" in model_lower or "nemotron" in model_lower:
+    # 1. NVIDIA ROUTING
+    if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
         
+    # 2. OPENAI ROUTING
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
         
+    # 3. ANTHROPIC ROUTING
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
         return ChatAnthropic(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
         
+    # 4. GROQ ROUTING (For open-source Llama/Mixtral)
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
-        from langchain_groq import ChatGroq
-        return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
-        
+        # If user passed an NVIDIA key, route open-source models to NVIDIA NIM instead of Groq
+        if api_key.startswith("nvapi-"):
+            from langchain_nvidia_ai_endpoints import ChatNVIDIA
+            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+        else:
+            from langchain_groq import ChatGroq
+            return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+            
+    # 5. GEMINI ROUTING (DEFAULT FALLBACK)
     else:
-        # Default fallback to Google Gemini
         from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt).content
+        # 🛑 CRITICAL ISOLATION: Never send an NVIDIA or OpenAI key to Gemini.
+        # Force the fallback to use the hardcoded Google API key from Render Environment.
+        google_key = os.getenv("GEMINI_API_KEY") 
+        if not google_key and not api_key.startswith("nvapi-") and not api_key.startswith("sk-"):
+            google_key = api_key
+            
+        return ChatGoogleGenerativeAI(model=model_name, google_api_key=google_key, temperature=0).invoke(prompt).content
 # =====================================================================
 
 class ClauseService:
