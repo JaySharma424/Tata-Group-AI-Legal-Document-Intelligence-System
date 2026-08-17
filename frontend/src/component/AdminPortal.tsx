@@ -479,7 +479,7 @@ export const AdminPortal: React.FC = () => {
                 <Cpu className="w-5 h-5 text-[#00A3E0]" /> LLM Provider & Key Management
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Configure runtime Gemini model selection and update API keys dynamically for RAG reasoning and evaluations.
+                Configure runtime LLM model selection and update API keys dynamically for RAG reasoning and evaluations.
               </p>
             </div>
             
@@ -500,10 +500,36 @@ export const AdminPortal: React.FC = () => {
                 onChange={(e) => setSelectedLlm(e.target.value)}
                 className="w-full bg-[#001021] border border-[#002B49] rounded-xl p-3 text-sm text-white focus:border-[#00A3E0] outline-none font-medium cursor-pointer"
               >
-                <option value="gemini-3.5-flash">Gemini 3.5 Flash (Fastest • High Accuracy)</option>
-                <option value="gemini-3.6-flash">Gemini 3.6 Flash (Updated Reasoning)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Context Analysis)</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Legacy Support)</option>
+                <optgroup label="Google DeepMind Models">
+                  <option value="gemini-3.5-flash">Gemini 3.5 Flash (Fastest • High Accuracy)</option>
+                  <option value="gemini-3.6-flash">Gemini 3.6 Flash (Updated Reasoning)</option>
+                  <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Context Analysis)</option>
+                  <option value="gemini-1.5-flash">Gemini 1.5 Flash (Legacy Support)</option>
+                </optgroup>
+                <optgroup label="NVIDIA Open Models (API Route)">
+                  <option value="nvidia-nemotron-4-340b">NVIDIA Nemotron-4 340B (Enterprise Grade)</option>
+                  <option value="nvidia-llama-3.1-nemotron-70b">Llama-3.1-Nemotron 70B (Instruct)</option>
+                </optgroup>
+                <optgroup label="OpenAI Models">
+                  <option value="gpt-4o">GPT-4o (Omni Multimodal)</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo (Large Context)</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cost Efficient)</option>
+                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Legacy)</option>
+                </optgroup>
+                <optgroup label="Anthropic Claude Models">
+                  <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Best Reasoning)</option>
+                  <option value="claude-3-opus">Claude 3 Opus (Highly Complex Tasks)</option>
+                  <option value="claude-3-haiku">Claude 3 Haiku (Lightweight Fast)</option>
+                </optgroup>
+                <optgroup label="Meta Llama Models">
+                  <option value="llama-3.1-70b-versatile">Llama 3.1 70B (Versatile)</option>
+                  <option value="llama-3.1-8b-instant">Llama 3.1 8B (Instant)</option>
+                  <option value="llama-3-70b">Llama 3 70B (Standard)</option>
+                </optgroup>
+                <optgroup label="Mistral AI Models">
+                  <option value="mixtral-8x7b-instruct">Mixtral 8x7B Instruct (MoE)</option>
+                  <option value="mistral-large-latest">Mistral Large (Latest)</option>
+                </optgroup>
               </select>
               <p className="text-[11px] text-slate-500 font-mono">
                 This engine executes clause extraction, risk evaluation, and chat assistant responses.
@@ -524,14 +550,14 @@ export const AdminPortal: React.FC = () => {
                 <option value="text-embedding-004">text-embedding-004 (Standard Google Vector)</option>
               </select>
               <p className="text-[11px] text-slate-500 font-mono">
-                Used to index and retrieve knowledge base policy vectors from Qdrant DB.
+                Used to index and retrieve knowledge base policy vectors from Qdrant DB. (Keep as-is to prevent vector dimension errors).
               </p>
             </div>
 
             {/* Custom API Key Input */}
             <div className="space-y-2">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                <Key className="w-4 h-4 text-[#00A3E0]" /> Google Gemini API Key
+                <Key className="w-4 h-4 text-[#00A3E0]" /> Provider API Key (Google, OpenAI, Anthropic, or Groq)
               </label>
               <input 
                 type="password" 
@@ -541,7 +567,7 @@ export const AdminPortal: React.FC = () => {
                 className="w-full bg-[#001021] border border-[#002B49] rounded-xl p-3 text-sm text-white focus:border-[#00A3E0] outline-none font-mono placeholder:text-slate-600"
               />
               <p className="text-[11px] text-slate-500 font-mono">
-                Updating this key will dynamically update your backend without restarting the Render instance.
+                Updating this key will dynamically update your backend without restarting the Render instance. Ensure the key matches the selected model provider.
               </p>
             </div>
 
