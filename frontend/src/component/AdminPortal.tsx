@@ -500,35 +500,29 @@ export const AdminPortal: React.FC = () => {
                 onChange={(e) => setSelectedLlm(e.target.value)}
                 className="w-full bg-[#001021] border border-[#002B49] rounded-xl p-3 text-sm text-white focus:border-[#00A3E0] outline-none font-medium cursor-pointer"
               >
+                <optgroup label="NVIDIA NIM (Enterprise Endpoints)">
+                  <option value="nvidia/nemotron-4-340b-instruct">NVIDIA Nemotron-4 340B (Enterprise Grade)</option>
+                  <option value="nvidia/llama-3.1-nemotron-70b-instruct">Llama-3.1-Nemotron 70B (Instruct)</option>
+                  <option value="meta/llama-3.1-405b-instruct">NVIDIA Hosted: Llama 3.1 405B</option>
+                  <option value="meta/llama-3.1-70b-instruct">NVIDIA Hosted: Llama 3.1 70B</option>
+                  <option value="mistralai/mixtral-8x22b-instruct-v0.1">NVIDIA Hosted: Mixtral 8x22B</option>
+                </optgroup>
                 <optgroup label="Google DeepMind Models">
                   <option value="gemini-3.5-flash">Gemini 3.5 Flash (Fastest • High Accuracy)</option>
                   <option value="gemini-3.6-flash">Gemini 3.6 Flash (Updated Reasoning)</option>
                   <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Context Analysis)</option>
-                  <option value="gemini-1.5-flash">Gemini 1.5 Flash (Legacy Support)</option>
-                </optgroup>
-                <optgroup label="NVIDIA Open Models (API Route)">
-                  <option value="nvidia-nemotron-4-340b">NVIDIA Nemotron-4 340B (Enterprise Grade)</option>
-                  <option value="nvidia-llama-3.1-nemotron-70b">Llama-3.1-Nemotron 70B (Instruct)</option>
                 </optgroup>
                 <optgroup label="OpenAI Models">
                   <option value="gpt-4o">GPT-4o (Omni Multimodal)</option>
                   <option value="gpt-4-turbo">GPT-4 Turbo (Large Context)</option>
-                  <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cost Efficient)</option>
-                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Legacy)</option>
                 </optgroup>
                 <optgroup label="Anthropic Claude Models">
-                  <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Best Reasoning)</option>
-                  <option value="claude-3-opus">Claude 3 Opus (Highly Complex Tasks)</option>
-                  <option value="claude-3-haiku">Claude 3 Haiku (Lightweight Fast)</option>
+                  <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet (Best Reasoning)</option>
+                  <option value="claude-3-opus-20240229">Claude 3 Opus (Highly Complex Tasks)</option>
                 </optgroup>
-                <optgroup label="Meta Llama Models">
-                  <option value="llama-3.1-70b-versatile">Llama 3.1 70B (Versatile)</option>
-                  <option value="llama-3.1-8b-instant">Llama 3.1 8B (Instant)</option>
-                  <option value="llama-3-70b">Llama 3 70B (Standard)</option>
-                </optgroup>
-                <optgroup label="Mistral AI Models">
-                  <option value="mixtral-8x7b-instruct">Mixtral 8x7B Instruct (MoE)</option>
-                  <option value="mistral-large-latest">Mistral Large (Latest)</option>
+                <optgroup label="Groq (Ultra-Fast Open Source)">
+                  <option value="llama-3.1-70b-versatile">Groq: Llama 3.1 70B</option>
+                  <option value="mixtral-8x7b-32768">Groq: Mixtral 8x7B</option>
                 </optgroup>
               </select>
               <p className="text-[11px] text-slate-500 font-mono">
