@@ -15,11 +15,10 @@ from backend.document_pipeline.normalization.normalization_service import Clause
 from backend.services.rag_service import RAGKnowledgeService
 
 # =====================================================================
-# 🚀 NEW: DYNAMIC LLM ROUTER FOR MULTI-PROVIDER SUPPORT
+# 🚀 DYNAMIC LLM ROUTER FOR MULTI-PROVIDER SUPPORT
 # =====================================================================
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     """Dynamically routes tasks while strictly isolating provider API keys."""
-    import os
     model_lower = model_name.lower()
     
     # 1. NVIDIA ROUTING
@@ -39,7 +38,6 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         
     # 4. GROQ ROUTING (For open-source Llama/Mixtral)
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
-        # If user passed an NVIDIA key, route open-source models to NVIDIA NIM instead of Groq
         if api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
             return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
@@ -50,17 +48,24 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     # 5. GEMINI ROUTING (DEFAULT FALLBACK)
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        # 🛑 CRITICAL ISOLATION: Never send an NVIDIA or OpenAI key to Gemini.
-        # Force the fallback to use the hardcoded Google API key from Render Environment.
-        google_key = os.getenv("GEMINI_API_KEY") 
-        if not google_key and not api_key.startswith("nvapi-") and not api_key.startswith("sk-"):
+        google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not google_key and not api_key.startswith("nvapi-") and not api_key.startswith("sk-") and not api_key.startswith("gsk_"):
             google_key = api_key
             
         response = ChatGoogleGenerativeAI(model=model_name, google_api_key=google_key, temperature=0).invoke(prompt)
-        # Handle both string and list responses from newer langchain versions
         if isinstance(response, list):
             return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
+
+def clean_llm_json_response(raw_text: str) -> str:
+    """Strips thinking processes, markdown fences, and conversational preambles."""
+    text = str(raw_text).strip()
+    # Remove reasoning model <think>...</think> blocks
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    if text.startswith("```json"): text = text[7:]
+    elif text.startswith("```"): text = text[3:]
+    if text.endswith("```"): text = text[:-3]
+    return text.strip()
 # =====================================================================
 
 class LegalPipelineState(TypedDict):
@@ -99,7 +104,7 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
 
   config = get_llm_config()
   api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY", "")
-  selected_llm = config.get("llm_model", "gemini-2.0-flash-lite")
+  selected_llm = config.get("llm_model", "gemini-3.5-flash")
 
   prompt = f"""
     You are Aadhya, Enterprise Legal Intelligence AI for Tata Group.
@@ -123,46 +128,44 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     - "recommended_action": (e.g., "Review Document")
     """
 
-  # Try user's selected model first, then safely cascade back to Gemini if it fails (e.g., bad API key)
-  # Updated to use current available Gemini models (2.5-flash is deprecated)
-  # Ordered by: user preference -> NVIDIA (best free tier for legal) -> Gemini flash-lite (fast) -> Gemini flash (fallback)
-  ordered_candidates = [selected_llm, "nvidia/nemotron-3-ultra", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
+  # Cleaned, valid cascade of models (purged 404 dead endpoints)
+  ordered_candidates = [
+      selected_llm,
+      "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-2.5-flash",
+      "gemini-1.5-flash"
+  ]
+  
+  seen = set()
+  cascade = [m for m in ordered_candidates if m and not (m in seen or seen.add(m))]
 
   raw_clauses = []
-  for model_name in ordered_candidates:
+  for model_name in cascade:
     try:
-      text_res = _invoke_dynamic_llm(prompt, model_name, api_key).strip()
+      raw_output = _invoke_dynamic_llm(prompt, model_name, api_key)
+      text_res = clean_llm_json_response(raw_output)
 
-      if text_res.startswith("```json"): text_res = text_res[7:]
-      if text_res.startswith("```"): text_res = text_res[3:]
-      if text_res.endswith("```"): text_res = text_res[:-3]
-
-      match = re.search(r"\[.*\]", text_res.strip(), re.DOTALL)
+      match = re.search(r"\[.*\]", text_res, re.DOTALL)
       if match:
         parsed = json.loads(match.group(0))
 
-        # Validate that all elements are dicts with required keys
         if isinstance(parsed, list):
           valid_clauses = []
           for item in parsed:
             if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
               valid_clauses.append(item)
-            elif isinstance(item, str):
-              print(f"⚠️ Skipping string item in response: {item[:100]}")
-              continue
 
           if len(valid_clauses) > 0:
             raw_clauses = valid_clauses
             print(f"✅ Successfully extracted {len(raw_clauses)} valid clauses using model: {model_name}")
-            break  # STOP cascade on first success
+            break
     except Exception as e:
       error_str = str(e)
-      # Only skip model if it's a SERIOUS error (invalid key, model not found, auth error)
-      # Don't skip for rate limits (429) - those are temporary
-      if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED", "UNAUTHENTICATED", "model not found", "does not exist"]):
-        print(f"❌ Model {model_name} has serious error, skipping: {e}")
+      if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED", "UNAUTHENTICATED"]):
+        print(f"❌ Model {model_name} failed with serious error: {e}")
         continue
-      # For rate limits (429) and other transient errors, log but continue to next model
       print(f"⚠️ Model {model_name} transient error, trying next: {e}")
       continue
 
@@ -204,7 +207,7 @@ def ground_clauses_with_rag_node(state: LegalPipelineState) -> Dict[str, Any]:
       clause["rag_reference_used"] = "CLS-GEN-020"
 
     grounded_clauses.append(clause)
-    time.sleep(2)
+    time.sleep(0.5)
 
   return {
       "raw_clauses": grounded_clauses,
