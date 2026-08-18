@@ -5,38 +5,25 @@ import time
 from typing import Any, Dict, List, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langsmith import traceable
-
-# Import dynamic PostgreSQL LLM config service
 from backend.services.llm_config import get_llm_config
-
-# Import modular pipeline services
 from backend.document_pipeline.clause_extraction.reasoning_service import LegalReasoningService
 from backend.document_pipeline.normalization.normalization_service import ClauseNormalizationService
 from backend.services.rag_service import RAGKnowledgeService
 
-# =====================================================================
-# 🚀 DYNAMIC LLM ROUTER FOR MULTI-PROVIDER SUPPORT
-# =====================================================================
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     """Dynamically routes tasks while strictly isolating provider API keys."""
+    import os
     model_lower = model_name.lower()
     
-    # 1. NVIDIA ROUTING
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
-        
-    # 2. OPENAI ROUTING
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
-        
-    # 3. ANTHROPIC ROUTING
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
         return ChatAnthropic(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
-        
-    # 4. GROQ ROUTING (For open-source Llama/Mixtral)
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
@@ -44,8 +31,6 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         else:
             from langchain_groq import ChatGroq
             return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
-            
-    # 5. GEMINI ROUTING (DEFAULT FALLBACK)
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
         google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -58,15 +43,15 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
-    """Strips thinking processes, markdown fences, and conversational preambles."""
+    """Aggressively extracts the JSON array from noisy LLM outputs."""
     text = str(raw_text).strip()
-    # Remove reasoning model <think>...</think> blocks
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    if text.startswith("```json"): text = text[7:]
-    elif text.startswith("```"): text = text[3:]
-    if text.endswith("```"): text = text[:-3]
-    return text.strip()
-# =====================================================================
+    # 🚀 FIX: Hard JSON Array locator to prevent "Extra Data" errors
+    start_idx = text.find('[')
+    end_idx = text.rfind(']')
+    if start_idx != -1 and end_idx != -1:
+        return text[start_idx:end_idx+1]
+    return text
 
 class LegalPipelineState(TypedDict):
   ocr_text: str
@@ -94,7 +79,6 @@ def deduplicate_extracted_clauses(clauses: List[Dict[str, Any]]) -> List[Dict[st
       seen_keys.add(norm_key)
       unique_clauses.append(clause)
   return unique_clauses
-
 
 @traceable(name="LLM Clause Extraction Node")
 def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
@@ -128,14 +112,12 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     - "recommended_action": (e.g., "Review Document")
     """
 
-  # Cleaned, valid cascade of models (purged 404 dead endpoints)
+  # 🚀 FIX: Removed dead gemini-1.5 and 2.5 models to stop 404 infinite loops
   ordered_candidates = [
       selected_llm,
       "nvidia/nemotron-3.5-lightning-30b-a3b",
       "gemini-3.6-flash",
-      "gemini-3.5-flash",
-      "gemini-2.5-flash",
-      "gemini-1.5-flash"
+      "gemini-3.5-flash"
   ]
   
   seen = set()
@@ -147,20 +129,17 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
       raw_output = _invoke_dynamic_llm(prompt, model_name, api_key)
       text_res = clean_llm_json_response(raw_output)
 
-      match = re.search(r"\[.*\]", text_res, re.DOTALL)
-      if match:
-        parsed = json.loads(match.group(0))
+      parsed = json.loads(text_res)
+      if isinstance(parsed, list):
+        valid_clauses = []
+        for item in parsed:
+          if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
+            valid_clauses.append(item)
 
-        if isinstance(parsed, list):
-          valid_clauses = []
-          for item in parsed:
-            if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
-              valid_clauses.append(item)
-
-          if len(valid_clauses) > 0:
-            raw_clauses = valid_clauses
-            print(f"✅ Successfully extracted {len(raw_clauses)} valid clauses using model: {model_name}")
-            break
+        if len(valid_clauses) > 0:
+          raw_clauses = valid_clauses
+          print(f"✅ Successfully extracted {len(raw_clauses)} valid clauses using model: {model_name}")
+          break
     except Exception as e:
       error_str = str(e)
       if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED", "UNAUTHENTICATED"]):
@@ -238,7 +217,6 @@ def legal_reasoning_node(state: LegalPipelineState) -> Dict[str, Any]:
           fc["rag_reference_used"] = normalized_clauses[i].get("rag_reference_used", "CLS-GEN-020")
 
   return {"final_clauses": final_clauses}
-
 
 workflow = StateGraph(LegalPipelineState)
 
