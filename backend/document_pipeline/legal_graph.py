@@ -11,7 +11,6 @@ from backend.document_pipeline.normalization.normalization_service import Clause
 from backend.services.rag_service import RAGKnowledgeService
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    """Dynamically routes tasks with max_retries=1 to prevent hanging on 429 Quota errors."""
     model_lower = model_name.lower()
     
     if "nvidia" in model_lower or "nemotron" in model_lower:
@@ -50,25 +49,19 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         if not gemini_key: raise ValueError("API_KEY_INVALID: No valid Google key found.")
             
         response = ChatGoogleGenerativeAI(model=model_name, google_api_key=gemini_key, temperature=0, max_retries=1).invoke(prompt)
-        if isinstance(response, list):
-            return str(response[0]) if response else ""
+        if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
-    """Violently extracts the JSON array from noisy LLM outputs (like NVIDIA Nemotron)."""
     if not raw_text: return "[]"
     text = str(raw_text).strip()
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     
-    # Try to find the first '[' and last ']'
     match = re.search(r'\[.*\]', text, re.DOTALL)
-    if match:
-        return match.group(0)
+    if match: return match.group(0)
         
-    # Fallback: Try to find the first '{' and last '}' and wrap in array
     match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match:
-        return "[" + match.group(0) + "]"
+    if match: return "[" + match.group(0) + "]"
         
     return text
 
@@ -132,15 +125,12 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     CRITICAL: OUTPUT ONLY A RAW JSON ARRAY. NO MARKDOWN. NO CONVERSATIONAL TEXT.
     """
 
-  # 🚀 USER ARCHITECTURE: Try Admin Key -> Fallback to NVIDIA -> Fallback to Gemini 3.5
+  # 🚀 GOAL 1: If Admin Key exists, use it. Otherwise, default to NVIDIA via Render Env.
   ordered_candidates = []
   if selected_llm and api_key:
       ordered_candidates.append(selected_llm)
-  
-  ordered_candidates.extend([
-      "nvidia/nemotron-3.5-lightning-30b-a3b",
-      "gemini-3.5-flash"
-  ])
+  else:
+      ordered_candidates.append("nvidia/nemotron-3.5-lightning-30b-a3b")
   
   seen = set()
   cascade = [m for m in ordered_candidates if m and not (m in seen or seen.add(m))]
