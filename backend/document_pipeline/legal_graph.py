@@ -12,31 +12,26 @@ from backend.document_pipeline.normalization.normalization_service import Clause
 from backend.services.rag_service import RAGKnowledgeService
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    """Dynamically routes tasks while strictly validating provider API keys."""
     model_lower = model_name.lower()
     
-    # 1. NVIDIA ROUTING
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         nv_key = api_key if (api_key and api_key.startswith("nvapi-")) else os.getenv("NVIDIA_API_KEY")
         if not nv_key: raise ValueError("API_KEY_INVALID: No valid NVIDIA key found.")
         return ChatNVIDIA(model=model_name, api_key=nv_key, temperature=0).invoke(prompt).content
         
-    # 2. OPENAI ROUTING
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
         sk_key = api_key if (api_key and api_key.startswith("sk-") and not api_key.startswith("sk-ant-")) else os.getenv("OPENAI_API_KEY")
         if not sk_key: raise ValueError("API_KEY_INVALID: No valid OpenAI key found.")
         return ChatOpenAI(model=model_name, api_key=sk_key, temperature=0).invoke(prompt).content
         
-    # 3. ANTHROPIC ROUTING
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
         ant_key = api_key if (api_key and api_key.startswith("sk-ant-")) else os.getenv("ANTHROPIC_API_KEY")
         if not ant_key: raise ValueError("API_KEY_INVALID: No valid Anthropic key found.")
         return ChatAnthropic(model=model_name, api_key=ant_key, temperature=0).invoke(prompt).content
         
-    # 4. GROQ ROUTING
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key and api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
@@ -47,7 +42,6 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
             if not groq_key: raise ValueError("API_KEY_INVALID: No valid Groq key found.")
             return ChatGroq(model=model_name, api_key=groq_key, temperature=0).invoke(prompt).content
             
-    # 5. GEMINI ROUTING
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
         gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -61,7 +55,6 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
-    """Aggressively extracts the JSON array from noisy LLM outputs."""
     text = str(raw_text).strip()
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     text = re.sub(r"^```(?:json)?", "", text, flags=re.MULTILINE)
@@ -138,11 +131,16 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     CRITICAL: OUTPUT VALID JSON ONLY. NO CONVERSATIONAL TEXT.
     """
 
-  # 🚀 ARCHITECTURE FIX: Prioritize Admin Model, immediately fallback to NVIDIA Free.
+  # 🚀 RESTORED CASCADE: Try Admin Model -> Try NVIDIA -> Try Gemini
   ordered_candidates = []
-  if selected_llm and api_key:
+  if selected_llm:
       ordered_candidates.append(selected_llm)
-  ordered_candidates.append("nvidia/nemotron-3.5-lightning-30b-a3b")
+      
+  ordered_candidates.extend([
+      "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash"
+  ])
   
   seen = set()
   cascade = [m for m in ordered_candidates if m and not (m in seen or seen.add(m))]
@@ -153,7 +151,6 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
       raw_output = _invoke_dynamic_llm(prompt, model_name, api_key)
       text_res = clean_llm_json_response(raw_output)
 
-      # Handle boolean/null mapping for Python AST fallback
       python_str = text_res.replace('true', 'True').replace('false', 'False').replace('null', 'None')
       try:
           parsed = json.loads(text_res)
