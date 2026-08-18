@@ -51,6 +51,9 @@ def mask_key_suffix(key_str: str) -> str:
         return "...N/A"
     return f"...{key_str[-4:]}"
 
+# Maximum file size: 10MB to prevent Render free tier crashes
+MAX_FILE_SIZE = 10 * 1024 * 1024
+
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -61,16 +64,23 @@ async def upload_document(
     document_type: str = Form("Unknown"),
     counterparty: Optional[str] = Form(None),
     jurisdiction: Optional[str] = Form(None),
-    current_user: UserModel = Depends(get_current_user), 
+    current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     job_id = str(uuid.uuid4())
     upload_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads")
     os.makedirs(upload_dir, exist_ok=True)
-    
+
+    # Read file with size limit
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File size exceeds maximum allowed ({MAX_FILE_SIZE // (1024*1024)}MB)"
+        )
+
     clean_filename = sanitize_text(file.filename)
     file_path = os.path.join(upload_dir, f"{job_id}_{clean_filename}")
-    contents = await file.read()
     with open(file_path, "wb") as f:
         f.write(contents)
 
