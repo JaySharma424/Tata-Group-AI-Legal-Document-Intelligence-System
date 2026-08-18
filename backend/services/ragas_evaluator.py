@@ -71,7 +71,6 @@ class RateLimitedLLM(BaseChatModel):
                 else: raise e
 
 def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
-    """Generates RAGAS metrics dynamically based on Admin configuration."""
     if not clauses: return {}
         
     loop = asyncio.new_event_loop()
@@ -79,10 +78,12 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
 
     config = get_llm_config()
     admin_key = config.get("api_key", "")
-    eval_model_name = config.get("llm_model") if admin_key else "nvidia/nemotron-3.5-lightning-30b-a3b"
+    selected_llm = config.get("llm_model", "")
     emb_model = config.get("embedding_model", "gemini-embedding-001")
     
-    # 1. Isolate Embeddings (MUST use Gemini for Qdrant dimension consistency)
+    # 🚀 GOAL 2: If Admin Key exists, use it. Otherwise, default to Gemini via Render Env.
+    eval_model_name = selected_llm if (admin_key and selected_llm) else "gemini-3.5-flash"
+    
     google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not google_key and admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_"):
         google_key = admin_key
@@ -92,7 +93,7 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         return {}
     evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=google_key)
 
-    # 2. Dynamically Init Langchain RAGAS LLM
+    # Dynamically Init Langchain RAGAS LLM
     model_lower = eval_model_name.lower()
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
@@ -106,7 +107,8 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         base_llm = ChatOpenAI(model=eval_model_name, api_key=sk_key, temperature=0)
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        base_llm = ChatGoogleGenerativeAI(model=eval_model_name, google_api_key=google_key, temperature=0)
+        gemini_target_key = admin_key if (admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_")) else google_key
+        base_llm = ChatGoogleGenerativeAI(model=eval_model_name, google_api_key=gemini_target_key, temperature=0)
 
     evaluator_llm = RateLimitedLLM(llm=base_llm)
 
