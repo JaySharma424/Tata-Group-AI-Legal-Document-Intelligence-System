@@ -28,7 +28,7 @@ from ragas.metrics import (
     context_precision,
     context_recall
 )
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
@@ -52,7 +52,7 @@ class RateLimitedLLM(BaseChatModel):
         return "rate_limited_llm"
         
     def _generate(self, messages: List[BaseMessage], stop: List[str] | None = None, run_manager: Any | None = None, **kwargs: Any) -> ChatResult:
-        for attempt in range(4):
+        for attempt in range(2):
             try:
                 result = self.llm._generate(messages, stop, run_manager, **kwargs)
                 for gen in result.generations:
@@ -60,13 +60,13 @@ class RateLimitedLLM(BaseChatModel):
                     if hasattr(gen, 'message') and hasattr(gen.message, 'content'): gen.message.content = clean_json_output(gen.message.content)
                 return result
             except Exception as e:
-                if ("429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "Quota" in str(e)) and attempt < 3:
-                    time.sleep(12)
+                if attempt < 1:
+                    time.sleep(2)
                 else:
                     raise e
 
     async def _agenerate(self, messages: List[BaseMessage], stop: List[str] | None = None, run_manager: Any | None = None, **kwargs: Any) -> ChatResult:
-        for attempt in range(4):
+        for attempt in range(2):
             try:
                 result = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
                 for gen in result.generations:
@@ -74,39 +74,13 @@ class RateLimitedLLM(BaseChatModel):
                     if hasattr(gen, 'message') and hasattr(gen.message, 'content'): gen.message.content = clean_json_output(gen.message.content)
                 return result
             except Exception as e:
-                if ("429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "Quota" in str(e)) and attempt < 3:
-                    await asyncio.sleep(12)
+                if attempt < 1:
+                    await asyncio.sleep(2)
                 else:
                     raise e
 
-def get_dynamic_llm(model_name: str, api_key: str) -> BaseChatModel:
-    """Dynamically routes to the correct LangChain LLM provider."""
-    model_lower = model_name.lower()
-    
-    if "gpt" in model_lower:
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0)
-        
-    elif "claude" in model_lower:
-        from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0)
-        
-    elif "nvidia" in model_lower or "nemotron" in model_lower:
-        from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0)
-        
-    elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
-        from langchain_groq import ChatGroq
-        return ChatGroq(model=model_name, api_key=api_key, temperature=0)
-        
-    else:
-        # Default to Google Gemini
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0)
-
-
 def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
-    """Generates RAGAS metrics by evaluating Uploaded Document Clauses against Qdrant KB Policies."""
+    """Generates RAGAS metrics using a strict, fast LLM to prevent Pydantic parsing timeouts."""
     if not clauses:
         return {}
         
@@ -114,45 +88,30 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     asyncio.set_event_loop(loop)
 
     config = get_llm_config()
-
-    # DYNAMIC API KEY (Used for Reasoning Model)
-    reasoning_api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
-
-    # STRICT GEMINI API KEY (Used exclusively to preserve Qdrant Embeddings)
-    embedding_api_key = os.getenv("GEMINI_API_KEY") or reasoning_api_key
-
-    if not reasoning_api_key:
-        return {}
-
-    llm_model = config.get("llm_model", "gemini-2.0-flash-lite")
-    emb_model = config.get("embedding_model", "gemini-embedding-001")
-
-    # Cascade for RAGAS evaluator - try user model, then NVIDIA, then Gemini fallbacks
-    ragas_model_candidates = [llm_model, "nvidia/nemotron-3-ultra", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
-
-    evaluator_llm = None
-    for model_name in ragas_model_candidates:
-        try:
-            base_llm = get_dynamic_llm(model_name=model_name, api_key=reasoning_api_key)
-            evaluator_llm = RateLimitedLLM(llm=base_llm)
-            print(f"✅ RAGAS evaluator using model: {model_name}")
-            break
-        except Exception as e:
-            error_str = str(e)
-            if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED", "UNAUTHENTICATED", "model not found", "does not exist"]):
-                print(f"❌ RAGAS model {model_name} has serious error, skipping: {e}")
-                continue
-            print(f"⚠️ RAGAS model {model_name} transient error, trying next: {e}")
-            continue
-
-    if evaluator_llm is None:
-        print("⚡ All RAGAS models unavailable. Skipping evaluation.")
-        return {}
+    api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
     
-    # Embeddings stay strictly Gemini
-    evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=embedding_api_key)
+    # 🚀 STRICT ISOLATION FOR RAGAS EVALUATION
+    # We completely bypass NVIDIA Nemotron for background Ragas evaluation.
+    # Nemotron generates <think> conversational tags which completely breaks RAGAS's internal Pydantic JSON parsers.
+    # We force a fast, structured Gemini model purely for these metric calculations.
+    
+    eval_model_name = "gemini-3.6-flash"
+    emb_model = config.get("embedding_model", "gemini-embedding-001")
+    
+    # Isolate Google API Key securely
+    google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not google_key and not api_key.startswith("nvapi-") and not api_key.startswith("sk-") and not api_key.startswith("gsk_"):
+        google_key = api_key
 
-    # Select high-risk clause for targeted evaluation
+    if not google_key:
+        print("[WARN] Missing Google API Key. Skipping RAGAS evaluation to save UI latency.")
+        return {}
+
+    base_llm = ChatGoogleGenerativeAI(model=eval_model_name, google_api_key=google_key, temperature=0)
+    evaluator_llm = RateLimitedLLM(llm=base_llm)
+    evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=google_key)
+
+    # Select high-risk clause for targeted evaluation to save compute time
     sample_clauses = sorted(clauses, key=lambda x: 0 if str(x.get("risk_level")).upper() == "HIGH" else 1)[:1]
 
     data = {"user_input": [], "retrieved_contexts": [], "response": [], "reference": []}
@@ -174,7 +133,8 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         if hasattr(m, 'embeddings'):
             m.embeddings = evaluator_embeddings
 
-    run_config = RunConfig(timeout=180, max_retries=3, max_workers=1)
+    # Reduced retries and timeout for maximum UI responsiveness
+    run_config = RunConfig(timeout=30, max_retries=1, max_workers=4)
 
     try:
         results = evaluate(
@@ -200,7 +160,7 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
             "answer_correctness": 1.0, 
         }
     except Exception as e:
-        print(f"Ragas Evaluation Failed: {e}")
+        print(f"[WARN] Ragas Evaluation Failed: {e}")
         return {}
     finally:
         loop.close()
