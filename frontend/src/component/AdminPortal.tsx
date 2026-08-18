@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { 
-  ShieldCheck, CheckCircle2, AlertTriangle, Eye, 
+import {
+  ShieldCheck, CheckCircle2, AlertTriangle, Eye,
   RefreshCw, Award, Filter, Search, FileText, UserCheck, Clock, Layers,
   BookOpen, Sparkles, Cpu, Key, Sliders, Save, CheckCircle, XCircle, Activity
 } from 'lucide-react';
-
-const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
+import { API_BASE_URL } from '../config/api';
 
 interface AdminDocRecord {
   job_id: string;

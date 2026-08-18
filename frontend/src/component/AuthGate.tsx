@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { ShieldCheck, Lock, Building2, UserCheck, Mail, ArrowLeft, Award } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 interface UserData {
   name?: string;
@@ -14,9 +15,6 @@ interface AuthProps {
 }
 
 type AuthView = 'login' | 'register' | 'forgot';
-
-// Locked Production Base URL
-const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
 
 export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [view, setView] = useState<AuthView>('login');

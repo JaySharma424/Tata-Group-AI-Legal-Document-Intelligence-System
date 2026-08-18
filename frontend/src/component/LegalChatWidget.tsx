@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { Bot, Send, X, Maximize2, Minimize2, Loader2, Award, Sparkles } from 'lucide-react';
-
-const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
+import { API_BASE_URL } from '../config/api';
 
 interface ChatMessage {
   role: 'user' | 'assistant';

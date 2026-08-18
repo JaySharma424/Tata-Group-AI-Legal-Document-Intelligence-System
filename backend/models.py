@@ -161,21 +161,5 @@ class SystemConfigModel(Base):
     
     
     
-# ==================== AUTOMATIC SCHEMA MIGRATION ====================
-# Forces PostgreSQL to add the missing RAGAS columns to your existing 
-# ==================== AUTOMATIC SCHEMA MIGRATION ====================
-from backend.database import engine
-from sqlalchemy import text
-
-try:
-    with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_faithfulness FLOAT;"))
-        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_answer_relevancy FLOAT;"))
-        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_context_precision FLOAT;"))
-        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_context_recall FLOAT;"))
-        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ragas_answer_correctness FLOAT;"))
-        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS llm_model_used VARCHAR DEFAULT 'gemini-3.5-flash';"))
-        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS api_key_masked VARCHAR DEFAULT '...fkkQ';"))
-        print("✅ Database schema migration complete: All governance columns verified.")
-except Exception as e:
-    print(f"⚠️ Notice during migration: {e}")
+# Migration should be run separately via Alembic or a migration script
+# NOT on import to avoid startup issues

@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { 
-  Upload, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap, 
-  AlertTriangle, ArchiveX, CheckCircle, XCircle, Award, FileSearch, 
+import {
+  Upload, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap,
+  AlertTriangle, ArchiveX, CheckCircle, XCircle, Award, FileSearch,
   Sparkles, BookOpen, Eye, Layers, FileText, Hash, BarChart3
 } from 'lucide-react';
 import { PipelineVisualizer } from './PipelineVisualizer';
+import { API_BASE_URL } from '../config/api';
 
 interface DocumentWorkspaceProps {
   selectedHistoryJobId?: string | null;
-  _onActiveJobChange?: (jobId: string) => void; 
+  _onActiveJobChange?: (jobId: string) => void;
 }
-
-const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
 
 const getSessionUser = () => {
   const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/;

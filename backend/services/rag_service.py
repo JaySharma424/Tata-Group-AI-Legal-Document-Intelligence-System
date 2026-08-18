@@ -18,6 +18,7 @@ from qdrant_client.models import (
     VectorParams,
 )
 
+
 class RAGKnowledgeService:
     """Production-grade RAG service supporting Qdrant Cloud, local disk, and in-memory fallback."""
 
@@ -25,18 +26,18 @@ class RAGKnowledgeService:
         self.collection_name = "tata_legal_knowledge_v2"
         self.vector_dim = 768  # Enforced 768-dim vector size
         self.is_seeding = False  # Prevent concurrent seeding attempts
-        
+
         # --- DYNAMIC LLM CONFIGURATION ---
         config = get_llm_config()
         api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
-        
+
         if api_key:
             self.client = genai.Client(api_key=api_key)
             self.has_api_key = True
         else:
             self.client = None
             self.has_api_key = False
-            print("⚠️ GEMINI_API_KEY missing. Vector search will use zero-vectors.")
+            print("[WARN] GEMINI_API_KEY missing. Vector search will use zero-vectors.")
 
         # --- QDRANT CLOUD / LOCAL INITIALIZATION ---
         qdrant_url = os.getenv("QDRANT_URL")
@@ -44,24 +45,17 @@ class RAGKnowledgeService:
 
         if qdrant_url and qdrant_api_key:
             try:
-                print(f"🌐 Connecting to Qdrant Cloud cluster at {qdrant_url[:30]}...")
+                print(f"[INFO] Connecting to Qdrant Cloud cluster at {qdrant_url[:30]}...")
                 self.qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
                 self.qdrant.get_collections()
-                print("✅ Connected to Qdrant Cloud successfully.")
+                print("[OK] Connected to Qdrant Cloud successfully.")
             except Exception as e:
-                print(f"⚠️ Failed to connect to Qdrant Cloud: {e}. Falling back to in-memory.")
-                self.qdrant = QdrantClient(location=":memory:")
+                print(f"[WARN] Failed to connect to Qdrant Cloud: {e}. Falling back to in-memory.")
+                self.qdrant = QdrantClient(":memory:")
         else:
-            os.makedirs(storage_path, exist_ok=True)
-            try:
-                self.qdrant = QdrantClient(path=storage_path)
-                self.qdrant.get_collections()
-            except Exception as e:
-                if "AlreadyLocked" in str(e) or "already accessed" in str(e):
-                    print("⚠️ Qdrant disk locked. Falling back to in-memory Qdrant instance.")
-                    self.qdrant = QdrantClient(location=":memory:")
-                else:
-                    self.qdrant = QdrantClient(location=":memory:")
+            # Use in-memory for local development to avoid locking issues
+            print("[INFO] Using in-memory Qdrant for local development")
+            self.qdrant = QdrantClient(":memory:")
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.csv_path = os.path.join(
@@ -72,37 +66,25 @@ class RAGKnowledgeService:
         )
 
         # Ensure collection exists without blocking startup
-        self._ensure_collection_exists(seed_immediately=False)
+        threading.Thread(target=self._ensure_collection_exists, daemon=True).start()
 
-    def _ensure_collection_exists(self, seed_immediately: bool = True):
-        """Creates vector collection if missing or recreates it if vector size mismatches."""
+    def _ensure_collection_exists(self, seed_immediately: bool = False):
+        """Creates collection if missing; optionally seeds it."""
         try:
-            collections = [c.name for c in self.qdrant.get_collections().collections]
-            if self.collection_name in collections:
-                info = self.qdrant.get_collection(self.collection_name)
-                existing_dim = info.config.params.vectors.size
-                if existing_dim != self.vector_dim:
-                    print(
-                        f"⚠️ Dimension mismatch ({existing_dim} vs {self.vector_dim})."
-                        " Recreating Qdrant collection..."
-                    )
-                    self.qdrant.delete_collection(self.collection_name)
-                    collections.remove(self.collection_name)
-        except Exception:
-            collections = []
-
-        if self.collection_name not in collections:
-            self.qdrant.create_collection(
-                collection_name=self.collection_name,
-                vectors_config=VectorParams(
-                    size=self.vector_dim, distance=Distance.COSINE
-                ),
-            )
-            if seed_immediately:
-                print("🌱 Seeding RAG knowledge base...")
-                self._seed_structured_policies()
-            else:
-                print("ℹ️ Collection created. Seeding deferred to prevent startup blocking.")
+            collections = self.qdrant.get_collections().collections
+            names = [c.name for c in collections]
+            if self.collection_name not in names:
+                self.qdrant.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config=VectorParams(size=self.vector_dim, distance=Distance.COSINE),
+                )
+                if seed_immediately:
+                    print("[INFO] Seeding RAG knowledge base...")
+                    self._seed_structured_policies()
+                else:
+                    print("[INFO] Collection created. Seeding deferred to prevent startup blocking.")
+        except Exception as e:
+            print(f"[WARN] Collection init error: {e}")
 
     def _get_embedding(self, text: str, retries: int = 3) -> List[float]:
         """Generates strictly 768-dim vector embeddings using robust fallback models."""
@@ -117,219 +99,146 @@ class RAGKnowledgeService:
             for attempt in range(retries):
                 try:
                     response = self.client.models.embed_content(
-                        model=model_name,
-                        contents=text[:2000],
-                        config=types.EmbedContentConfig(
-                            output_dimensionality=self.vector_dim
-                        ),
+                        model=model_name, contents=text, config=types.EmbedContentConfig()
                     )
-                    if response.embeddings and len(response.embeddings) > 0:
-                        values = list(response.embeddings[0].values)
-                        if len(values) > self.vector_dim:
-                            values = values[: self.vector_dim]
-                        elif len(values) < self.vector_dim:
-                            values += [0.0] * (self.vector_dim - len(values))
-                        return values
-                except Exception as e:
-                    err_msg = str(e)
-                    if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
-                        wait_time = 2 * (attempt + 1)
-                        print(f"⏳ Gemini Rate Limit hit. Backing off for {wait_time}s...")
-                        time.sleep(wait_time)
-                        continue
+                    embedding = response.embeddings[0].values
+                    if len(embedding) == self.vector_dim:
+                        return embedding
+                    elif len(embedding) < self.vector_dim:
+                        return embedding + [0.0] * (self.vector_dim - len(embedding))
                     else:
-                        print(f"⚠️ Embedding failed for {model_name}: {err_msg}. Trying next model...")
-                        break 
-
-        print("❌ All embedding models failed. Returning zero-vector fallback.")
+                        return embedding[:self.vector_dim]
+                except Exception as e:
+                    if attempt == retries - 1 and model_name == candidate_models[-1]:
+                        print(f"[WARN] All embedding models failed: {e}")
+                        return [0.0] * self.vector_dim
+                    time.sleep(0.5 * (attempt + 1))
         return [0.0] * self.vector_dim
 
-    def _parse_structured_policy_file(
-        self, file_path: str
-    ) -> List[Dict[str, Any]]:
-        records = []
-        filename = os.path.basename(file_path)
-
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-
-        blocks = re.split(r"\n(?=TITLE:)", content.strip())
-
-        for idx, block in enumerate(blocks):
-            if not block.strip():
-                continue
-
-            title_match = re.search(r"TITLE:\s*(.*)", block)
-            category_match = re.search(r"CATEGORY:\s*(.*)", block)
-            ref_match = re.search(r"REFERENCE_ID:\s*(.*)", block)
-            jurisdiction_match = re.search(r"JURISDICTION:\s*(.*)", block)
-            guidance_match = re.search(r"GUIDANCE:\s*(.*)", block, re.DOTALL)
-
-            ref_id = (
-                ref_match.group(1).strip()
-                if ref_match
-                else f"KB-{filename.upper()}-{idx+1}"
-            )
-            title = (
-                title_match.group(1).strip() if title_match else "Corporate Policy"
-            )
-            category = (
-                category_match.group(1).strip()
-                if category_match
-                else "GENERAL COMPLIANCE"
-            )
-            jurisdiction = (
-                jurisdiction_match.group(1).strip() if jurisdiction_match else "Global"
-            )
-            guidance = (
-                guidance_match.group(1).strip() if guidance_match else block.strip()
-            )
-
-            semantic_text = (
-                f"[{category}] {title}: {guidance} (Jurisdiction: {jurisdiction})"
-            )
-
-            records.append({
-                "ref_id": ref_id,
-                "title": title,
-                "category": category,
-                "jurisdiction": jurisdiction,
-                "guidance": guidance,
-                "source_file": filename,
-                "semantic_text": semantic_text,
-            })
-
-        return records
-
     def _seed_structured_policies(self):
+        """Seeds the knowledge base from CSV taxonomy and KB markdown files."""
         if self.is_seeding:
-            print("ℹ️ Seeding already in progress, skipping...")
             return
-            
         self.is_seeding = True
         try:
-            policies = []
-            point_id_counter = 1
-
-            if os.path.exists(self.csv_path):
-                try:
-                    with open(self.csv_path, mode="r", encoding="utf-8") as file:
-                        reader = csv.DictReader(file)
-                        for row in reader:
-                            ref_id = (
-                                row.get("reference_id")
-                                or row.get("ref_id")
-                                or f"TAX-{point_id_counter}"
-                            )
-                            risk_level = row.get("risk_level", "MEDIUM").upper()
-                            policy_txt = row.get("policy_text") or row.get("trigger", "")
-                            guidelines = row.get("handling_guidelines") or row.get("action", "")
-
-                            semantic_text = f"[{risk_level} RISK TAXONOMY] Ref: {ref_id} | Policy: {policy_txt} | Guidelines: {guidelines}"
-
-                            policies.append({
-                                "id": point_id_counter,
-                                "payload": {
-                                    "ref": ref_id,
-                                    "text": semantic_text,
-                                    "category": "RISK_TAXONOMY",
-                                    "risk_level": risk_level,
-                                },
-                            })
-                            point_id_counter += 1
-                except Exception as e:
-                    print(f"Error reading risk_taxonomy.csv: {e}")
-
-            if os.path.exists(self.kb_dir):
-                txt_files = glob.glob(os.path.join(self.kb_dir, "*.txt"))
-                for file_path in txt_files:
-                    parsed_records = self._parse_structured_policy_file(file_path)
-                    for rec in parsed_records:
-                        policies.append({
-                            "id": point_id_counter,
-                            "payload": {
-                                "ref": rec["ref_id"],
-                                "text": (
-                                    f"[{rec['ref_id']}] {rec['title']} - {rec['guidance']}"
-                                ),
-                                "title": rec["title"],
-                                "category": rec["category"],
-                                "jurisdiction": rec["jurisdiction"],
-                                "source_file": rec["source_file"],
-                            },
-                            "embedding_text": rec["semantic_text"],
-                        })
-                        point_id_counter += 1
-
             points = []
-            for idx, p in enumerate(policies):
-                embed_input = p.get("embedding_text", p["payload"]["text"])
-                vector = self._get_embedding(embed_input)
-                points.append(
-                    PointStruct(id=p["id"], vector=vector, payload=p["payload"])
-                )
+            point_id = 0
 
-                if (idx + 1) % 10 == 0:
-                    time.sleep(0.5)
+            # Seed from CSV taxonomy
+            if os.path.exists(self.csv_path):
+                with open(self.csv_path, "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        text = f"Risk Category: {row.get('Category', '')}. Subcategory: {row.get('Subcategory', '')}. Description: {row.get('Description', '')}. Legal Basis: {row.get('Legal_Basis', '')}. Mitigation: {row.get('Mitigation', '')}"
+                        embedding = self._get_embedding(text)
+                        points.append(
+                            PointStruct(
+                                id=point_id,
+                                vector=embedding,
+                                payload={
+                                    "source": "risk_taxonomy",
+                                    "category": row.get("Category", ""),
+                                    "subcategory": row.get("Subcategory", ""),
+                                    "text": text,
+                                },
+                            )
+                        )
+                        point_id += 1
+
+            # Seed from KB markdown files
+            if os.path.exists(self.kb_dir):
+                for md_file in glob.glob(os.path.join(self.kb_dir, "*.md")):
+                    with open(md_file, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    chunks = self._chunk_text(content, chunk_size=800, overlap=100)
+                    for chunk in chunks:
+                        embedding = self._get_embedding(chunk)
+                        points.append(
+                            PointStruct(
+                                id=point_id,
+                                vector=embedding,
+                                payload={
+                                    "source": "knowledge_base",
+                                    "file": os.path.basename(md_file),
+                                    "text": chunk,
+                                },
+                            )
+                        )
+                        point_id += 1
 
             if points:
                 self.qdrant.upsert(collection_name=self.collection_name, points=points)
-                print(
-                    f"✅ RAG Engine: Successfully embedded {len(points)} legal records into Qdrant."
-                )
+                print(f"[OK] Seeded {len(points)} knowledge points into Qdrant.")
+        except Exception as e:
+            print(f"[WARN] Seeding error: {e}")
         finally:
             self.is_seeding = False
 
-    def retrieve_context(
-        self,
-        query_text: str,
-        top_k: int = 3,
-        category_filter: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """Retrieves top matching legal policies from Qdrant vector database."""
-        if not query_text:
-            return []
-            
-        try:
-            collection_info = self.qdrant.get_collection(self.collection_name)
-            if collection_info.points_count == 0:
-                print("⚠️ Qdrant database is empty upon first query. Seeding now (Lazy Load)...")
-                self._seed_structured_policies()
-        except Exception as e:
-            print(f"Error checking collection info: {e}")
+    def _chunk_text(self, text: str, chunk_size: int = 800, overlap: int = 100) -> List[str]:
+        """Simple text chunking for KB documents."""
+        words = text.split()
+        chunks = []
+        for i in range(0, len(words), chunk_size - overlap):
+            chunk = " ".join(words[i : i + chunk_size])
+            if chunk:
+                chunks.append(chunk)
+        return chunks
 
-        query_vector = self._get_embedding(query_text[:1000])
-        
-        if all(v == 0.0 for v in query_vector):
-            print("⚠️ Aborting Qdrant search due to zero-vector embedding failure.")
-            return []
+    def semantic_search(self, query: str, top_k: int = 5, filters: Optional[Dict] = None) -> List[Dict]:
+        """Performs semantic search with optional metadata filters."""
+        query_vector = self._get_embedding(query)
 
-        query_filter = None
-        if category_filter:
-            query_filter = Filter(
-                must=[
-                    FieldCondition(
-                        key="category", match=MatchValue(value=category_filter)
-                    )
-                ]
-            )
+        qdrant_filter = None
+        if filters:
+            conditions = []
+            for key, value in filters.items():
+                conditions.append(FieldCondition(key=key, match=MatchValue(value=value)))
+            if conditions:
+                qdrant_filter = Filter(must=conditions)
 
         try:
             results = self.qdrant.search(
                 collection_name=self.collection_name,
                 query_vector=query_vector,
-                query_filter=query_filter,
+                query_filter=qdrant_filter,
                 limit=top_k,
             )
             return [
                 {
-                    "ref": hit.payload.get("ref", "CLS-GEN-020"),
-                    "text": hit.payload.get("text", ""),
-                    "title": hit.payload.get("title", ""),
-                    "category": hit.payload.get("category", ""),
+                    "text": r.payload.get("text", ""),
+                    "score": r.score,
+                    "source": r.payload.get("source", ""),
+                    "category": r.payload.get("category", ""),
+                    "file": r.payload.get("file", ""),
                 }
-                for hit in results
+                for r in results
             ]
         except Exception as e:
-            print(f"Qdrant search error: {e}")
+            print(f"[WARN] Search error: {e}")
             return []
+
+    def upsert_document_knowledge(self, doc_id: str, clauses: List[Dict]):
+        """Upserts clause-level knowledge from analyzed documents."""
+        points = []
+        for i, clause in enumerate(clauses):
+            text = f"Clause Type: {clause.get('clause_type', 'Unknown')}. Risk: {clause.get('risk_level', 'Unknown')}. Text: {clause.get('text', '')[:500]}"
+            embedding = self._get_embedding(text)
+            points.append(
+                PointStruct(
+                    id=hash(f"{doc_id}_{i}") % (2**31),
+                    vector=embedding,
+                    payload={
+                        "source": "document_analysis",
+                        "doc_id": doc_id,
+                        "clause_type": clause.get("clause_type", ""),
+                        "risk_level": clause.get("risk_level", ""),
+                        "text": text,
+                    },
+                )
+            )
+        if points:
+            try:
+                self.qdrant.upsert(collection_name=self.collection_name, points=points)
+                print(f"[OK] Upserted {len(points)} clause vectors for document {doc_id}")
+            except Exception as e:
+                print(f"[WARN] Upsert error: {e}")

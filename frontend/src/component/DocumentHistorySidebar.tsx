@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { History, FileText, CheckCircle, XCircle, RefreshCw, AlertCircle } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 interface HistoryItem {
   id: string;
@@ -14,8 +15,6 @@ interface HistoryItem {
 interface SidebarProps {
   onSelectDocument?: (jobId: string) => void;
 }
-
-const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com';
 
 export const DocumentHistorySidebar: React.FC<SidebarProps> = ({ onSelectDocument }) => {
   const [history, setHistory] = useState<HistoryItem[]>([]);
