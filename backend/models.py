@@ -153,7 +153,7 @@ class SystemConfigModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     config_key = Column(String, unique=True, index=True, nullable=False) # e.g., "default"
     
-    llm_model = Column(String, default="gemini-3.5-flash")
+    llm_model = Column(String, default="gemini-2.0-flash-lite")
     embedding_model = Column(String, default="gemini-embedding-001")
     api_key = Column(String, nullable=True) # Securely stores the active key
     

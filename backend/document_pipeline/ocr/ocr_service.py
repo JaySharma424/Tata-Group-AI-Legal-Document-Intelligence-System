@@ -1,7 +1,7 @@
 import os
 import re
 from PIL import Image, PngImagePlugin
-import google.generativeai as genai
+from google import genai
 
 class OCRService:
     """Service for handling OCR text extraction and metrics generation from documents."""
@@ -43,16 +43,20 @@ class OCRService:
         if ext in ['png', 'jpg', 'jpeg', 'webp']:
             try:
                 img = Image.open(file_path)
-                model_candidates = ["gemini-3.6-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
+                # Use valid free tier models
+                model_candidates = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
                 extracted_text = None
 
                 for model_name in model_candidates:
                     try:
-                        model = genai.GenerativeModel(model_name)
-                        response = model.generate_content([
-                            "Extract all readable text, clauses, headers, schedules, and provisions from this legal document image accurately and completely.",
-                            img
-                        ])
+                        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", ""))
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=[
+                                "Extract all readable text, clauses, headers, schedules, and provisions from this legal document image accurately and completely.",
+                                img
+                            ]
+                        )
                         if response and response.text:
                             extracted_text = response.text.strip()
                             break

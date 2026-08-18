@@ -124,7 +124,7 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     if not reasoning_api_key:
         return {}
 
-    llm_model = config.get("llm_model", "gemini-3.5-flash")
+    llm_model = config.get("llm_model", "gemini-2.0-flash-lite")
     emb_model = config.get("embedding_model", "gemini-embedding-001")
 
     # Route to the correct provider dynamically

@@ -31,7 +31,7 @@ def get_llm_config():
 
         # Fallback if DB is completely empty
         return {
-            "llm_model": "gemini-3.5-flash",
+            "llm_model": "gemini-3.7-flash",
             "embedding_model": "gemini-embedding-001",
             "api_key": os.getenv("GEMINI_API_KEY", "")
         }

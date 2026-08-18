@@ -103,15 +103,15 @@ class ClauseService:
         ]
 
     def extract_clauses(self, ocr_text: str, file_path: str = None, user_role: str = "Senior Reviewer", business_unit: str = "Enterprise"):
-        retrieved_references = self.rag_service.retrieve_context(ocr_text)
+        retrieved_references = self.rag_service.semantic_search(ocr_text, top_k=5)
         rag_context_str = json.dumps(retrieved_references, indent=2)
 
         config = get_llm_config()
         api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY", "")
-        selected_llm = config.get("llm_model", "gemini-3.5-flash")
+        selected_llm = config.get("llm_model", "gemini-2.0-flash-lite")
         
         # Priority fallback chain
-        model_candidates = [selected_llm, "gemini-3.6-flash", "gemini-1.5-flash", "gemini-3.5-flash"]
+        model_candidates = [selected_llm, "gemini-2.0-flash-lite", "gemini-3.7-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
 
         prompt = f"""
         You are Aadhya, an expert Enterprise Legal Intelligence AI for Tata Group.
@@ -140,10 +140,12 @@ class ClauseService:
             try:
                 # 🛑 SAFETY GUARD: If processing an image, force Gemini Vision Model
                 if file_path and os.path.exists(file_path) and file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
-                    import google.generativeai as genai
-                    genai.configure(api_key=api_key)
-                    model = genai.GenerativeModel("gemini-1.5-flash") 
-                    response = model.generate_content([Image.open(file_path), prompt])
+                    from google import genai as google_genai
+                    client = google_genai.Client(api_key=api_key)
+                    response = client.models.generate_content(
+                        model="gemini-2.0-flash-lite",
+                        contents=[Image.open(file_path), prompt]
+                    )
                     raw_text = response.text.strip()
                 else:
                     # ✅ Text document: Route to user's selected Nvidia/OpenAI model

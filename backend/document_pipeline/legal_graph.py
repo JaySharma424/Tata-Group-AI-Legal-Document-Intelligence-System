@@ -99,7 +99,7 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
 
   config = get_llm_config()
   api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY", "")
-  selected_llm = config.get("llm_model", "gemini-3.5-flash")
+  selected_llm = config.get("llm_model", "gemini-2.0-flash-lite")
 
   prompt = f"""
     You are Aadhya, Enterprise Legal Intelligence AI for Tata Group.
@@ -125,7 +125,7 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
 
   # Try user's selected model first, then safely cascade back to Gemini if it fails (e.g., bad API key)
   # Updated to use current available Gemini models (2.5-flash is deprecated)
-  ordered_candidates = [selected_llm, "gemini-3.6-flash", "gemini-1.5-flash", "gemini-3.5-flash"]
+  ordered_candidates = [selected_llm, "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
 
   raw_clauses = []
   for model_name in ordered_candidates:
@@ -173,7 +173,7 @@ def ground_clauses_with_rag_node(state: LegalPipelineState) -> Dict[str, Any]:
     clause_type = clause.get("clause_type", "")
 
     search_query = f"{clause_type} {clause_text[:400]}"
-    search_hits = rag_service.retrieve_context(search_query, top_k=1)
+    search_hits = rag_service.semantic_search(search_query, top_k=1)
 
     if search_hits and len(search_hits) > 0:
       best_match = search_hits[0]

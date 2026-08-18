@@ -86,7 +86,7 @@ async def upload_document(
 
     # 🚀 NEW: Fetch active LLM & API key suffix from PostgreSQL
     active_config = get_llm_config()
-    active_model = active_config.get("llm_model", "gemini-3.5-flash")
+    active_model = active_config.get("llm_model", "gemini-2.0-flash-lite")
     active_key_suffix = mask_key_suffix(active_config.get("api_key", ""))
 
     # 1. OCR Extraction & Metrics

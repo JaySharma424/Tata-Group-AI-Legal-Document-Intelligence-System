@@ -128,7 +128,7 @@ Business Unit: {doc.business_unit}
         rag_context_str = "No specific corporate policies matched."
         references = []
         try:
-            references = rag_service.retrieve_context(user_query)
+            references = rag_service.semantic_search(user_query, top_k=5)
             if references:
                 rag_context_str = "\n".join([f"- [{r.get('ref', 'REF')}]: {r.get('text', '')}" for r in references])
         except Exception as rag_error:
@@ -157,7 +157,7 @@ User Query: {user_query}
 """
 
         # 6. Call Dynamic LLM with Model Fallbacks
-        model_candidates = [active_model, "gemini-3.6-flash", "gemini-1.5-flash", "gemini-3.5-flash"]
+        model_candidates = [active_model, "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
         answer = None
 
         for model_name in model_candidates:

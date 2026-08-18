@@ -18,7 +18,7 @@ async def get_config():
     masked_key = f"{raw_key[:6]}...{raw_key[-4:]}" if len(raw_key) > 10 else "****"
     return {
         "status": "success",
-        "llm_model": config.get("llm_model", "gemini-3.5-flash"),
+        "llm_model": config.get("llm_model", "gemini-2.0-flash-lite"),
         "embedding_model": config.get("embedding_model", "gemini-embedding-001"),
         "masked_api_key": masked_key,
         "is_configured": bool(raw_key)
@@ -64,7 +64,7 @@ def _test_dynamic_llm_connection(model_name: str, api_key: str) -> str:
 async def test_llm_connection(req: LLMConfigRequest):
     """Validates the key and model connectivity directly with the respective AI provider."""
     key = req.api_key if req.api_key else get_llm_config().get("api_key")
-    model = req.llm_model if req.llm_model else get_llm_config().get("llm_model", "gemini-3.5-flash")
+    model = req.llm_model if req.llm_model else get_llm_config().get("llm_model", "gemini-2.0-flash-lite")
     
     if not key:
         raise HTTPException(status_code=400, detail="No API Key provided for testing.")

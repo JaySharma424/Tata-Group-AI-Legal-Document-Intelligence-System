@@ -71,7 +71,7 @@ class LegalReasoningService:
     # Get Active Admin LLM Settings
     config = get_llm_config()
     api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY", "")
-    selected_llm = config.get("llm_model", "gemini-3.5-flash")
+    selected_llm = config.get("llm_model", "gemini-2.0-flash-lite")
 
     clauses_json_str = json.dumps(normalized_clauses, indent=2)
 
@@ -93,7 +93,7 @@ class LegalReasoningService:
         """
 
     # Model Cascade: Tries the Admin-selected model, then falls back to reliable defaults if it fails
-    model_candidates = [selected_llm, "gemini-3.6-flash", "gemini-1.5-flash", "gemini-3.5-flash"]
+    model_candidates = [selected_llm, "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
 
     for model_name in model_candidates:
       try:
