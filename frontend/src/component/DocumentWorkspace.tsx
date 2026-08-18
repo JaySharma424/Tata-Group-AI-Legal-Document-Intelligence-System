@@ -80,7 +80,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     setReviewComments('');
     
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/v1/documents/upload`, formData, {
+      const response = await axios.post(`${API_BASE_URL}/documents/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
@@ -114,7 +114,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
   const loadDocumentFromHistory = async (jobId: string) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/v1/documents/${jobId}`);
+      const response = await axios.get(`${API_BASE_URL}/documents/${jobId}`);
       
       const safeClauses = Array.isArray(response.data?.clauses) 
         ? response.data.clauses.filter((c: any) => c !== null && typeof c === 'object') 
@@ -153,7 +153,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     const token = sessionStorage.getItem('access_token');
     
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/v1/documents/${targetId}/export-pdf`, {
+      const response = await axios.get(`${API_BASE_URL}/documents/${targetId}/export-pdf`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob',
       });
@@ -181,7 +181,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
     setIsSubmitting(true);
     try {
-      await axios.post(`${API_BASE_URL}/api/v1/review/actions`, {
+      await axios.post(`${API_BASE_URL}/review/actions`, {
         document_id: activeJobId,
         user_email: currentUser,
         action: action,

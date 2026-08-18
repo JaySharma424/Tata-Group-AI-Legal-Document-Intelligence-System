@@ -58,7 +58,7 @@ export const AdminPortal: React.FC = () => {
   const fetchAdminDocuments = async () => {
     try {
       const token = sessionStorage.getItem('access_token');
-      const response = await axios.get(`${API_BASE_URL}/api/v1/review/admin/documents`, {
+      const response = await axios.get(`${API_BASE_URL}/review/admin/documents`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setDocuments(response.data.documents || []);
@@ -72,7 +72,7 @@ export const AdminPortal: React.FC = () => {
   const fetchLlmConfig = async () => {
     try {
       const token = sessionStorage.getItem('access_token');
-      const response = await axios.get(`${API_BASE_URL}/api/v1/admin/llm-config`, {
+      const response = await axios.get(`${API_BASE_URL}/admin/llm-config`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSelectedLlm(response.data.llm_model || 'gemini-3.5-flash');
@@ -97,7 +97,7 @@ export const AdminPortal: React.FC = () => {
 
     try {
       const token = sessionStorage.getItem('access_token');
-      await axios.post(`${API_BASE_URL}/api/v1/admin/llm-config`, {
+      await axios.post(`${API_BASE_URL}/admin/llm-config`, {
         api_key: apiKey || undefined,
         llm_model: selectedLlm,
         embedding_model: selectedEmbedding
@@ -122,7 +122,7 @@ export const AdminPortal: React.FC = () => {
 
     try {
       const token = sessionStorage.getItem('access_token');
-      const response = await axios.post(`${API_BASE_URL}/api/v1/admin/llm-config/test`, {
+      const response = await axios.post(`${API_BASE_URL}/admin/llm-config/test`, {
         api_key: apiKey || undefined,
         llm_model: selectedLlm
       }, {
@@ -146,7 +146,7 @@ export const AdminPortal: React.FC = () => {
       const token = sessionStorage.getItem('access_token');
       const currentUser = sessionStorage.getItem('user_email') || 'admin@tata.com';
       
-      await axios.post(`${API_BASE_URL}/api/v1/review/admin/review/action`, {
+      await axios.post(`${API_BASE_URL}/review/admin/review/action`, {
         job_id: docId,
         action: action,
         comments: `Admin (${currentUser}) marked document as ${action}`
@@ -176,7 +176,7 @@ export const AdminPortal: React.FC = () => {
     setInspectLoading(true);
     try {
       const token = sessionStorage.getItem('access_token');
-      const response = await axios.get(`${API_BASE_URL}/api/v1/documents/${doc.job_id}`, {
+      const response = await axios.get(`${API_BASE_URL}/documents/${doc.job_id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setDocClauses(response.data.clauses || []);

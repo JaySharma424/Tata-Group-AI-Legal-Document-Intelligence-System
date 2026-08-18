@@ -44,7 +44,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
       formData.append('username', email);
       formData.append('password', password);
       
-      const response = await axios.post(`${API_BASE_URL}/api/v1/auth/login`, formData, {
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, formData, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
 
@@ -93,7 +93,7 @@ export const AuthGate: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     }
 
     try {
-      await axios.post(`${API_BASE_URL}/api/v1/auth/register`, {
+      await axios.post(`${API_BASE_URL}/auth/register`, {
         full_name: name,
         email: email,
         password: password,

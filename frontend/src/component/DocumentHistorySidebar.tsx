@@ -23,7 +23,7 @@ export const DocumentHistorySidebar: React.FC<SidebarProps> = ({ onSelectDocumen
   const fetchHistory = async () => {
     try {
       const token = sessionStorage.getItem('access_token');
-      const response = await axios.get(`${API_BASE_URL}/api/v1/review/history`, {
+      const response = await axios.get(`${API_BASE_URL}/review/history`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setHistory(response.data?.history || []);

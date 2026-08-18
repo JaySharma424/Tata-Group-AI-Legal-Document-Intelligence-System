@@ -5,6 +5,7 @@ import { DocumentWorkspace } from './component/DocumentWorkspace';
 import { AdminPortal } from './component/AdminPortal';
 import { AuthGate } from './component/AuthGate';
 import { LegalChatWidget } from './component/LegalChatWidget';
+import { API_BASE_URL } from './config/api';
 import { User, Settings, LogOut, X, CheckCircle2, Award, ShieldAlert, FileText, Key } from 'lucide-react';
 
 // Global Axios Interceptors (Reading from sessionStorage)
@@ -87,7 +88,7 @@ function App() {
     }
 
     try {
-      const response = await axios.put('https://tata-ai-backend-og7t.onrender.com/api/v1/auth/profile', updatePayload, {
+      const response = await axios.put(`${API_BASE_URL}/auth/profile`, updatePayload, {
         headers: { Authorization: `Bearer ${token}` }
       });
       

@@ -42,7 +42,7 @@ export function LegalChatWidget({ currentDocumentId }: { currentDocumentId?: str
         text: msg.text
       }));
 
-      const response = await axios.post(`${API_BASE_URL}/api/v1/chat/query`, {
+      const response = await axios.post(`${API_BASE_URL}/chat/query`, {
         query: userText,
         user_id: "demo_user@tata.com",
         document_id: currentDocumentId || null,
