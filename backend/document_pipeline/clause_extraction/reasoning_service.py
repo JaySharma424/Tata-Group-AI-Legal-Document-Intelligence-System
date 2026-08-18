@@ -53,11 +53,20 @@ def clean_llm_json_response(raw_text: str) -> str:
     text = str(raw_text).strip()
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     
-    match = re.search(r'\[.*\]', text, re.DOTALL)
-    if match: return match.group(0)
-        
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match: return "[" + match.group(0) + "]"
+    first_bracket = text.find('[')
+    last_bracket = text.rfind(']')
+    first_brace = text.find('{')
+    last_brace = text.rfind('}')
+    
+    has_list = first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket
+    has_dict = first_brace != -1 and last_brace != -1 and last_brace > first_brace
+    
+    if has_list:
+        if has_dict and first_brace < first_bracket and last_brace > last_bracket:
+            pass
+        return text[first_bracket:last_bracket+1]
+    elif has_dict:
+        return "[" + text[first_brace:last_brace+1] + "]"
         
     return text
 
@@ -78,7 +87,7 @@ class LegalReasoningService:
     clauses_json_str = json.dumps(normalized_clauses, indent=2)
 
     prompt = f"""
-        You are Aadhya a Senior Legal Counsel at Tata Group evaluating contracts for the '{business_unit}' business unit from the perspective of a '{user_role}'.
+        You are Senior Legal Counsel at Tata Group evaluating contracts for the '{business_unit}' business unit from the perspective of a '{user_role}'.
         Analyze the following array of normalized contract clauses:
         {clauses_json_str}
         
@@ -99,7 +108,7 @@ class LegalReasoningService:
         ordered_candidates.append(selected_llm)
     else:
         ordered_candidates.append("nvidia/nemotron-3.5-lightning-30b-a3b")
-        ordered_candidates.append("gemini-3.5-flash") # Safety net
+        ordered_candidates.append("gemini-3.5-flash")
     
     seen = set()
     cascade = [m for m in ordered_candidates if m and not (m in seen or seen.add(m))]
