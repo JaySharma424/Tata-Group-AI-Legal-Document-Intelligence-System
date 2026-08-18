@@ -2,6 +2,7 @@ import json
 import os
 import re
 import time
+import ast
 from typing import Any, Dict, List, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langsmith import traceable
@@ -12,9 +13,7 @@ from backend.services.rag_service import RAGKnowledgeService
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     """Dynamically routes tasks while strictly isolating provider API keys."""
-    import os
     model_lower = model_name.lower()
-    
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
@@ -46,7 +45,9 @@ def clean_llm_json_response(raw_text: str) -> str:
     """Aggressively extracts the JSON array from noisy LLM outputs."""
     text = str(raw_text).strip()
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    # 🚀 FIX: Hard JSON Array locator to prevent "Extra Data" errors
+    text = re.sub(r"^```(?:json)?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"```$", "", text, flags=re.MULTILINE).strip()
+    
     start_idx = text.find('[')
     end_idx = text.rfind(']')
     if start_idx != -1 and end_idx != -1:
@@ -110,9 +111,10 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     - "page_reference": (e.g., "Section 1")
     - "obligation_owner": (responsible entity)
     - "recommended_action": (e.g., "Review Document")
+    
+    CRITICAL: YOU MUST OUTPUT VALID JSON ONLY. NO SINGLE QUOTES. NO TRAILING COMMAS. NO CONVERSATIONAL TEXT.
     """
 
-  # 🚀 FIX: Removed dead gemini-1.5 and 2.5 models to stop 404 infinite loops
   ordered_candidates = [
       selected_llm,
       "nvidia/nemotron-3.5-lightning-30b-a3b",
@@ -129,7 +131,12 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
       raw_output = _invoke_dynamic_llm(prompt, model_name, api_key)
       text_res = clean_llm_json_response(raw_output)
 
-      parsed = json.loads(text_res)
+      # 🚀 FIX: Bulletproof parsing handles standard JSON and single-quote Python dictionaries
+      try:
+          parsed = json.loads(text_res)
+      except json.JSONDecodeError:
+          parsed = ast.literal_eval(text_res)
+
       if isinstance(parsed, list):
         valid_clauses = []
         for item in parsed:
@@ -219,7 +226,6 @@ def legal_reasoning_node(state: LegalPipelineState) -> Dict[str, Any]:
   return {"final_clauses": final_clauses}
 
 workflow = StateGraph(LegalPipelineState)
-
 workflow.add_node("extract_clauses", extract_clauses_node)
 workflow.add_node("ground_clauses", ground_clauses_with_rag_node)
 workflow.add_node("normalize_clauses", normalize_clauses_node)
