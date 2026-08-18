@@ -59,7 +59,11 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         if not google_key and not api_key.startswith("nvapi-") and not api_key.startswith("sk-"):
             google_key = api_key
             
-        return ChatGoogleGenerativeAI(model=model_name, google_api_key=google_key, temperature=0).invoke(prompt).content
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=google_key, temperature=0).invoke(prompt)
+        # Handle both string and list responses from newer langchain versions
+        if isinstance(response, list):
+            return str(response[0]) if response else ""
+        return str(response.content) if hasattr(response, "content") else str(response)
 # =====================================================================
 
 class ChatMessage(BaseModel):
@@ -153,7 +157,7 @@ User Query: {user_query}
 """
 
         # 6. Call Dynamic LLM with Model Fallbacks
-        model_candidates = [active_model, "gemini-3.5-flash", "gemini-2.5-flash"]
+        model_candidates = [active_model, "gemini-3.6-flash", "gemini-1.5-flash", "gemini-3.5-flash"]
         answer = None
 
         for model_name in model_candidates:

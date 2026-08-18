@@ -43,7 +43,7 @@ class OCRService:
         if ext in ['png', 'jpg', 'jpeg', 'webp']:
             try:
                 img = Image.open(file_path)
-                model_candidates = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+                model_candidates = ["gemini-3.6-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
                 extracted_text = None
 
                 for model_name in model_candidates:

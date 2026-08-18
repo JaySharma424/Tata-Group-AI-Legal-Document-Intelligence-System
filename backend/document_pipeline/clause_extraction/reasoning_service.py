@@ -48,7 +48,11 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         if not google_key and not api_key.startswith("nvapi-") and not api_key.startswith("sk-"):
             google_key = api_key
             
-        return ChatGoogleGenerativeAI(model=model_name, google_api_key=google_key, temperature=0).invoke(prompt).content
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=google_key, temperature=0).invoke(prompt)
+        # Handle both string and list responses from newer langchain versions
+        if isinstance(response, list):
+            return str(response[0]) if response else ""
+        return str(response.content) if hasattr(response, "content") else str(response)
 # =====================================================================
 
 class LegalReasoningService:
@@ -89,7 +93,7 @@ class LegalReasoningService:
         """
 
     # Model Cascade: Tries the Admin-selected model, then falls back to reliable defaults if it fails
-    model_candidates = [selected_llm, "gemini-3.5-flash", "gemini-2.5-flash"]
+    model_candidates = [selected_llm, "gemini-3.6-flash", "gemini-1.5-flash", "gemini-3.5-flash"]
 
     for model_name in model_candidates:
       try:
