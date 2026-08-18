@@ -11,35 +11,37 @@ from backend.document_pipeline.normalization.normalization_service import Clause
 from backend.services.rag_service import RAGKnowledgeService
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
+    """Dynamically routes tasks while strictly isolating provider API keys."""
     model_lower = model_name.lower()
     
+    # 🚀 FIX: Removed max_retries which caused NVIDIA 400 Bad Request
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         nv_key = api_key if (api_key and api_key.startswith("nvapi-")) else os.getenv("NVIDIA_API_KEY")
         if not nv_key: raise ValueError("API_KEY_INVALID: No valid NVIDIA key found.")
-        return ChatNVIDIA(model=model_name, api_key=nv_key, temperature=0, max_retries=1).invoke(prompt).content
+        return ChatNVIDIA(model=model_name, api_key=nv_key, temperature=0).invoke(prompt).content
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
         sk_key = api_key if (api_key and api_key.startswith("sk-") and not api_key.startswith("sk-ant-")) else os.getenv("OPENAI_API_KEY")
         if not sk_key: raise ValueError("API_KEY_INVALID: No valid OpenAI key found.")
-        return ChatOpenAI(model=model_name, api_key=sk_key, temperature=0, max_retries=1).invoke(prompt).content
+        return ChatOpenAI(model=model_name, api_key=sk_key, temperature=0).invoke(prompt).content
         
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
         ant_key = api_key if (api_key and api_key.startswith("sk-ant-")) else os.getenv("ANTHROPIC_API_KEY")
         if not ant_key: raise ValueError("API_KEY_INVALID: No valid Anthropic key found.")
-        return ChatAnthropic(model=model_name, api_key=ant_key, temperature=0, max_retries=1).invoke(prompt).content
+        return ChatAnthropic(model=model_name, api_key=ant_key, temperature=0).invoke(prompt).content
         
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key and api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_retries=1).invoke(prompt).content
+            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
             groq_key = api_key if (api_key and api_key.startswith("gsk_")) else os.getenv("GROQ_API_KEY")
             if not groq_key: raise ValueError("API_KEY_INVALID: No valid Groq key found.")
-            return ChatGroq(model=model_name, api_key=groq_key, temperature=0, max_retries=1).invoke(prompt).content
+            return ChatGroq(model=model_name, api_key=groq_key, temperature=0).invoke(prompt).content
             
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
@@ -48,11 +50,12 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
             gemini_key = api_key
         if not gemini_key: raise ValueError("API_KEY_INVALID: No valid Google key found.")
             
-        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=gemini_key, temperature=0, max_retries=1).invoke(prompt)
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=gemini_key, temperature=0).invoke(prompt)
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
+    """Aggressively extracts the JSON array from noisy LLM outputs."""
     if not raw_text: return "[]"
     text = str(raw_text).strip()
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
@@ -125,12 +128,13 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     CRITICAL: OUTPUT ONLY A RAW JSON ARRAY. NO MARKDOWN. NO CONVERSATIONAL TEXT.
     """
 
-  # 🚀 GOAL 1: If Admin Key exists, use it. Otherwise, default to NVIDIA via Render Env.
+  # 🚀 CASCADE LOGIC: Try Admin Key -> Fallback to NVIDIA -> Ultimate Safety Fallback to Gemini
   ordered_candidates = []
   if selected_llm and api_key:
       ordered_candidates.append(selected_llm)
   else:
       ordered_candidates.append("nvidia/nemotron-3.5-lightning-30b-a3b")
+      ordered_candidates.append("gemini-3.5-flash") # Safety net
   
   seen = set()
   cascade = [m for m in ordered_candidates if m and not (m in seen or seen.add(m))]
