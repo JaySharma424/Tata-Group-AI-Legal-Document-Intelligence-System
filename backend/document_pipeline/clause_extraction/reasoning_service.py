@@ -13,29 +13,29 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         nv_key = api_key if (api_key and api_key.startswith("nvapi-")) else os.getenv("NVIDIA_API_KEY")
         if not nv_key: raise ValueError("API_KEY_INVALID: No valid NVIDIA key found.")
-        return ChatNVIDIA(model=model_name, api_key=nv_key, temperature=0).invoke(prompt).content
+        return ChatNVIDIA(model=model_name, api_key=nv_key, temperature=0, max_retries=1).invoke(prompt).content
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
         sk_key = api_key if (api_key and api_key.startswith("sk-") and not api_key.startswith("sk-ant-")) else os.getenv("OPENAI_API_KEY")
         if not sk_key: raise ValueError("API_KEY_INVALID: No valid OpenAI key found.")
-        return ChatOpenAI(model=model_name, api_key=sk_key, temperature=0).invoke(prompt).content
+        return ChatOpenAI(model=model_name, api_key=sk_key, temperature=0, max_retries=1).invoke(prompt).content
         
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
         ant_key = api_key if (api_key and api_key.startswith("sk-ant-")) else os.getenv("ANTHROPIC_API_KEY")
         if not ant_key: raise ValueError("API_KEY_INVALID: No valid Anthropic key found.")
-        return ChatAnthropic(model=model_name, api_key=ant_key, temperature=0).invoke(prompt).content
+        return ChatAnthropic(model=model_name, api_key=ant_key, temperature=0, max_retries=1).invoke(prompt).content
         
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key and api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_retries=1).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
             groq_key = api_key if (api_key and api_key.startswith("gsk_")) else os.getenv("GROQ_API_KEY")
             if not groq_key: raise ValueError("API_KEY_INVALID: No valid Groq key found.")
-            return ChatGroq(model=model_name, api_key=groq_key, temperature=0).invoke(prompt).content
+            return ChatGroq(model=model_name, api_key=groq_key, temperature=0, max_retries=1).invoke(prompt).content
             
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
@@ -44,23 +44,21 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
             gemini_key = api_key
         if not gemini_key: raise ValueError("API_KEY_INVALID: No valid Google key found.")
             
-        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=gemini_key, temperature=0).invoke(prompt)
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=gemini_key, temperature=0, max_retries=1).invoke(prompt)
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
+    if not raw_text: return "[]"
     text = str(raw_text).strip()
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    text = re.sub(r"^```(?:json)?", "", text, flags=re.MULTILINE)
-    text = re.sub(r"```$", "", text, flags=re.MULTILINE).strip()
     
-    start_idx = text.find('[')
-    end_idx = text.rfind(']')
-    if start_idx != -1 and end_idx != -1: return text[start_idx:end_idx+1]
+    match = re.search(r'\[.*\]', text, re.DOTALL)
+    if match: return match.group(0)
         
-    start_idx = text.find('{')
-    end_idx = text.rfind('}')
-    if start_idx != -1 and end_idx != -1: return "[" + text[start_idx:end_idx+1] + "]"
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match: return "[" + match.group(0) + "]"
+        
     return text
 
 class LegalReasoningService:
@@ -93,17 +91,15 @@ class LegalReasoningService:
         Return ONLY a valid JSON array matching the exact length and order of the input clauses. Each object in the array MUST contain these exact keys:
         ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"]
         
-        CRITICAL: YOU MUST OUTPUT VALID JSON ONLY. NO SINGLE QUOTES. NO TRAILING COMMAS. NO CONVERSATIONAL TEXT.
+        CRITICAL: OUTPUT ONLY A RAW JSON ARRAY. NO MARKDOWN. NO CONVERSATIONAL TEXT.
         """
 
-    # 🚀 RESTORED CASCADE: Try Admin Model -> Try NVIDIA -> Try Gemini
     ordered_candidates = []
-    if selected_llm:
+    if selected_llm and api_key:
         ordered_candidates.append(selected_llm)
         
     ordered_candidates.extend([
         "nvidia/nemotron-3.5-lightning-30b-a3b",
-        "gemini-3.6-flash",
         "gemini-3.5-flash"
     ])
     
@@ -115,11 +111,19 @@ class LegalReasoningService:
         raw_output = _invoke_dynamic_llm(prompt, model_name, api_key)
         text_res = clean_llm_json_response(raw_output)
 
+        if not text_res or text_res == "[]":
+            print(f"⚠️ Model {model_name} returned empty output. Trying next.")
+            continue
+
         python_str = text_res.replace('true', 'True').replace('false', 'False').replace('null', 'None')
         try:
             evaluated_array = json.loads(text_res)
         except json.JSONDecodeError:
-            evaluated_array = ast.literal_eval(python_str)
+            try:
+                evaluated_array = ast.literal_eval(python_str)
+            except Exception as ast_err:
+                print(f"⚠️ Parsing failed for {model_name}: {ast_err}")
+                continue
             
         if isinstance(evaluated_array, dict): evaluated_array = [evaluated_array]
 
