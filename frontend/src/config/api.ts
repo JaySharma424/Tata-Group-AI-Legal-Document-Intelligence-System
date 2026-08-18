@@ -1,8 +1,8 @@
 // API Configuration
-// Change this to switch between local and production environments
+// Automatically detects environment and uses appropriate base URL
 
-// Local development - uses Vite proxy to avoid CORS issues
-export const API_BASE_URL = '/api';
-
-// Production
-// export const API_BASE_URL = 'https://tata-ai-backend-og7t.onrender.com/api/v1';
+// In production (Render static site), Vite replaces import.meta.env.PROD with true
+// In development, it uses the Vite proxy at /api
+export const API_BASE_URL = import.meta.env.PROD
+  ? 'https://tata-ai-backend-og7t.onrender.com/api/v1'
+  : '/api';
