@@ -90,15 +90,10 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     config = get_llm_config()
     api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
     
-    # 🚀 STRICT ISOLATION FOR RAGAS EVALUATION
-    # We completely bypass NVIDIA Nemotron for background Ragas evaluation.
-    # Nemotron generates <think> conversational tags which completely breaks RAGAS's internal Pydantic JSON parsers.
-    # We force a fast, structured Gemini model purely for these metric calculations.
-    
-    eval_model_name = "gemini-3.6-flash"
+    # 🚀 FIX: Swapped dead 1.5-flash for the active 3.5-flash endpoint
+    eval_model_name = "gemini-3.5-flash"
     emb_model = config.get("embedding_model", "gemini-embedding-001")
     
-    # Isolate Google API Key securely
     google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not google_key and not api_key.startswith("nvapi-") and not api_key.startswith("sk-") and not api_key.startswith("gsk_"):
         google_key = api_key
@@ -111,7 +106,6 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     evaluator_llm = RateLimitedLLM(llm=base_llm)
     evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=google_key)
 
-    # Select high-risk clause for targeted evaluation to save compute time
     sample_clauses = sorted(clauses, key=lambda x: 0 if str(x.get("risk_level")).upper() == "HIGH" else 1)[:1]
 
     data = {"user_input": [], "retrieved_contexts": [], "response": [], "reference": []}
@@ -133,8 +127,8 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         if hasattr(m, 'embeddings'):
             m.embeddings = evaluator_embeddings
 
-    # Reduced retries and timeout for maximum UI responsiveness
-    run_config = RunConfig(timeout=30, max_retries=1, max_workers=4)
+    # 🚀 FIX: Increased timeout from 30s to 120s to prevent TimeoutError
+    run_config = RunConfig(timeout=120, max_retries=2, max_workers=2)
 
     try:
         results = evaluate(
