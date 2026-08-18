@@ -1,12 +1,12 @@
 import json
 import os
 import re
+import ast
 from typing import Any, Dict, List
 
 from backend.services.llm_config import get_llm_config
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    """Dynamically routes tasks while strictly isolating provider API keys."""
     model_lower = model_name.lower()
     
     if "nvidia" in model_lower or "nemotron" in model_lower:
@@ -40,7 +40,9 @@ def clean_llm_json_response(raw_text: str) -> str:
     """Aggressively extracts the JSON array from noisy LLM outputs."""
     text = str(raw_text).strip()
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    # 🚀 FIX: Hard JSON Array locator to prevent "Extra Data" errors
+    text = re.sub(r"^```(?:json)?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"```$", "", text, flags=re.MULTILINE).strip()
+    
     start_idx = text.find('[')
     end_idx = text.rfind(']')
     if start_idx != -1 and end_idx != -1:
@@ -81,9 +83,10 @@ class LegalReasoningService:
         
         Return ONLY a valid JSON array matching the exact length and order of the input clauses. Each object in the array MUST contain these exact keys:
         ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"]
+        
+        CRITICAL: YOU MUST OUTPUT VALID JSON ONLY. NO SINGLE QUOTES. NO TRAILING COMMAS. NO CONVERSATIONAL TEXT.
         """
 
-    # 🚀 FIX: Removed dead gemini-1.5 and 2.5 models to stop 404 infinite loops
     ordered_candidates = [
         selected_llm,
         "nvidia/nemotron-3.5-lightning-30b-a3b",
@@ -99,10 +102,15 @@ class LegalReasoningService:
         raw_output = _invoke_dynamic_llm(prompt, model_name, api_key)
         text_res = clean_llm_json_response(raw_output)
 
-        parsed = json.loads(text_res)
-        if isinstance(parsed, list):
+        # 🚀 FIX: Bulletproof parsing
+        try:
+            evaluated_array = json.loads(text_res)
+        except json.JSONDecodeError:
+            evaluated_array = ast.literal_eval(text_res)
+
+        if isinstance(evaluated_array, list):
           valid_clauses = []
-          for item in parsed:
+          for item in evaluated_array:
             if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
               valid_clauses.append(item)
 
