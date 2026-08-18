@@ -17,7 +17,7 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         nv_key = api_key if (api_key and api_key.startswith("nvapi-")) else os.getenv("NVIDIA_API_KEY")
         if not nv_key: raise ValueError("API_KEY_INVALID: No valid NVIDIA key found.")
-        return ChatNVIDIA(model=model_name, api_key=nv_key, temperature=0).invoke(prompt).content
+        return ChatNVIDIA(model=model_name, api_key=nv_key, temperature=0, max_tokens=2048).invoke(prompt).content
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
@@ -34,7 +34,7 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key and api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=2048).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
             groq_key = api_key if (api_key and api_key.startswith("gsk_")) else os.getenv("GROQ_API_KEY")
@@ -53,32 +53,45 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
-    """Bulletproof regex extraction to bypass chatty LLM preambles like [Step 1]."""
+    """Heals truncated JSON arrays and strips chatty LLM preambles."""
     if not raw_text: return "[]"
     text = str(raw_text).strip()
     
-    # 1. Strip explicit think tags
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     
-    # 2. Extract from Markdown fences if present
     md_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
     if md_match:
         text = md_match.group(1).strip()
         
-    # 3. Find the first valid JSON array `[{` or object `{`
-    list_match = re.search(r"\[\s*\{.*?\}\s*\]", text, re.DOTALL)
-    if list_match: return list_match.group(0)
+    start_idx = text.find('[')
+    start_brace = text.find('{')
+    
+    if start_idx == -1 and start_brace == -1:
+        return "[]"
         
-    dict_match = re.search(r"\{\s*\".*?\".*?\}", text, re.DOTALL)
-    if dict_match: return "[" + dict_match.group(0) + "]"
+    is_list = False
+    if start_idx != -1 and (start_brace == -1 or start_idx < start_brace):
+        text = text[start_idx:]
+        is_list = True
+    else:
+        text = text[start_brace:]
+
+    # 🚀 JSON AUTO-HEALER: Fixes Token Truncation Errors
+    text = re.sub(r',\s*$', '', text) # Strip dangling commas
+    
+    if text.count('"') % 2 != 0:
+        text += '"'
         
-    # 4. Absolute fallback
-    idx_list = text.find('[')
-    idx_dict = text.find('{')
-    if idx_list != -1 and (idx_dict == -1 or idx_list < idx_dict):
-        return text[idx_list:text.rfind(']')+1]
-    elif idx_dict != -1:
-        return "[" + text[idx_dict:text.rfind('}')+1] + "]"
+    open_braces = text.count('{') - text.count('}')
+    open_brackets = text.count('[') - text.count(']')
+    
+    if open_braces > 0:
+        text += '}' * open_braces
+    if open_brackets > 0:
+        text += ']' * open_brackets
+
+    if not is_list and text.startswith('{'):
+        return "[" + text + "]"
         
     return text
 
@@ -142,7 +155,6 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     CRITICAL INSTRUCTION: You are a JSON parser. Output NOTHING but the raw JSON array. NO explanations, NO thinking process, NO markdown.
     """
 
-  # 🚀 GOAL 1 CASCADE: Try Admin Key -> Fallback to NVIDIA -> Ultimate Safety Fallback to Gemini
   ordered_candidates = []
   if selected_llm and api_key:
       ordered_candidates.append(selected_llm)
