@@ -78,7 +78,7 @@ class LegalReasoningService:
     clauses_json_str = json.dumps(normalized_clauses, indent=2)
 
     prompt = f"""
-        You are Senior Legal Counsel at Tata Group evaluating contracts for the '{business_unit}' business unit from the perspective of a '{user_role}'.
+        You are Aadhya a Senior Legal Counsel at Tata Group evaluating contracts for the '{business_unit}' business unit from the perspective of a '{user_role}'.
         Analyze the following array of normalized contract clauses:
         {clauses_json_str}
         
