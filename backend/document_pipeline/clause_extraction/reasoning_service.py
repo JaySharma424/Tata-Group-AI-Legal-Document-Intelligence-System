@@ -3,32 +3,21 @@ import os
 import re
 from typing import Any, Dict, List
 
-# Import dynamic PostgreSQL LLM config service
 from backend.services.llm_config import get_llm_config
 
-# =====================================================================
-# 🚀 DYNAMIC LLM ROUTER
-# =====================================================================
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     """Dynamically routes tasks while strictly isolating provider API keys."""
     model_lower = model_name.lower()
     
-    # 1. NVIDIA ROUTING
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
-        
-    # 2. OPENAI ROUTING
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
-        
-    # 3. ANTHROPIC ROUTING
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
         return ChatAnthropic(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
-        
-    # 4. GROQ ROUTING (For open-source Llama/Mixtral)
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
@@ -36,8 +25,6 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         else:
             from langchain_groq import ChatGroq
             return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
-            
-    # 5. GEMINI ROUTING (DEFAULT FALLBACK)
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
         google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -50,14 +37,15 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
-    """Strips thinking processes, markdown fences, and conversational preambles."""
+    """Aggressively extracts the JSON array from noisy LLM outputs."""
     text = str(raw_text).strip()
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    if text.startswith("```json"): text = text[7:]
-    elif text.startswith("```"): text = text[3:]
-    if text.endswith("```"): text = text[:-3]
-    return text.strip()
-# =====================================================================
+    # 🚀 FIX: Hard JSON Array locator to prevent "Extra Data" errors
+    start_idx = text.find('[')
+    end_idx = text.rfind(']')
+    if start_idx != -1 and end_idx != -1:
+        return text[start_idx:end_idx+1]
+    return text
 
 class LegalReasoningService:
   """Executes dedicated legal reasoning and risk flagging pass using Dynamic LLMs and RAG context."""
@@ -72,7 +60,6 @@ class LegalReasoningService:
     if not normalized_clauses:
       return []
 
-    # Get Active Admin LLM Settings
     config = get_llm_config()
     api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY", "")
     selected_llm = config.get("llm_model", "gemini-3.5-flash")
@@ -96,14 +83,12 @@ class LegalReasoningService:
         ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"]
         """
 
-    # Cleaned, valid cascade of models (purged 404 dead endpoints)
+    # 🚀 FIX: Removed dead gemini-1.5 and 2.5 models to stop 404 infinite loops
     ordered_candidates = [
         selected_llm,
         "nvidia/nemotron-3.5-lightning-30b-a3b",
         "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-2.5-flash",
-        "gemini-1.5-flash"
+        "gemini-3.5-flash"
     ]
     
     seen = set()
@@ -114,22 +99,19 @@ class LegalReasoningService:
         raw_output = _invoke_dynamic_llm(prompt, model_name, api_key)
         text_res = clean_llm_json_response(raw_output)
 
-        match = re.search(r"\[.*\]", text_res, re.DOTALL)
-        if match:
-          evaluated_array = json.loads(match.group(0))
+        parsed = json.loads(text_res)
+        if isinstance(parsed, list):
+          valid_clauses = []
+          for item in parsed:
+            if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
+              valid_clauses.append(item)
 
-          if isinstance(evaluated_array, list):
-            valid_clauses = []
-            for item in evaluated_array:
-              if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
-                valid_clauses.append(item)
-
-            if len(valid_clauses) == len(normalized_clauses):
-              print(f"✅ Successfully batch-evaluated all {len(valid_clauses)} clauses in 1 call using model: {model_name}")
-              return valid_clauses
-            elif len(valid_clauses) > 0:
-              print(f"✅ Batch evaluated {len(valid_clauses)} valid clauses using model: {model_name}")
-              return valid_clauses
+          if len(valid_clauses) == len(normalized_clauses):
+            print(f"✅ Successfully batch-evaluated all {len(valid_clauses)} clauses in 1 call using model: {model_name}")
+            return valid_clauses
+          elif len(valid_clauses) > 0:
+            print(f"✅ Batch evaluated {len(valid_clauses)} valid clauses using model: {model_name}")
+            return valid_clauses
 
       except Exception as e:
         error_str = str(e)
