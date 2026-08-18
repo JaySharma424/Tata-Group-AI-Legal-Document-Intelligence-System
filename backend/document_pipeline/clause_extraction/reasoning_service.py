@@ -92,12 +92,20 @@ class LegalReasoningService:
         
         Return ONLY a valid JSON array matching the exact length and order of the input clauses. Each object in the array MUST contain these exact keys:
         ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"]
+        
+        CRITICAL: YOU MUST OUTPUT VALID JSON ONLY. NO SINGLE QUOTES. NO TRAILING COMMAS. NO CONVERSATIONAL TEXT.
         """
 
+    # 🚀 RESTORED CASCADE: Try Admin Model -> Try NVIDIA -> Try Gemini
     ordered_candidates = []
-    if selected_llm and api_key:
+    if selected_llm:
         ordered_candidates.append(selected_llm)
-    ordered_candidates.append("nvidia/nemotron-3.5-lightning-30b-a3b")
+        
+    ordered_candidates.extend([
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash"
+    ])
     
     seen = set()
     cascade = [m for m in ordered_candidates if m and not (m in seen or seen.add(m))]
