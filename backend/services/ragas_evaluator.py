@@ -33,7 +33,7 @@ from langchain_core.outputs import ChatResult
 from backend.services.llm_config import get_llm_config
 
 def clean_json_output(raw_text: Any) -> str:
-    """Bulletproof Regex for strict RAGAS JSON outputs."""
+    """Bulletproof Auto-Healing Regex for strict RAGAS JSON outputs."""
     if isinstance(raw_text, list):
         raw_text = "".join([str(item.get("text", item)) if isinstance(item, dict) else str(item) for item in raw_text])
     text = str(raw_text).strip()
@@ -42,24 +42,30 @@ def clean_json_output(raw_text: Any) -> str:
     md_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
     if md_match: text = md_match.group(1).strip()
         
-    dict_match = re.search(r"\{\s*\".*?\".*?\}", text, re.DOTALL)
-    list_match = re.search(r"\[\s*\{.*?\}\s*\]", text, re.DOTALL)
-    
-    if dict_match and list_match:
-        if len(dict_match.group(0)) > len(list_match.group(0)):
-            return dict_match.group(0)
-        return list_match.group(0)
-    elif dict_match:
-        return dict_match.group(0)
-    elif list_match:
-        return list_match.group(0)
-        
     idx_list = text.find('[')
     idx_dict = text.find('{')
-    if idx_list != -1 and (idx_dict == -1 or idx_list < idx_dict):
-        return text[idx_list:text.rfind(']')+1]
-    elif idx_dict != -1:
-        return text[idx_dict:text.rfind('}')+1]
+    
+    if idx_list == -1 and idx_dict == -1:
+        return text
+        
+    if idx_dict != -1 and (idx_list == -1 or idx_dict < idx_list):
+        text = text[idx_dict:]
+    else:
+        text = text[idx_list:]
+
+    # 🚀 JSON AUTO-HEALER: Fixes Token Truncation Errors
+    text = re.sub(r',\s*$', '', text) # Strip dangling commas
+    
+    if text.count('"') % 2 != 0:
+        text += '"'
+        
+    open_braces = text.count('{') - text.count('}')
+    open_brackets = text.count('[') - text.count(']')
+    
+    if open_braces > 0:
+        text += '}' * open_braces
+    if open_brackets > 0:
+        text += ']' * open_brackets
         
     return text
 
@@ -104,7 +110,6 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     selected_llm = config.get("llm_model", "")
     emb_model = config.get("embedding_model", "gemini-embedding-001")
     
-    # 🚀 GOAL 2: If Admin Key exists, use it. Otherwise, default to Gemini via Render Env.
     eval_model_name = selected_llm if (admin_key and selected_llm) else "gemini-3.5-flash"
     
     google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -121,7 +126,7 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         nv_key = admin_key if (admin_key and admin_key.startswith("nvapi-")) else os.getenv("NVIDIA_API_KEY")
         if not nv_key: return {}
-        base_llm = ChatNVIDIA(model=eval_model_name, api_key=nv_key, temperature=0)
+        base_llm = ChatNVIDIA(model=eval_model_name, api_key=nv_key, temperature=0, max_tokens=2048)
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
         sk_key = admin_key if (admin_key and admin_key.startswith("sk-")) else os.getenv("OPENAI_API_KEY")
