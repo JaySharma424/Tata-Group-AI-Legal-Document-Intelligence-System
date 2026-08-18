@@ -2,6 +2,7 @@ import os
 import time
 import asyncio
 import math
+import re
 from typing import List, Dict, Any
 from datasets import Dataset
 import warnings
@@ -31,14 +32,33 @@ from langchain_core.outputs import ChatResult
 
 from backend.services.llm_config import get_llm_config
 
-def clean_json_output(text: Any) -> str:
-    if isinstance(text, list):
-        text = "".join([str(item.get("text", item)) if isinstance(item, dict) else str(item) for item in text])
-    text = str(text).strip()
-    if text.startswith("```json"): text = text[7:]
-    if text.startswith("```"): text = text[3:]
-    if text.endswith("```"): text = text[:-3]
-    return text.strip()
+def clean_json_output(raw_text: Any) -> str:
+    """Aggressively strips chatty preambles like 'Here is a thinking process...'"""
+    if isinstance(raw_text, list):
+        raw_text = "".join([str(item.get("text", item)) if isinstance(item, dict) else str(item) for item in raw_text])
+    text = str(raw_text).strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    
+    first_brace = text.find('{')
+    last_brace = text.rfind('}')
+    first_bracket = text.find('[')
+    last_bracket = text.rfind(']')
+    
+    has_dict = first_brace != -1 and last_brace != -1 and last_brace > first_brace
+    has_list = first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket
+    
+    # Extract whichever container wraps the data
+    if has_dict and has_list:
+        if first_brace < first_bracket and last_brace > last_bracket:
+            return text[first_brace:last_brace+1]
+        else:
+            return text[first_bracket:last_bracket+1]
+    elif has_dict:
+        return text[first_brace:last_brace+1]
+    elif has_list:
+        return text[first_bracket:last_bracket+1]
+        
+    return text
 
 class RateLimitedLLM(BaseChatModel):
     llm: BaseChatModel
@@ -81,19 +101,15 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     selected_llm = config.get("llm_model", "")
     emb_model = config.get("embedding_model", "gemini-embedding-001")
     
-    # 🚀 GOAL 2: If Admin Key exists, use it. Otherwise, default to Gemini via Render Env.
     eval_model_name = selected_llm if (admin_key and selected_llm) else "gemini-3.5-flash"
     
     google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not google_key and admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_"):
         google_key = admin_key
 
-    if not google_key:
-        print("[WARN] Missing Google API Key for Embeddings. RAGAS cannot run.")
-        return {}
+    if not google_key: return {}
     evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=google_key)
 
-    # Dynamically Init Langchain RAGAS LLM
     model_lower = eval_model_name.lower()
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
