@@ -94,14 +94,12 @@ class LegalReasoningService:
         CRITICAL: OUTPUT ONLY A RAW JSON ARRAY. NO MARKDOWN. NO CONVERSATIONAL TEXT.
         """
 
+    # 🚀 GOAL 1: If Admin Key exists, use it. Otherwise, default to NVIDIA via Render Env.
     ordered_candidates = []
     if selected_llm and api_key:
         ordered_candidates.append(selected_llm)
-        
-    ordered_candidates.extend([
-        "nvidia/nemotron-3.5-lightning-30b-a3b",
-        "gemini-3.5-flash"
-    ])
+    else:
+        ordered_candidates.append("nvidia/nemotron-3.5-lightning-30b-a3b")
     
     seen = set()
     cascade = [m for m in ordered_candidates if m and not (m in seen or seen.add(m))]
