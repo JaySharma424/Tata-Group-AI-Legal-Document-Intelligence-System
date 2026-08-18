@@ -110,8 +110,8 @@ class ClauseService:
         api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY", "")
         selected_llm = config.get("llm_model", "gemini-2.0-flash-lite")
         
-        # Priority fallback chain
-        model_candidates = [selected_llm, "gemini-2.0-flash-lite", "gemini-3.7-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+        # Priority fallback chain - Ordered by: user preference -> NVIDIA (best free tier for legal) -> Gemini flash-lite (fast) -> Gemini flash (fallback)
+        model_candidates = [selected_llm, "nvidia/nemotron-3-ultra", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
 
         prompt = f"""
         You are Aadhya, an expert Enterprise Legal Intelligence AI for Tata Group.
@@ -150,19 +150,27 @@ class ClauseService:
                 else:
                     # ✅ Text document: Route to user's selected Nvidia/OpenAI model
                     raw_text = _invoke_dynamic_llm(prompt, model_name, api_key).strip()
-                
+
                 match = re.search(r'\[.*\]', raw_text, re.DOTALL)
                 if match:
                     json_str = match.group(0)
                     parsed_clauses = json.loads(json_str)
-                    
+
                     if isinstance(parsed_clauses, list) and len(parsed_clauses) > 0:
                         raw_clauses = parsed_clauses
-                        print(f"Successfully extracted raw clauses using model: {model_name}")
-                        break
+                        print(f"✅ Successfully extracted {len(raw_clauses)} clauses using model: {model_name}")
+                        break  # STOP cascade on first success
 
             except Exception as e:
-                print(f"Model {model_name} failed: {e}. Trying next available model...")
+                error_str = str(e)
+                # Only skip model if it's a SERIOUS error (invalid key, model not found, auth error)
+                # Don't skip for rate limits (429) - those are temporary
+                if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED", "UNAUTHENTICATED", "model not found", "does not exist"]):
+                    print(f"❌ Model {model_name} has serious error, skipping: {e}")
+                    continue
+                # For rate limits (429) and other transient errors, log but continue to next model
+                print(f"⚠️ Model {model_name} transient error, trying next: {e}")
+                continue
 
         if not raw_clauses:
             print("All cloud models failed or rate limited. Executing local fallback evaluation.")

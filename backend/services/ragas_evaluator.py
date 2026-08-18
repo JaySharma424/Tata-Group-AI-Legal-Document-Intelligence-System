@@ -114,22 +114,40 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     asyncio.set_event_loop(loop)
 
     config = get_llm_config()
-    
+
     # DYNAMIC API KEY (Used for Reasoning Model)
     reasoning_api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
-    
+
     # STRICT GEMINI API KEY (Used exclusively to preserve Qdrant Embeddings)
     embedding_api_key = os.getenv("GEMINI_API_KEY") or reasoning_api_key
-    
+
     if not reasoning_api_key:
         return {}
 
     llm_model = config.get("llm_model", "gemini-2.0-flash-lite")
     emb_model = config.get("embedding_model", "gemini-embedding-001")
 
-    # Route to the correct provider dynamically
-    base_llm = get_dynamic_llm(model_name=llm_model, api_key=reasoning_api_key)
-    evaluator_llm = RateLimitedLLM(llm=base_llm)
+    # Cascade for RAGAS evaluator - try user model, then NVIDIA, then Gemini fallbacks
+    ragas_model_candidates = [llm_model, "nvidia/nemotron-3-ultra", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
+
+    evaluator_llm = None
+    for model_name in ragas_model_candidates:
+        try:
+            base_llm = get_dynamic_llm(model_name=model_name, api_key=reasoning_api_key)
+            evaluator_llm = RateLimitedLLM(llm=base_llm)
+            print(f"✅ RAGAS evaluator using model: {model_name}")
+            break
+        except Exception as e:
+            error_str = str(e)
+            if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED", "UNAUTHENTICATED", "model not found", "does not exist"]):
+                print(f"❌ RAGAS model {model_name} has serious error, skipping: {e}")
+                continue
+            print(f"⚠️ RAGAS model {model_name} transient error, trying next: {e}")
+            continue
+
+    if evaluator_llm is None:
+        print("⚡ All RAGAS models unavailable. Skipping evaluation.")
+        return {}
     
     # Embeddings stay strictly Gemini
     evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=embedding_api_key)

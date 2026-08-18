@@ -93,7 +93,8 @@ class LegalReasoningService:
         """
 
     # Model Cascade: Tries the Admin-selected model, then falls back to reliable defaults if it fails
-    model_candidates = [selected_llm, "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+    # Ordered by: user preference -> NVIDIA (best free tier for legal) -> Gemini flash-lite (fast) -> Gemini flash (fallback)
+    model_candidates = [selected_llm, "nvidia/nemotron-3-ultra", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
 
     for model_name in model_candidates:
       try:
@@ -110,15 +111,32 @@ class LegalReasoningService:
         if match:
           evaluated_array = json.loads(match.group(0))
 
-          if isinstance(evaluated_array, list) and len(evaluated_array) == len(normalized_clauses):
-            print(f"✅ Successfully batch-evaluated all {len(evaluated_array)} clauses in 1 call using model: {model_name}")
-            return evaluated_array
-          elif isinstance(evaluated_array, list) and len(evaluated_array) > 0:
-            print(f"✅ Batch evaluated {len(evaluated_array)} clauses using model: {model_name}")
-            return evaluated_array
-            
+          # Validate that all elements are dicts with required keys
+          if isinstance(evaluated_array, list):
+            valid_clauses = []
+            for item in evaluated_array:
+              if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
+                valid_clauses.append(item)
+              elif isinstance(item, str):
+                print(f"⚠️ Skipping string item in response: {item[:100]}")
+                continue
+
+            if len(valid_clauses) == len(normalized_clauses):
+              print(f"✅ Successfully batch-evaluated all {len(valid_clauses)} clauses in 1 call using model: {model_name}")
+              return valid_clauses
+            elif len(valid_clauses) > 0:
+              print(f"✅ Batch evaluated {len(valid_clauses)} valid clauses using model: {model_name}")
+              return valid_clauses
+
       except Exception as e:
-        print(f"⚠️ Batch reasoning model {model_name} failed: {e}. Trying next candidate in cascade...")
+        error_str = str(e)
+        # Only skip model if it's a SERIOUS error (invalid key, model not found, auth error)
+        # Don't skip for rate limits (429) - those are temporary
+        if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED", "UNAUTHENTICATED", "model not found", "does not exist"]):
+          print(f"❌ Model {model_name} has serious error, skipping: {e}")
+          continue
+        # For rate limits (429) and other transient errors, log but continue to next model
+        print(f"⚠️ Model {model_name} transient error, trying next: {e}")
         continue
 
     print("⚡ All reasoning models rate-limited or unavailable. Retaining normalized clause defaults.")

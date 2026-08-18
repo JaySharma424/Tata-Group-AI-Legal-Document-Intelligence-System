@@ -125,7 +125,8 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
 
   # Try user's selected model first, then safely cascade back to Gemini if it fails (e.g., bad API key)
   # Updated to use current available Gemini models (2.5-flash is deprecated)
-  ordered_candidates = [selected_llm, "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+  # Ordered by: user preference -> NVIDIA (best free tier for legal) -> Gemini flash-lite (fast) -> Gemini flash (fallback)
+  ordered_candidates = [selected_llm, "nvidia/nemotron-3-ultra", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
 
   raw_clauses = []
   for model_name in ordered_candidates:
@@ -139,11 +140,30 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
       match = re.search(r"\[.*\]", text_res.strip(), re.DOTALL)
       if match:
         parsed = json.loads(match.group(0))
-        if isinstance(parsed, list) and len(parsed) > 0:
-          raw_clauses = parsed
-          break
+
+        # Validate that all elements are dicts with required keys
+        if isinstance(parsed, list):
+          valid_clauses = []
+          for item in parsed:
+            if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
+              valid_clauses.append(item)
+            elif isinstance(item, str):
+              print(f"⚠️ Skipping string item in response: {item[:100]}")
+              continue
+
+          if len(valid_clauses) > 0:
+            raw_clauses = valid_clauses
+            print(f"✅ Successfully extracted {len(raw_clauses)} valid clauses using model: {model_name}")
+            break  # STOP cascade on first success
     except Exception as e:
-      print(f"Extraction failed for model {model_name}: {e}")
+      error_str = str(e)
+      # Only skip model if it's a SERIOUS error (invalid key, model not found, auth error)
+      # Don't skip for rate limits (429) - those are temporary
+      if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED", "UNAUTHENTICATED", "model not found", "does not exist"]):
+        print(f"❌ Model {model_name} has serious error, skipping: {e}")
+        continue
+      # For rate limits (429) and other transient errors, log but continue to next model
+      print(f"⚠️ Model {model_name} transient error, trying next: {e}")
       continue
 
   if not raw_clauses:
