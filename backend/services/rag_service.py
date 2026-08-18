@@ -27,13 +27,23 @@ class RAGKnowledgeService:
         self.vector_dim = 768  # Enforced 768-dim vector size
         self.is_seeding = False  # Prevent concurrent seeding attempts
 
-        # --- DYNAMIC LLM CONFIGURATION ---
+        # --- 🚀 STRICT GOOGLE API KEY ISOLATION FOR EMBEDDINGS ---
+        google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         config = get_llm_config()
-        api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
+        db_key = config.get("api_key", "")
+        
+        # Only use database key for Google embeddings if it is an actual Google API key
+        if db_key and not db_key.startswith("nvapi-") and not db_key.startswith("sk-") and not db_key.startswith("gsk_"):
+            google_key = db_key
 
-        if api_key:
-            self.client = genai.Client(api_key=api_key)
-            self.has_api_key = True
+        if google_key:
+            try:
+                self.client = genai.Client(api_key=google_key)
+                self.has_api_key = True
+            except Exception as e:
+                print(f"[WARN] Failed to initialize Google GenAI Client: {e}")
+                self.client = None
+                self.has_api_key = False
         else:
             self.client = None
             self.has_api_key = False
@@ -53,7 +63,6 @@ class RAGKnowledgeService:
                 print(f"[WARN] Failed to connect to Qdrant Cloud: {e}. Falling back to in-memory.")
                 self.qdrant = QdrantClient(":memory:")
         else:
-            # Use in-memory for local development to avoid locking issues
             print("[INFO] Using in-memory Qdrant for local development")
             self.qdrant = QdrantClient(":memory:")
 
@@ -88,28 +97,32 @@ class RAGKnowledgeService:
 
     def _get_embedding(self, text: str, retries: int = 3) -> List[float]:
         """Generates strictly 768-dim vector embeddings using robust fallback models."""
-        if not self.has_api_key or not text.strip():
+        if not self.has_api_key or not self.client or not text.strip():
             return [0.0] * self.vector_dim
 
         config = get_llm_config()
         active_embedding_model = config.get("embedding_model", "gemini-embedding-001")
-        candidate_models = [active_embedding_model, "gemini-embedding-001"]
+        candidate_models = [active_embedding_model, "text-embedding-004", "gemini-embedding-001"]
+        
+        seen = set()
+        candidates = [m for m in candidate_models if m and not (m in seen or seen.add(m))]
 
-        for model_name in candidate_models:
+        for model_name in candidates:
             for attempt in range(retries):
                 try:
                     response = self.client.models.embed_content(
-                        model=model_name, contents=text, config=types.EmbedContentConfig()
+                        model=model_name, contents=text[:2000], config=types.EmbedContentConfig()
                     )
-                    embedding = response.embeddings[0].values
-                    if len(embedding) == self.vector_dim:
-                        return embedding
-                    elif len(embedding) < self.vector_dim:
-                        return embedding + [0.0] * (self.vector_dim - len(embedding))
-                    else:
-                        return embedding[:self.vector_dim]
+                    if response and response.embeddings and len(response.embeddings) > 0:
+                        embedding = list(response.embeddings[0].values)
+                        if len(embedding) == self.vector_dim:
+                            return embedding
+                        elif len(embedding) < self.vector_dim:
+                            return embedding + [0.0] * (self.vector_dim - len(embedding))
+                        else:
+                            return embedding[:self.vector_dim]
                 except Exception as e:
-                    if attempt == retries - 1 and model_name == candidate_models[-1]:
+                    if attempt == retries - 1 and model_name == candidates[-1]:
                         print(f"[WARN] All embedding models failed: {e}")
                         return [0.0] * self.vector_dim
                     time.sleep(0.5 * (attempt + 1))
@@ -129,6 +142,7 @@ class RAGKnowledgeService:
                 with open(self.csv_path, "r", encoding="utf-8") as f:
                     reader = csv.DictReader(f)
                     for row in reader:
+                        ref_id = row.get("reference_id") or row.get("ref_id") or f"TAX-{point_id+1}"
                         text = f"Risk Category: {row.get('Category', '')}. Subcategory: {row.get('Subcategory', '')}. Description: {row.get('Description', '')}. Legal Basis: {row.get('Legal_Basis', '')}. Mitigation: {row.get('Mitigation', '')}"
                         embedding = self._get_embedding(text)
                         points.append(
@@ -136,6 +150,7 @@ class RAGKnowledgeService:
                                 id=point_id,
                                 vector=embedding,
                                 payload={
+                                    "ref": ref_id,
                                     "source": "risk_taxonomy",
                                     "category": row.get("Category", ""),
                                     "subcategory": row.get("Subcategory", ""),
@@ -145,21 +160,25 @@ class RAGKnowledgeService:
                         )
                         point_id += 1
 
-            # Seed from KB markdown files
+            # Seed from KB markdown/txt files
             if os.path.exists(self.kb_dir):
-                for md_file in glob.glob(os.path.join(self.kb_dir, "*.md")):
-                    with open(md_file, "r", encoding="utf-8") as f:
+                for file_path in glob.glob(os.path.join(self.kb_dir, "*.*")):
+                    if not (file_path.endswith('.md') or file_path.endswith('.txt')):
+                        continue
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                         content = f.read()
                     chunks = self._chunk_text(content, chunk_size=800, overlap=100)
-                    for chunk in chunks:
+                    for idx, chunk in enumerate(chunks):
+                        ref_id = f"KB-{os.path.basename(file_path).upper()[:8]}-{idx+1}"
                         embedding = self._get_embedding(chunk)
                         points.append(
                             PointStruct(
                                 id=point_id,
                                 vector=embedding,
                                 payload={
+                                    "ref": ref_id,
                                     "source": "knowledge_base",
-                                    "file": os.path.basename(md_file),
+                                    "file": os.path.basename(file_path),
                                     "text": chunk,
                                 },
                             )
@@ -186,7 +205,7 @@ class RAGKnowledgeService:
 
     def semantic_search(self, query: str, top_k: int = 5, filters: Optional[Dict] = None) -> List[Dict]:
         """Performs semantic search with optional metadata filters."""
-        query_vector = self._get_embedding(query)
+        query_vector = self._get_embedding(query[:1000])
 
         qdrant_filter = None
         if filters:
@@ -205,6 +224,7 @@ class RAGKnowledgeService:
             )
             return [
                 {
+                    "ref": r.payload.get("ref", "CLS-GEN-020"),
                     "text": r.payload.get("text", ""),
                     "score": r.score,
                     "source": r.payload.get("source", ""),
@@ -217,17 +237,23 @@ class RAGKnowledgeService:
             print(f"[WARN] Search error: {e}")
             return []
 
+    # Alias to ensure backwards compatibility with any other callers
+    def retrieve_context(self, query_text: str, top_k: int = 3, category_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        filters = {"category": category_filter} if category_filter else None
+        return self.semantic_search(query_text, top_k=top_k, filters=filters)
+
     def upsert_document_knowledge(self, doc_id: str, clauses: List[Dict]):
         """Upserts clause-level knowledge from analyzed documents."""
         points = []
         for i, clause in enumerate(clauses):
-            text = f"Clause Type: {clause.get('clause_type', 'Unknown')}. Risk: {clause.get('risk_level', 'Unknown')}. Text: {clause.get('text', '')[:500]}"
+            text = f"Clause Type: {clause.get('clause_type', 'Unknown')}. Risk: {clause.get('risk_level', 'Unknown')}. Text: {clause.get('extracted_text', '')[:500]}"
             embedding = self._get_embedding(text)
             points.append(
                 PointStruct(
                     id=hash(f"{doc_id}_{i}") % (2**31),
                     vector=embedding,
                     payload={
+                        "ref": clause.get("rag_reference_used", f"DOC-{doc_id[:6]}-{i+1}"),
                         "source": "document_analysis",
                         "doc_id": doc_id,
                         "clause_type": clause.get("clause_type", ""),
