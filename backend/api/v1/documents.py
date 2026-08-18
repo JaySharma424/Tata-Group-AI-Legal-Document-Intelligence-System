@@ -46,6 +46,7 @@ def sanitize_text(val: str) -> str:
 
 # 🚀 NEW: Helper to securely mask the API key
 def mask_key_suffix(key_str: str) -> str:
+    """Mask API key suffix for safe UI display - shows only last 4 characters."""
     if not key_str or len(key_str) < 4:
         return "...N/A"
     return f"...{key_str[-4:]}"

@@ -15,7 +15,7 @@ AUTHORIZED_ADMIN_EMAILS = [
 def check_is_admin(user: UserModel) -> bool:
     email_lower = user.email.lower() if user.email else ""
     is_role_admin = user.role in ["Admin", "General Counsel", "Senior Reviewer"]
-    is_email_admin = email_lower in AUTHORIZED_ADMIN_EMAILS or "admin" in email_lower
+    is_email_admin = email_lower in AUTHORIZED_ADMIN_EMAILS
     return is_role_admin or is_email_admin
 
 @router.get("/console/high-risk")
