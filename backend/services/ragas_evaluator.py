@@ -1,9 +1,6 @@
-import time
-import asyncio
+import os
 import math
-import re
-from typing import List, Dict, Any
-from datasets import Dataset
+import asyncio
 import warnings
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -18,85 +15,11 @@ if "langchain_community.chat_models.vertexai" not in sys.modules:
 
 from ragas import evaluate
 from ragas.run_config import RunConfig
-from ragas.metrics import (
-    faithfulness,
-    answer_relevancy,
-    context_precision,
-    context_recall
-)
+from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage
-from langchain_core.outputs import ChatResult
-
 from backend.services.llm_config import get_llm_config
 
-def clean_json_output(raw_text: Any) -> str:
-    if isinstance(raw_text, list):
-        raw_text = "".join([str(item.get("text", item)) if isinstance(item, dict) else str(item) for item in raw_text])
-    text = str(raw_text).strip()
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    
-    md_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
-    if md_match: text = md_match.group(1).strip()
-        
-    idx_list = text.find('[')
-    idx_dict = text.find('{')
-    
-    if idx_list == -1 and idx_dict == -1:
-        return text
-        
-    if idx_dict != -1 and (idx_list == -1 or idx_dict < idx_list):
-        text = text[idx_dict:]
-    else:
-        text = text[idx_list:]
-
-    text = re.sub(r',\s*$', '', text) 
-    
-    if text.count('"') % 2 != 0:
-        text += '"'
-        
-    open_braces = text.count('{') - text.count('}')
-    open_brackets = text.count('[') - text.count(']')
-    
-    if open_braces > 0:
-        text += '}' * open_braces
-    if open_brackets > 0:
-        text += ']' * open_brackets
-        
-    return text
-
-class RateLimitedLLM(BaseChatModel):
-    llm: BaseChatModel
-    
-    @property
-    def _llm_type(self) -> str: return "rate_limited_llm"
-        
-    def _generate(self, messages: List[BaseMessage], stop: List[str] | None = None, run_manager: Any | None = None, **kwargs: Any) -> ChatResult:
-        for attempt in range(2):
-            try:
-                result = self.llm._generate(messages, stop, run_manager, **kwargs)
-                for gen in result.generations:
-                    if hasattr(gen, 'text'): gen.text = clean_json_output(gen.text)
-                    if hasattr(gen, 'message') and hasattr(gen.message, 'content'): gen.message.content = clean_json_output(gen.message.content)
-                return result
-            except Exception as e:
-                if attempt < 1: time.sleep(2)
-                else: raise e
-
-    async def _agenerate(self, messages: List[BaseMessage], stop: List[str] | None = None, run_manager: Any | None = None, **kwargs: Any) -> ChatResult:
-        for attempt in range(2):
-            try:
-                result = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
-                for gen in result.generations:
-                    if hasattr(gen, 'text'): gen.text = clean_json_output(gen.text)
-                    if hasattr(gen, 'message') and hasattr(gen.message, 'content'): gen.message.content = clean_json_output(gen.message.content)
-                return result
-            except Exception as e:
-                if attempt < 1: await asyncio.sleep(2)
-                else: raise e
-
-def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
+def generate_ragas_scorecard(clauses: list) -> dict:
     if not clauses: return {}
         
     loop = asyncio.new_event_loop()
@@ -105,11 +28,9 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     config = get_llm_config()
     admin_key = config.get("api_key", "")
     eval_model_name = config.get("llm_model", "")
-    import os
     emb_model = config.get("embedding_model", "gemini-embedding-001")
     
     if not admin_key or not eval_model_name:
-        print("[WARN] No Admin API Key configured. Skipping RAGAS evaluation.")
         return {}
     
     if admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_"):
@@ -124,20 +45,18 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=google_key)
 
     model_lower = eval_model_name.lower()
+    
+    # 🚀 FIX: Pass LLMs directly to RAGAS without mutating their JSON outputs
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        base_llm = ChatNVIDIA(model=eval_model_name, api_key=admin_key, temperature=0, max_tokens=2048)
+        base_llm = ChatNVIDIA(model=eval_model_name, api_key=admin_key, temperature=0, max_tokens=2048, timeout=120)
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        # 🚀 FIX: Force Fail-Fast for RAGAS evaluation
         base_llm = ChatOpenAI(model=eval_model_name, api_key=admin_key, temperature=0, max_retries=0)
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
         gemini_target_key = admin_key if (admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_")) else google_key
-        # 🚀 FIX: Force Fail-Fast for RAGAS evaluation to prevent Sleep Trap
         base_llm = ChatGoogleGenerativeAI(model=eval_model_name, google_api_key=gemini_target_key, temperature=0, max_retries=0)
-
-    evaluator_llm = RateLimitedLLM(llm=base_llm)
 
     sample_clauses = sorted(clauses, key=lambda x: 0 if str(x.get("risk_level")).upper() == "HIGH" else 1)[:1]
     data = {"user_input": [], "retrieved_contexts": [], "response": [], "reference": []}
@@ -148,14 +67,16 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         data["response"].append(c.get("risk_rationale", ""))
         data["reference"].append(c.get('matched_policy_text', 'Standard enterprise compliance parameters.'))
 
+    from datasets import Dataset
     dataset = Dataset.from_dict(data)
     metrics = [faithfulness, answer_relevancy, context_precision, context_recall]
     
     for m in metrics:
-        m.llm = evaluator_llm
+        m.llm = base_llm 
         if hasattr(m, 'embeddings'): m.embeddings = evaluator_embeddings
 
-    run_config = RunConfig(timeout=120, max_retries=2, max_workers=2)
+    # 🚀 FIX: Prevent RAGAS from internally looping and causing 429 timeouts
+    run_config = RunConfig(timeout=120, max_retries=0, max_workers=1) 
 
     try:
         results = evaluate(dataset=dataset, metrics=metrics, run_config=run_config, raise_exceptions=False)
