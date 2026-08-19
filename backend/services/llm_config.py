@@ -1,4 +1,3 @@
-import os
 from backend.database import SessionLocal, engine
 from backend.models import SystemConfigModel
 
@@ -15,7 +14,10 @@ def ensure_system_config_table():
         pass
 
 def get_llm_config():
-    """Retrieves active LLM configuration from the PostgreSQL database."""
+    """
+    Retrieves active LLM configuration STRICTLY from the PostgreSQL database.
+    Environment variable fallbacks have been removed to ensure Admin Portal supremacy.
+    """
     db = SessionLocal()
     try:
         # Ensure table exists before querying
@@ -26,27 +28,27 @@ def get_llm_config():
             return {
                 "llm_model": config.llm_model,
                 "embedding_model": config.embedding_model,
-                "api_key": config.api_key or os.getenv("GEMINI_API_KEY", "")
+                "api_key": config.api_key  # 🚀 Removed os.getenv fallback completely
             }
 
-        # Fallback if DB is completely empty
+        # Fallback if DB is completely empty (System stays offline without a key)
         return {
-            "llm_model": "gemini-3.7-flash",
+            "llm_model": "gemini-3.5-flash",
             "embedding_model": "gemini-embedding-001",
-            "api_key": os.getenv("GEMINI_API_KEY", "")
+            "api_key": "" # 🚀 Blank by default until Admin configures it
         }
     except Exception as e:
         print(f"Database Config Read Error: {e}")
         return {
             "llm_model": "gemini-3.5-flash",
             "embedding_model": "gemini-embedding-001",
-            "api_key": os.getenv("GEMINI_API_KEY", "")
+            "api_key": ""
         }
     finally:
         db.close()
 
 def update_llm_config(new_key: str = None, llm_model: str = None, embedding_model: str = None):
-    """Updates runtime configuration and permanently persists to PostgreSQL."""
+    """Updates runtime configuration and permanently persists to PostgreSQL ONLY."""
     db = SessionLocal()
     try:
         # Ensure table exists before updating
@@ -61,7 +63,7 @@ def update_llm_config(new_key: str = None, llm_model: str = None, embedding_mode
         # Update the provided values
         if new_key and new_key.strip():
             config.api_key = new_key.strip()
-            os.environ["GEMINI_API_KEY"] = new_key.strip() # Keep env updated for immediate access
+            # 🚀 Removed os.environ overwrite to prevent cross-contamination of keys
 
         if llm_model and llm_model.strip():
             config.llm_model = llm_model.strip()
