@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 import logging
 import os
 from dotenv import load_dotenv
-
+from sqlalchemy import text
 from backend.database import engine, Base
 from backend import models
 from backend.api.v1.router import api_router
@@ -13,7 +13,19 @@ load_dotenv()
 
 # Issue all DDL statements to create mapped database tables if they do not exist
 Base.metadata.create_all(bind=engine)
-
+def ensure_database_schema_upgrades():
+    """Automatically adds missing columns (like proposed_redline) to live PostgreSQL tables."""
+    try:
+        with engine.begin() as connection:
+            # Check and add proposed_redline column to extracted_clauses if missing
+            connection.execute(text("""
+                ALTER TABLE extracted_clauses 
+                ADD COLUMN IF NOT EXISTS proposed_redline TEXT;
+            """))
+            print("✅ Database schema verified: 'proposed_redline' column exists.")
+    except Exception as e:
+        print(f"⚠️ Schema migration notice: {e}")
+ensure_database_schema_upgrades()
 app = FastAPI(title="Tata AI Legal Intelligence API", version="1.0.0")
 
 # -------------------------------------------------------------------------
