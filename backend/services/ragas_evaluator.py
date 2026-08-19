@@ -1,3 +1,4 @@
+import os
 import time
 import asyncio
 import math
@@ -112,11 +113,14 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         print("[WARN] No Admin API Key configured. Skipping RAGAS evaluation.")
         return {}
     
-    # RAGAS requires Google Embeddings. Ensure the Admin Key is a Google Key.
-    if not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_"):
+    # 🚀 RAGAS EMBEDDING FIX: Always attempt to fetch from Env if Admin key is NVIDIA
+    if admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_"):
         google_key = admin_key
     else:
-        print("[WARN] RAGAS embeddings require a Google Gemini key. The configured admin key is not a Google key. Skipping.")
+        google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
+    if not google_key:
+        print("[WARN] Missing Google API Key in Environment for Embeddings. RAGAS cannot run.")
         return {}
 
     evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=google_key)
