@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import ast
 from typing import Any, Dict, List, TypedDict
@@ -18,31 +19,29 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        # 🚀 FIX: Aggressively increased max_tokens to prevent truncation
-        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
-            return ChatGroq(model=model_name, api_key=api_key, temperature=1).invoke(prompt).content
+            return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
             
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=1).invoke(prompt)
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt)
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
-    
 
 def clean_llm_json_response(raw_text: str) -> str:
     """Heals truncated JSON arrays and strips chatty LLM preambles."""
@@ -68,6 +67,7 @@ def clean_llm_json_response(raw_text: str) -> str:
     else:
         text = text[start_brace:]
 
+    # 🚀 JSON AUTO-HEALER
     text = re.sub(r',\s*$', '', text) 
     
     if text.count('"') % 2 != 0:
@@ -123,15 +123,18 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
   api_key = config.get("api_key", "")
   selected_llm = config.get("llm_model", "")
 
+  # 🚀 TOKEN OPTIMIZATION FIX: Force extreme brevity to bypass free-tier output caps.
   prompt = f"""
-    You are Aadhya, Enterprise Legal Intelligence AI for Tata Group.
-    Analyze the document text for Business Unit: '{business_unit}' and User Role: '{user_role}'.
+    You are Aadhya, Enterprise Legal AI. Analyze the document for Business Unit: '{business_unit}' and Role: '{user_role}'.
 
-    DOCUMENT TEXT TO ANALYZE:
+    DOCUMENT TEXT:
     {ocr_text[:8000]}
 
     INSTRUCTIONS:
-    1. Extract ALL distinct, non-duplicate legal clauses present in the text.
+    1. Extract ALL distinct legal clauses present in the text.
+    2. To save token output space, keep `risk_rationale` to a maximum of 10 words.
+    3. Keep `extracted_text` concise.
+    
     Return ONLY a valid JSON array where each object contains these EXACT keys:
     - "clause_type"
     - "extracted_text"
@@ -143,7 +146,7 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
     - "obligation_owner"
     - "recommended_action"
     
-    CRITICAL INSTRUCTION: You are a JSON parser. Output NOTHING but the raw JSON array. NO explanations, NO thinking process, NO markdown.
+    CRITICAL INSTRUCTION: Output NOTHING but the raw JSON array. DO NOT STOP EARLY.
     """
 
   raw_clauses = []
