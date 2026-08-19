@@ -11,7 +11,6 @@ from backend.document_pipeline.normalization.normalization_service import Clause
 from backend.services.rag_service import RAGKnowledgeService
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    """Strictly routes tasks using Admin keys. Enforces Fail-Fast for Google to prevent hanging."""
     if not api_key or not model_name:
         raise ValueError("ADMIN_CONFIG_MISSING: No API Key or Model found in Admin Settings.")
         
@@ -23,13 +22,11 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        # 🚀 FIX: Force Fail-Fast
-        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0, max_retries=0).invoke(prompt).content
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
-        # 🚀 FIX: Force Fail-Fast
-        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0, max_retries=0).invoke(prompt).content
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key.startswith("nvapi-"):
@@ -37,16 +34,16 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
             return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
-            return ChatGroq(model=model_name, api_key=api_key, temperature=0, max_retries=0).invoke(prompt).content
+            return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
             
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        # 🚀 FIX: Prevent LangChain Sleep Trap on 429 Quota Exhaustion
-        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0, max_retries=0).invoke(prompt)
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt)
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
+    """Advanced JSON scrubber to fix unterminated strings and broken tails."""
     if not raw_text: return "[]"
     text = str(raw_text).strip()
     
@@ -69,13 +66,16 @@ def clean_llm_json_response(raw_text: str) -> str:
     else:
         text = text[start_brace:]
 
+    # 🚀 FIX: Sanitize internal quotes and newlines BEFORE parsing
+    # This prevents the "unterminated string literal" error
+    text = re.sub(r'(?<!\\)"(?=(?:[^"]*"[^"]*")*[^"]*$)', '\\"', text) # Escape rogue quotes inside strings
+    text = text.replace('\n', ' ').replace('\r', ' ') # Remove raw newlines which break JSON strings
+
     last_brace = text.rfind('}')
     if last_brace != -1:
         text = text[:last_brace+1]
-        
         if is_list:
-            if not text.endswith(']'):
-                text += ']'
+            if not text.endswith(']'): text += ']'
         else:
             text = "[" + text + "]"
         return text
@@ -120,28 +120,13 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
   selected_llm = config.get("llm_model", "")
 
   prompt = f"""
-    You are Aadhya, Enterprise Legal AI. Analyze the document for Business Unit: '{business_unit}' and Role: '{user_role}'.
-
-    DOCUMENT TEXT:
-    {ocr_text[:8000]}
-
-    INSTRUCTIONS:
-    1. Extract ALL distinct legal clauses present in the text.
-    2. To save token output space, keep `risk_rationale` to a maximum of 10 words.
-    3. Keep `extracted_text` concise.
+    Extract clauses from document for BU: '{business_unit}'.
+    DOC: {ocr_text[:6000]}
     
-    Return ONLY a valid JSON array where each object contains these EXACT keys:
-    - "clause_type"
-    - "extracted_text"
-    - "confidence_score"
-    - "risk_level"
-    - "risk_rationale"
-    - "involved_party"
-    - "page_reference"
-    - "obligation_owner"
-    - "recommended_action"
+    Output ONLY a JSON array. Each object MUST have these EXACT keys:
+    ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "page_reference", "obligation_owner", "recommended_action"]
     
-    CRITICAL INSTRUCTION: Output NOTHING but the raw JSON array. DO NOT STOP EARLY.
+    CRITICAL: Keep "extracted_text" to max 2 sentences. Keep "risk_rationale" to max 5 words. Do not explain.
     """
 
   raw_clauses = []
