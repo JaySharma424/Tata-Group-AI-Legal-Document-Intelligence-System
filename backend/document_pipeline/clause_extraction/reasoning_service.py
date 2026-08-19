@@ -13,7 +13,7 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         nv_key = api_key if (api_key and api_key.startswith("nvapi-")) else os.getenv("NVIDIA_API_KEY")
         if not nv_key: raise ValueError("API_KEY_INVALID: No valid NVIDIA key found.")
-        return ChatNVIDIA(model=model_name, api_key=nv_key, temperature=0).invoke(prompt).content
+        return ChatNVIDIA(model=model_name, api_key=nv_key, temperature=0, max_tokens=2048).invoke(prompt).content
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
@@ -30,7 +30,7 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key and api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=2048).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
             groq_key = api_key if (api_key and api_key.startswith("gsk_")) else os.getenv("GROQ_API_KEY")
@@ -49,117 +49,10 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
-    """Bulletproof regex extraction to bypass chatty LLM preambles like [Step 1]."""
+    """Heals truncated JSON arrays and strips chatty LLM preambles."""
     if not raw_text: return "[]"
     text = str(raw_text).strip()
+    
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     
-    md_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
-    if md_match:
-        text = md_match.group(1).strip()
-        
-    list_match = re.search(r"\[\s*\{.*?\}\s*\]", text, re.DOTALL)
-    if list_match: return list_match.group(0)
-        
-    dict_match = re.search(r"\{\s*\".*?\".*?\}", text, re.DOTALL)
-    if dict_match: return "[" + dict_match.group(0) + "]"
-        
-    idx_list = text.find('[')
-    idx_dict = text.find('{')
-    if idx_list != -1 and (idx_dict == -1 or idx_list < idx_dict):
-        return text[idx_list:text.rfind(']')+1]
-    elif idx_dict != -1:
-        return "[" + text[idx_dict:text.rfind('}')+1] + "]"
-        
-    return text
-
-class LegalReasoningService:
-  def evaluate_risk_and_reasoning(
-      self,
-      normalized_clauses: List[Dict[str, Any]],
-      business_unit: str,
-      user_role: str,
-  ) -> List[Dict[str, Any]]:
-    
-    if not normalized_clauses: return []
-
-    config = get_llm_config()
-    api_key = config.get("api_key", "")
-    selected_llm = config.get("llm_model", "")
-
-    clauses_json_str = json.dumps(normalized_clauses, indent=2)
-
-    prompt = f"""
-        You are Senior Legal Counsel at Tata Group evaluating contracts for the '{business_unit}' business unit from the perspective of a '{user_role}'.
-        Analyze the following array of normalized contract clauses:
-        {clauses_json_str}
-        
-        INSTRUCTIONS:
-        1. Determine the risk level strictly as: "HIGH", "MEDIUM", or "LOW".
-        2. Provide a professional legal rationale explaining exposure.
-        3. Specify the appropriate RAG policy reference ID cited from the context.
-        4. Suggest a recommended action.
-        
-        Return ONLY a valid JSON array matching the exact length and order of the input clauses. Each object in the array MUST contain these exact keys:
-        ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"]
-        
-        CRITICAL INSTRUCTION: You are a JSON parser. Output NOTHING but the raw JSON array. NO explanations, NO thinking process, NO markdown.
-        """
-
-    # 🚀 GOAL 1 CASCADE: Try Admin Key -> Fallback to NVIDIA -> Ultimate Safety Fallback to Gemini
-    ordered_candidates = []
-    if selected_llm and api_key:
-        ordered_candidates.append(selected_llm)
-        
-    ordered_candidates.extend([
-        "nvidia/nemotron-3.5-lightning-30b-a3b",
-        "gemini-3.5-flash"
-    ])
-    
-    seen = set()
-    cascade = [m for m in ordered_candidates if m and not (m in seen or seen.add(m))]
-
-    for model_name in cascade:
-      try:
-        raw_output = _invoke_dynamic_llm(prompt, model_name, api_key)
-        text_res = clean_llm_json_response(raw_output)
-
-        if not text_res or text_res == "[]":
-            print(f"⚠️ Model {model_name} returned empty output. Trying next.")
-            continue
-
-        python_str = text_res.replace('true', 'True').replace('false', 'False').replace('null', 'None')
-        try:
-            evaluated_array = json.loads(text_res)
-        except json.JSONDecodeError:
-            try:
-                evaluated_array = ast.literal_eval(python_str)
-            except Exception as ast_err:
-                print(f"⚠️ Parsing failed for {model_name}: {ast_err}")
-                continue
-            
-        if isinstance(evaluated_array, dict): evaluated_array = [evaluated_array]
-
-        if isinstance(evaluated_array, list):
-          valid_clauses = []
-          for item in evaluated_array:
-            if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
-              valid_clauses.append(item)
-
-          if len(valid_clauses) == len(normalized_clauses):
-            print(f"✅ Successfully batch-evaluated all {len(valid_clauses)} clauses in 1 call using model: {model_name}")
-            return valid_clauses
-          elif len(valid_clauses) > 0:
-            print(f"✅ Batch evaluated {len(valid_clauses)} valid clauses using model: {model_name}")
-            return valid_clauses
-
-      except Exception as e:
-        error_str = str(e)
-        if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED"]):
-          print(f"❌ Model {model_name} failed with API error: {e}")
-          continue
-        print(f"⚠️ Model {model_name} processing error, trying next: {e}")
-        continue
-
-    print("⚡ All reasoning models rate-limited or unavailable. Retaining normalized clause defaults.")
-    return normalized_clauses
+    md_match = re.search(r"```(?:json)?\s*(.*?)\s*
