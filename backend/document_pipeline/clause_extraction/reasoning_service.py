@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from backend.services.llm_config import get_llm_config
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
+    """Strictly routes tasks using ONLY the Admin-provided API key."""
     if not api_key or not model_name:
         raise ValueError("ADMIN_CONFIG_MISSING: No API Key or Model found in Admin Settings.")
         
@@ -38,44 +39,43 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
-def clean_llm_json_response(raw_text: str) -> str:
-    """Advanced JSON scrubber to fix unterminated strings and broken tails."""
-    if not raw_text: return "[]"
-    text = str(raw_text).strip()
+def robust_json_harvester(raw_text: str) -> List[Dict[str, Any]]:
+    """
+    The 'Object Harvester': Bypasses array-level syntax errors (like missing commas)
+    by extracting and parsing individual JSON objects one by one.
+    """
+    if not raw_text: return []
     
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    
+    text = re.sub(r"<think>.*?</think>", "", str(raw_text), flags=re.DOTALL)
     md_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
-    if md_match:
-        text = md_match.group(1).strip()
-        
-    start_idx = text.find('[')
-    start_brace = text.find('{')
+    if md_match: text = md_match.group(1)
+
+    extracted_objects = []
+    depth = 0
+    start_idx = -1
     
-    if start_idx == -1 and start_brace == -1:
-        return "[]"
-        
-    is_list = False
-    if start_idx != -1 and (start_brace == -1 or start_idx < start_brace):
-        text = text[start_idx:]
-        is_list = True
-    else:
-        text = text[start_brace:]
-
-    # 🚀 FIX: Sanitize internal quotes and newlines BEFORE parsing
-    text = re.sub(r'(?<!\\)"(?=(?:[^"]*"[^"]*")*[^"]*$)', '\\"', text) 
-    text = text.replace('\n', ' ').replace('\r', ' ') 
-
-    last_brace = text.rfind('}')
-    if last_brace != -1:
-        text = text[:last_brace+1]
-        if is_list:
-            if not text.endswith(']'): text += ']'
-        else:
-            text = "[" + text + "]"
-        return text
-        
-    return "[]"
+    for i, char in enumerate(text):
+        if char == '{':
+            if depth == 0: start_idx = i
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0 and start_idx != -1:
+                obj_str = text[start_idx:i+1].replace('\n', ' ').replace('\r', ' ')
+                
+                try:
+                    parsed = json.loads(obj_str)
+                    extracted_objects.append(parsed)
+                except json.JSONDecodeError:
+                    try:
+                        python_str = obj_str.replace('true', 'True').replace('false', 'False').replace('null', 'None')
+                        parsed = ast.literal_eval(python_str)
+                        if isinstance(parsed, dict):
+                            extracted_objects.append(parsed)
+                    except Exception:
+                        continue 
+                        
+    return extracted_objects
 
 class LegalReasoningService:
   def evaluate_risk_and_reasoning(
@@ -110,33 +110,18 @@ class LegalReasoningService:
     if selected_llm and api_key:
       try:
         raw_output = _invoke_dynamic_llm(prompt, selected_llm, api_key)
-        text_res = clean_llm_json_response(raw_output)
+        
+        # 🚀 Use the Harvester to bypass missing commas
+        parsed_list = robust_json_harvester(raw_output)
 
-        if text_res and text_res != "[]":
-            python_str = text_res.replace('true', 'True').replace('false', 'False').replace('null', 'None')
-            try:
-                evaluated_array = json.loads(text_res)
-            except json.JSONDecodeError:
-                try:
-                    evaluated_array = ast.literal_eval(python_str)
-                except Exception as ast_err:
-                    print(f"⚠️ Parsing failed for {selected_llm}: {ast_err}")
-                    evaluated_array = None
-                
-            if isinstance(evaluated_array, dict): evaluated_array = [evaluated_array]
+        valid_clauses = [item for item in parsed_list if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item]
 
-            if isinstance(evaluated_array, list):
-              valid_clauses = []
-              for item in evaluated_array:
-                if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
-                  valid_clauses.append(item)
-
-              if len(valid_clauses) == len(normalized_clauses):
-                print(f"✅ Successfully batch-evaluated all {len(valid_clauses)} clauses in 1 call using model: {selected_llm}")
-                return valid_clauses
-              elif len(valid_clauses) > 0:
-                print(f"✅ Batch evaluated {len(valid_clauses)} valid clauses using model: {selected_llm}")
-                return valid_clauses
+        if len(valid_clauses) == len(normalized_clauses):
+            print(f"✅ Successfully batch-evaluated all {len(valid_clauses)} clauses in 1 call using model: {selected_llm}")
+            return valid_clauses
+        elif len(valid_clauses) > 0:
+            print(f"✅ Batch evaluated {len(valid_clauses)} valid clauses using model: {selected_llm}")
+            return valid_clauses
 
       except Exception as e:
           print(f"❌ Model {selected_llm} failed with API error: {e}")
