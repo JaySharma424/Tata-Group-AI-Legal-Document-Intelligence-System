@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Upload, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap,
   AlertTriangle, ArchiveX, CheckCircle, XCircle, Award, FileSearch,
-  Sparkles, BookOpen, Eye, Layers, FileText, Hash, BarChart3, Activity, Loader2
+  Sparkles, BookOpen, Eye, Layers, FileText, Hash, BarChart3
 } from 'lucide-react';
 import { PipelineVisualizer } from './PipelineVisualizer';
 import { API_BASE_URL } from '../config/api';
@@ -40,10 +40,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
   const [confidentiality, setConfidentiality] = useState('Confidential');
   const [priority, setPriority] = useState('High');
   const [loading, setLoading] = useState(false);
-  
-  // 🚀 System Status State
-  const [systemHealth, setSystemHealth] = useState<{ status: 'idle' | 'testing' | 'online' | 'offline', message: string }>({ status: 'idle', message: '' });
-
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [clauses, setClauses] = useState<any[]>([]);
@@ -51,8 +47,18 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
   const [reviewStatus, setReviewStatus] = useState<string | null>(null);
   const [reviewComments, setReviewComments] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 🚀 NEW: LLM Configuration Check & Quick-Key Setup Modal States
+  const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
+  const [runtimeApiKey, setRuntimeApiKey] = useState('');
+  const [isSavingKey, setIsSavingKey] = useState(false);
   
   const currentUser = getSessionUser();
+
+  // Check configuration status on mount
+  useEffect(() => {
+    checkLLMConfig();
+  }, []);
 
   useEffect(() => {
     if (selectedHistoryJobId) {
@@ -60,23 +66,40 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     }
   }, [selectedHistoryJobId]);
 
-  const handleTestSystemHealth = async () => {
-    setSystemHealth({ status: 'testing', message: 'Pinging AI Engine...' });
+  const checkLLMConfig = async () => {
     try {
       const token = sessionStorage.getItem('access_token');
-      const response = await axios.get(`${API_BASE_URL}/documents/system-status`, {
+      const res = await axios.get(`${API_BASE_URL}/admin/llm-config`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      setSystemHealth({ 
-        status: response.data.status === 'online' ? 'online' : 'offline', 
-        message: response.data.message 
+      setIsConfigured(res.data?.is_configured ?? false);
+    } catch (err) {
+      console.error('Failed to check LLM config:', err);
+      setIsConfigured(false);
+    }
+  };
+
+  const handleSaveQuickKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!runtimeApiKey.trim()) return;
+    setIsSavingKey(true);
+    try {
+      const token = sessionStorage.getItem('access_token');
+      await axios.post(`${API_BASE_URL}/admin/llm-config`, {
+        api_key: runtimeApiKey.trim(),
+        llm_model: "gemini-2.0-flash-lite",
+        embedding_model: "gemini-embedding-001"
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-    } catch (error: any) {
-      setSystemHealth({ 
-        status: 'offline', 
-        message: 'System Offline: Backend API is completely unreachable.' 
-      });
+      setIsConfigured(true);
+      setRuntimeApiKey('');
+      alert('Success: Active Gemini API Key configured successfully!');
+    } catch (err) {
+      console.error('Failed to save key:', err);
+      alert('Failed to save API key. Please check your credentials.');
+    } finally {
+      setIsSavingKey(false);
     }
   };
 
@@ -128,14 +151,9 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       window.dispatchEvent(new Event('audit_updated'));
       setActiveTab('ragas');
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Upload error:', error);
-      
-      if (error.response && error.response.data && error.response.data.detail) {
-        alert(`⚠️ SYSTEM OFFLINE\n\n${error.response.data.detail}`);
-      } else {
-        alert('Failed to process document through backend pipeline.');
-      }
+      alert('Failed to process document through backend pipeline.');
     } finally {
       setLoading(false);
     }
@@ -247,8 +265,50 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
   });
 
   return (
-    <div className="p-8 space-y-8 min-h-screen text-slate-200 font-sans max-w-7xl mx-auto bg-[#000D1A]">
+    <div className="p-8 space-y-8 min-h-screen text-slate-200 font-sans max-w-7xl mx-auto bg-[#000D1A] relative">
       
+      {/* 🚀 BLOCKING LLM CONFIGURATION MODAL (If API Key is missing) */}
+      {isConfigured === false && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white">LLM API Key Required</h2>
+                <p className="text-xs text-slate-400">No active Gemini API key is configured in PostgreSQL.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveQuickKey} className="space-y-3 pt-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
+                  Enter Gemini API Key
+                </label>
+                <input 
+                  type="password"
+                  value={runtimeApiKey}
+                  onChange={(e) => setRuntimeApiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  required
+                  className="w-full bg-[#001021] border border-[#002B49] rounded-xl p-3 text-sm text-white focus:border-[#00A3E0] outline-none font-mono"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSavingKey}
+                className="w-full bg-[#00A3E0] hover:bg-[#0082B3] text-[#001021] font-black py-3 rounded-xl transition-all cursor-pointer uppercase tracking-wider text-xs flex items-center justify-center gap-2"
+              >
+                {isSavingKey ? 'Configuring AI Engine...' : 'Save & Initialize Workspace'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Tata Corporate Workspace Header */}
       <div className="border-b border-[#002B49] pb-6 flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
@@ -272,36 +332,13 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
+        {/* Upload Form Panel & Pipeline Visualizer Wrapper */}
         <div className="flex flex-col gap-6">
           <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 shadow-2xl relative overflow-hidden flex flex-col justify-between">
             <div className="absolute top-0 right-0 w-32 h-32 bg-[#003B73]/10 rounded-full blur-2xl pointer-events-none"></div>
             
             <div>
-              {/* 🚀 System Health Bar */}
-              <div className="flex items-center justify-between mb-5 bg-[#001021] border border-[#002B49] rounded-xl p-2.5">
-                <div className="flex items-center gap-2 text-xs font-bold">
-                  <Activity className="w-4 h-4 text-[#00A3E0]" /> System Health
-                </div>
-                <button 
-                  type="button" 
-                  onClick={handleTestSystemHealth}
-                  className="bg-[#002B49] hover:bg-[#003B73] text-[#00A3E0] px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest font-black transition-colors"
-                >
-                  {systemHealth.status === 'testing' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Check Connection'}
-                </button>
-              </div>
-
-              {systemHealth.status !== 'idle' && systemHealth.status !== 'testing' && (
-                <div className={`mb-5 p-3 border rounded-xl text-[11px] font-mono leading-relaxed shadow-lg ${
-                  systemHealth.status === 'online' 
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
-                    : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                }`}>
-                  {systemHealth.message}
-                </div>
-              )}
-
-              <h2 className="text-xs font-black uppercase tracking-widest text-[#00A3E0] mb-5 flex items-center gap-2 mt-4 border-t border-[#002B49] pt-5">
+              <h2 className="text-xs font-black uppercase tracking-widest text-[#00A3E0] mb-5 flex items-center gap-2">
                 <Upload className="w-4 h-4 text-[#00A3E0]" /> Upload Legal Contract
               </h2>
               
@@ -388,6 +425,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           <PipelineVisualizer isAnalyzing={loading} />
         </div>
 
+        {/* Processing Metric KPI Cards */}
         <div className="lg:col-span-2 flex flex-col justify-between gap-6">
           <div className="grid grid-cols-3 gap-5">
             
@@ -423,6 +461,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
           </div>
 
+          {/* Executive PDF Report Banner */}
           <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 shadow-xl flex justify-between items-center">
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -444,6 +483,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
       </div>
 
+      {/* FOUR-SURFACE NAVIGATION TAB SWITCHER */}
       <div className="bg-[#00182C] border border-[#002B49] rounded-3xl p-8 shadow-2xl space-y-6">
         
         <div className="flex flex-wrap items-center justify-between pb-4 border-b border-[#002B49] gap-4">
@@ -500,6 +540,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           )}
         </div>
 
+        {/* TAB 1: RAGAS SCORECARD WITH KEY TRACKING */}
         {activeTab === 'ragas' && (
           <div className="space-y-6">
             <div className="bg-[#001021] p-5 rounded-xl border border-[#002B49] flex justify-between items-center text-xs shadow-md">
@@ -538,6 +579,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           </div>
         )}
 
+        {/* TAB 2: EXTRACTED CLAUSES & VECTOR RAG RISK MATRIX */}
         {activeTab === 'clauses' && (
           <div className="space-y-5">
             {clauses.length > 0 ? (
@@ -603,6 +645,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           </div>
         )}
 
+        {/* TAB 3: PAGE-BY-PAGE OCR CONFIDENCE */}
         {activeTab === 'ocr' && (
           <div className="space-y-4">
             <div className="bg-[#001021] p-4 rounded-xl border border-[#002B49] flex justify-between items-center text-xs">
@@ -645,6 +688,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           </div>
         )}
 
+        {/* TAB 4: PAGE-BY-PAGE PARSED SECTIONS */}
         {activeTab === 'parsing' && (
           <div className="space-y-4">
             <div className="bg-[#001021] p-4 rounded-xl border border-[#002B49] flex justify-between items-center text-xs">
@@ -684,6 +728,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
       </div>
 
+      {/* Human-in-the-Loop Governance Sign-Off */}
       {activeJobId && clauses.length > 0 && (
         <div className="bg-[#00182C] border border-[#002B49] rounded-3xl p-8 shadow-2xl space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
