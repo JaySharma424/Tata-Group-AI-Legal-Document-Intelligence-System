@@ -37,16 +37,14 @@ export const DocumentHistorySidebar: React.FC<SidebarProps> = ({ onSelectDocumen
   useEffect(() => {
     fetchHistory();
 
-    // 1. Listen for instant updates when Accept/Reject/Upload happens
+    // Listen for instant updates when Accept/Reject/Upload happens
     const handleAuditUpdate = () => fetchHistory();
     window.addEventListener('audit_updated', handleAuditUpdate);
 
-    // 2. Poll every 5 seconds for live database sync
-    const interval = setInterval(fetchHistory, 5000);
+    // 🚀 FIX: Hardcoded 5-second setInterval removed to stop log flooding
 
     return () => {
       window.removeEventListener('audit_updated', handleAuditUpdate);
-      clearInterval(interval);
     };
   }, []);
 
