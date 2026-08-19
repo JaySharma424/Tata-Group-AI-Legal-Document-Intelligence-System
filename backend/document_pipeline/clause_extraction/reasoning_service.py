@@ -7,7 +7,6 @@ from typing import Any, Dict, List
 from backend.services.llm_config import get_llm_config
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    """Strictly routes tasks using ONLY the Admin-provided API key."""
     if not api_key or not model_name:
         raise ValueError("ADMIN_CONFIG_MISSING: No API Key or Model found in Admin Settings.")
         
@@ -19,11 +18,11 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0, max_retries=0).invoke(prompt).content
         
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0, max_retries=0).invoke(prompt).content
         
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key.startswith("nvapi-"):
@@ -31,16 +30,16 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
             return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
-            return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+            return ChatGroq(model=model_name, api_key=api_key, temperature=0, max_retries=0).invoke(prompt).content
             
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt)
+        # 🚀 FIX: Prevent LangChain Sleep Trap on 429 Quota Exhaustion
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0, max_retries=0).invoke(prompt)
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
-    """The 'Tail-Drop Healer': Discards broken JSON tails to rescue completed objects."""
     if not raw_text: return "[]"
     text = str(raw_text).strip()
     
