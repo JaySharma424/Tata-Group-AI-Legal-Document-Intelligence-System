@@ -1,32 +1,29 @@
 import spacy
-import fitz  # PyMuPDF for true PDF page counting
+import fitz  # PyMuPDF
 
 class ParsingService:
-    # Class-level variable ensures the model is loaded only once per server lifetime
     _nlp = None
 
     @classmethod
     def _get_nlp(cls):
         if cls._nlp is None:
-            print("Loading spaCy model lazily into memory...")
-            # Load only when absolutely required
+            print("Loading spaCy model lazily...")
             cls._nlp = spacy.load("en_core_web_sm")
         return cls._nlp
 
     def parse(self, text: str, file_path: str = None, actual_confidence: float = 100.0) -> dict:
-        # 1. OPTIMIZATION: Only load and run spaCy IF you actually need the 'doc' object
-        # If parse_text() does NOT use spaCy, DELETE the following 2 lines to stop OOM crashes!
-        nlp = self._get_nlp() 
-        doc = nlp(text[:50000]) # Reduced char limit for memory safety on Render
+        # 1. Process NLP ONLY ONCE here.
+        nlp = self._get_nlp()
+        # Process the text slice once and store it in 'doc'
+        doc = nlp(text[:50000]) 
         
-        # 2. Pass the 'doc' if your parse_text needs it, otherwise just pass text
+        # 2. Pass that 'doc' object to parse_text to reuse the work
         raw_result = self.parse_text(text, doc=doc) 
         
-        # 3. Calculate PDF page count efficiently (Memory safe)
+        # 3. Calculate PDF page count
         page_count = 1
         if file_path and file_path.lower().endswith('.pdf'):
             try:
-                # Open just the metadata to get page count, don't read entire file into RAM
                 with fitz.open(file_path) as doc_handle:
                     page_count = len(doc_handle)
             except Exception as e:
@@ -40,11 +37,14 @@ class ParsingService:
             "parsed_sections": raw_result.get("parsed_sections", [])
         }
         
-    def parse_text(self, text: str) -> dict:
-        """Parses raw text into structural sections and extracts recognized entities."""
-        doc = self.nlp(text)
+    def parse_text(self, text: str, doc=None) -> dict:
+        """Parses raw text using the already processed 'doc' object."""
+        # If doc wasn't passed, fallback to processing (but avoid this to save memory!)
+        if doc is None:
+            nlp = self._get_nlp()
+            doc = nlp(text[:50000])
         
-        # Extract basic entities (Parties, Dates, Monetary values)
+        # Extract entities from the already-processed 'doc'
         entities = []
         for ent in doc.ents:
             if ent.label_ in ["ORG", "PERSON", "DATE", "MONEY"]:
