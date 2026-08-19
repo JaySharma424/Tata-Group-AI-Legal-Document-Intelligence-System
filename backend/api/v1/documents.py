@@ -297,11 +297,17 @@ async def export_remediation_docx(
     
     clause_list = [
         {
-            "clause_type": c.clause_type,
-            "extracted_text": c.extracted_text,
-            "risk_level": c.risk_level,
-            "risk_rationale": c.risk_rationale,
-            "rag_reference_used": c.rag_reference_used,
+            "clause_type": getattr(c, 'clause_type', 'General Provision'),
+            "extracted_text": getattr(c, 'extracted_text', ''),
+            "risk_level": getattr(c, 'risk_level', 'LOW'),
+            "risk_rationale": getattr(c, 'risk_rationale', 'N/A'),
+            "rag_reference_used": (
+                getattr(c, 'rag_reference_used', None) or 
+                getattr(c, 'rag_reference', None) or 
+                getattr(c, 'policy_citation', None) or 
+                getattr(c, 'reference_id', None) or 
+                "TAX-1"
+            ),
             "proposed_redline": getattr(c, 'proposed_redline', None)
         } for c in clauses
     ]
