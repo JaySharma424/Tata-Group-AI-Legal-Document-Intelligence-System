@@ -264,35 +264,67 @@ async def get_document_history(
 
 @router.get("/system-status")
 async def check_system_status(current_user: UserModel = Depends(get_current_user)):
-    """Allows normal users to ping the AI engine and verify if it's online and has quota."""
+    """Validates configured LLM keys without draining generation quotas."""
     config = get_llm_config()
     api_key = config.get("api_key", "")
     model_name = config.get("llm_model", "gemini-3.5-flash")
 
     if not api_key:
-        return {"status": "offline", "message": "System Offline: Administrator has not configured an AI API Key."}
+        return {
+            "status": "offline",
+            "message": "System Offline: Administrator has not configured an AI API Key."
+        }
+
+    # Format sanity check
+    model_lower = model_name.lower()
+    if ("nvidia" in model_lower or "nemotron" in model_lower) and not api_key.startswith("nvapi-"):
+        return {
+            "status": "offline",
+            "message": "Configuration Warning: Selected NVIDIA model requires an 'nvapi-' API key."
+        }
+    if "gpt" in model_lower and not api_key.startswith("sk-"):
+        return {
+            "status": "offline",
+            "message": "Configuration Warning: Selected OpenAI model requires an 'sk-' API key."
+        }
 
     try:
-        model_lower = model_name.lower()
         if "nvidia" in model_lower or "nemotron" in model_lower:
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            ChatNVIDIA(model=model_name, api_key=api_key, max_tokens=10).invoke("Test")
+            ChatNVIDIA(model=model_name, api_key=api_key, max_tokens=5).invoke("ping")
         elif "gpt" in model_lower:
             from langchain_openai import ChatOpenAI
-            ChatOpenAI(model=model_name, api_key=api_key, max_tokens=10).invoke("Test")
+            ChatOpenAI(model=model_name, api_key=api_key, max_tokens=5, max_retries=0).invoke("ping")
         else:
             from langchain_google_genai import ChatGoogleGenerativeAI
-            ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, max_tokens=10).invoke("Test")
+            # Use max_retries=0 and a 1-token query to avoid consuming throughput
+            ChatGoogleGenerativeAI(
+                model=model_name,
+                google_api_key=api_key,
+                max_tokens=1,
+                max_retries=0
+            ).invoke("ping")
         
-        return {"status": "online", "message": f"System Online: {model_name} is active and ready."}
+        return {
+            "status": "online",
+            "message": f"System Online: {model_name} is active and ready."
+        }
     except Exception as e:
         error_str = str(e)
         if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-            return {"status": "offline", "message": "System Offline: The AI's daily quota has been exhausted. Admin must provide a fresh key."}
-        elif "API_KEY_INVALID" in error_str or "401" in error_str or "403" in error_str:
-            return {"status": "offline", "message": "System Offline: The configured API key is invalid or expired."}
-        return {"status": "offline", "message": f"System Offline: API Connectivity Issue. Please notify Admin."}
-
+            return {
+                "status": "online",
+                "message": f"System Active ({model_name}): Key registered, but currently rate-limited. Wait ~30s before running document analysis."
+            }
+        elif any(auth_err in error_str for auth_err in ["API_KEY_INVALID", "401", "403"]):
+            return {
+                "status": "offline",
+                "message": "System Offline: The configured API key is invalid or expired."
+            }
+        return {
+            "status": "offline",
+            "message": f"System Offline: API connectivity error ({error_str[:60]})."
+        }
 
 @router.get("/{document_id}")
 async def get_document_details(
