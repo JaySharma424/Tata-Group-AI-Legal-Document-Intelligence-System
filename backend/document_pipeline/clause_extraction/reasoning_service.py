@@ -34,12 +34,12 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
             
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        # 🚀 FIX: Prevent LangChain Sleep Trap on 429 Quota Exhaustion
         response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0, max_retries=0).invoke(prompt)
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
+    """Advanced JSON scrubber to fix unterminated strings and broken tails."""
     if not raw_text: return "[]"
     text = str(raw_text).strip()
     
@@ -62,13 +62,15 @@ def clean_llm_json_response(raw_text: str) -> str:
     else:
         text = text[start_brace:]
 
+    # 🚀 FIX: Sanitize internal quotes and newlines BEFORE parsing
+    text = re.sub(r'(?<!\\)"(?=(?:[^"]*"[^"]*")*[^"]*$)', '\\"', text) 
+    text = text.replace('\n', ' ').replace('\r', ' ') 
+
     last_brace = text.rfind('}')
     if last_brace != -1:
         text = text[:last_brace+1]
-        
         if is_list:
-            if not text.endswith(']'):
-                text += ']'
+            if not text.endswith(']'): text += ']'
         else:
             text = "[" + text + "]"
         return text
@@ -92,20 +94,17 @@ class LegalReasoningService:
     clauses_json_str = json.dumps(normalized_clauses, indent=2)
 
     prompt = f"""
-        You are Senior Legal Counsel at Tata Group evaluating contracts for '{business_unit}'.
-        Analyze the following array of normalized contract clauses:
-        {clauses_json_str}
+        Evaluate contracts for '{business_unit}'.
+        Clauses: {clauses_json_str}
         
         INSTRUCTIONS:
-        1. Determine the risk level strictly as: "HIGH", "MEDIUM", or "LOW".
-        2. Keep `risk_rationale` to a maximum of 10 words.
-        3. Specify the appropriate RAG policy reference ID cited from the context.
-        4. Suggest a recommended action.
+        1. Determine risk: "HIGH", "MEDIUM", or "LOW".
+        2. Keep `risk_rationale` to max 5 words.
         
-        Return ONLY a valid JSON array matching the exact length and order of the input clauses. Each object MUST contain these exact keys:
+        Return ONLY a JSON array matching the exact length/order of the input. Each object MUST contain these keys:
         ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"]
         
-        CRITICAL INSTRUCTION: Output NOTHING but the raw JSON array. DO NOT STOP EARLY.
+        CRITICAL: Output NOTHING but the raw JSON array. DO NOT STOP EARLY.
         """
 
     if selected_llm and api_key:
