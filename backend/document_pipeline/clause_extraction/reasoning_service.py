@@ -1,5 +1,4 @@
 import json
-import os
 import re
 import ast
 from typing import Any, Dict, List
@@ -7,44 +6,35 @@ from typing import Any, Dict, List
 from backend.services.llm_config import get_llm_config
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
+    """Strictly routes tasks using ONLY the Admin-provided API key."""
+    if not api_key or not model_name:
+        raise ValueError("ADMIN_CONFIG_MISSING: No API Key or Model found in Admin Settings.")
+        
     model_lower = model_name.lower()
     
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        nv_key = api_key if (api_key and api_key.startswith("nvapi-")) else os.getenv("NVIDIA_API_KEY")
-        if not nv_key: raise ValueError("API_KEY_INVALID: No valid NVIDIA key found.")
-        return ChatNVIDIA(model=model_name, api_key=nv_key, temperature=0, max_tokens=2048).invoke(prompt).content
+        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=2048).invoke(prompt).content
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        sk_key = api_key if (api_key and api_key.startswith("sk-") and not api_key.startswith("sk-ant-")) else os.getenv("OPENAI_API_KEY")
-        if not sk_key: raise ValueError("API_KEY_INVALID: No valid OpenAI key found.")
-        return ChatOpenAI(model=model_name, api_key=sk_key, temperature=0).invoke(prompt).content
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
         
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
-        ant_key = api_key if (api_key and api_key.startswith("sk-ant-")) else os.getenv("ANTHROPIC_API_KEY")
-        if not ant_key: raise ValueError("API_KEY_INVALID: No valid Anthropic key found.")
-        return ChatAnthropic(model=model_name, api_key=ant_key, temperature=0).invoke(prompt).content
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
         
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
-        if api_key and api_key.startswith("nvapi-"):
+        if api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
             return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=2048).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
-            groq_key = api_key if (api_key and api_key.startswith("gsk_")) else os.getenv("GROQ_API_KEY")
-            if not groq_key: raise ValueError("API_KEY_INVALID: No valid Groq key found.")
-            return ChatGroq(model=model_name, api_key=groq_key, temperature=0).invoke(prompt).content
+            return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
             
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        if api_key and not api_key.startswith("nvapi-") and not api_key.startswith("sk-") and not api_key.startswith("gsk_"):
-            gemini_key = api_key
-        if not gemini_key: raise ValueError("API_KEY_INVALID: No valid Google key found.")
-            
-        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=gemini_key, temperature=0).invoke(prompt)
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt)
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
@@ -72,10 +62,8 @@ def clean_llm_json_response(raw_text: str) -> str:
     else:
         text = text[start_brace:]
 
-    # 🚀 JSON AUTO-HEALER: Fixes Token Truncation Errors
-    text = re.sub(r',\s*$', '', text) # Strip dangling commas
+    text = re.sub(r',\s*$', '', text) 
     
-    # Close unclosed strings
     if text.count('"') % 2 != 0:
         text += '"'
         
@@ -125,57 +113,39 @@ class LegalReasoningService:
         CRITICAL INSTRUCTION: You are a JSON parser. Output NOTHING but the raw JSON array. NO explanations, NO thinking process, NO markdown.
         """
 
-    ordered_candidates = []
     if selected_llm and api_key:
-        ordered_candidates.append(selected_llm)
-    else:
-        ordered_candidates.append("nvidia/nemotron-3.5-lightning-30b-a3b")
-        ordered_candidates.append("gemini-3.5-flash")
-    
-    seen = set()
-    cascade = [m for m in ordered_candidates if m and not (m in seen or seen.add(m))]
-
-    for model_name in cascade:
       try:
-        raw_output = _invoke_dynamic_llm(prompt, model_name, api_key)
+        raw_output = _invoke_dynamic_llm(prompt, selected_llm, api_key)
         text_res = clean_llm_json_response(raw_output)
 
-        if not text_res or text_res == "[]":
-            print(f"⚠️ Model {model_name} returned empty output. Trying next.")
-            continue
-
-        python_str = text_res.replace('true', 'True').replace('false', 'False').replace('null', 'None')
-        try:
-            evaluated_array = json.loads(text_res)
-        except json.JSONDecodeError:
+        if text_res and text_res != "[]":
+            python_str = text_res.replace('true', 'True').replace('false', 'False').replace('null', 'None')
             try:
-                evaluated_array = ast.literal_eval(python_str)
-            except Exception as ast_err:
-                print(f"⚠️ Parsing failed for {model_name}: {ast_err}")
-                continue
-            
-        if isinstance(evaluated_array, dict): evaluated_array = [evaluated_array]
+                evaluated_array = json.loads(text_res)
+            except json.JSONDecodeError:
+                try:
+                    evaluated_array = ast.literal_eval(python_str)
+                except Exception as ast_err:
+                    print(f"⚠️ Parsing failed for {selected_llm}: {ast_err}")
+                    evaluated_array = None
+                
+            if isinstance(evaluated_array, dict): evaluated_array = [evaluated_array]
 
-        if isinstance(evaluated_array, list):
-          valid_clauses = []
-          for item in evaluated_array:
-            if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
-              valid_clauses.append(item)
+            if isinstance(evaluated_array, list):
+              valid_clauses = []
+              for item in evaluated_array:
+                if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
+                  valid_clauses.append(item)
 
-          if len(valid_clauses) == len(normalized_clauses):
-            print(f"✅ Successfully batch-evaluated all {len(valid_clauses)} clauses in 1 call using model: {model_name}")
-            return valid_clauses
-          elif len(valid_clauses) > 0:
-            print(f"✅ Batch evaluated {len(valid_clauses)} valid clauses using model: {model_name}")
-            return valid_clauses
+              if len(valid_clauses) == len(normalized_clauses):
+                print(f"✅ Successfully batch-evaluated all {len(valid_clauses)} clauses in 1 call using model: {selected_llm}")
+                return valid_clauses
+              elif len(valid_clauses) > 0:
+                print(f"✅ Batch evaluated {len(valid_clauses)} valid clauses using model: {selected_llm}")
+                return valid_clauses
 
       except Exception as e:
-        error_str = str(e)
-        if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED"]):
-          print(f"❌ Model {model_name} failed with API error: {e}")
-          continue
-        print(f"⚠️ Model {model_name} processing error, trying next: {e}")
-        continue
+          print(f"❌ Model {selected_llm} failed with API error: {e}")
 
-    print("⚡ All reasoning models rate-limited or unavailable. Retaining normalized clause defaults.")
+    print("⚡ Admin LLM configuration invalid or failed. Retaining normalized clause defaults.")
     return normalized_clauses
