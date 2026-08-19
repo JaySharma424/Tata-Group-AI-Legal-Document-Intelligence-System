@@ -79,6 +79,7 @@ def clean_llm_json_response(raw_text: str) -> str:
     # 🚀 JSON AUTO-HEALER: Fixes Token Truncation Errors
     text = re.sub(r',\s*$', '', text) # Strip dangling commas
     
+    # Close unclosed strings
     if text.count('"') % 2 != 0:
         text += '"'
         
