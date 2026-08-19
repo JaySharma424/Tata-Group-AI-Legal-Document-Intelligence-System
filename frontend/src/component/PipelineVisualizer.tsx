@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Scan, FileText, Database, Scale, FileCheck2, Loader2, CheckCircle2 } from 'lucide-react';
 
 const pipelineStages = [
@@ -35,35 +36,45 @@ export const PipelineVisualizer = ({ isAnalyzing }: { isAnalyzing: boolean }) =>
   if (!isAnalyzing) return null;
 
   return (
-    <div className="w-full bg-[#001021]/80 backdrop-blur-md border border-[#00A3E0]/30 rounded-xl p-6 mt-6 shadow-[0_0_20px_rgba(0,163,224,0.1)]">
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="w-full bg-[#001021]/90 backdrop-blur-md border border-[#00A3E0]/40 rounded-2xl p-6 mt-6 shadow-[0_0_25px_rgba(0,163,224,0.15)]"
+    >
       <h3 className="text-[#00A3E0] text-xs font-black tracking-widest mb-5 uppercase flex items-center gap-2">
-        <Loader2 className="w-4 h-4 animate-spin" /> Live Analysis Pipeline
+        <Loader2 className="w-4 h-4 animate-spin" /> Live LangGraph AI Pipeline Execution
       </h3>
-      <div className="space-y-4">
+      <div className="space-y-3.5">
         {pipelineStages.map((stage) => {
           const Icon = stage.icon;
           const isActive = activeStage === stage.id;
           const isDone = activeStage > stage.id;
           
           return (
-            <div 
-              key={stage.id} 
-              className={`flex items-center space-x-4 transition-all duration-500 ${
-                isActive || isDone ? 'opacity-100' : 'opacity-20'
+            <motion.div 
+              key={stage.id}
+              initial={{ opacity: 0.3, x: -5 }}
+              animate={{ opacity: isActive || isDone ? 1 : 0.3, x: 0 }}
+              transition={{ duration: 0.3 }}
+              className={`flex items-center space-x-4 p-3 rounded-xl border transition-all ${
+                isActive ? 'bg-[#002B49]/80 border-[#00A3E0] shadow-lg shadow-[#00A3E0]/10' : 
+                isDone ? 'bg-emerald-950/20 border-emerald-500/30' : 
+                'bg-[#001426]/50 border-[#002B49]'
               }`}
             >
               <div className={`p-2 rounded-lg border ${
                 isActive ? 'bg-[#002B49] border-[#00A3E0] text-[#00A3E0]' : 
-                isDone ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-400' : 
-                'bg-slate-800/50 border-slate-700 text-slate-500'
+                isDone ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 
+                'bg-[#001021] border-[#002B49] text-slate-600'
               }`}>
                 <Icon className="w-4 h-4" />
               </div>
               
               <div className="flex-1">
-                <span className={`text-sm ${
-                  isActive ? 'text-white font-bold' : 
-                  isDone ? 'text-emerald-400/80 font-medium' : 
+                <span className={`text-xs ${
+                  isActive ? 'text-white font-bold tracking-wide' : 
+                  isDone ? 'text-emerald-400 font-medium' : 
                   'text-slate-500 font-medium'
                 }`}>
                   {stage.label}
@@ -71,11 +82,15 @@ export const PipelineVisualizer = ({ isAnalyzing }: { isAnalyzing: boolean }) =>
               </div>
               
               {isActive && <Loader2 className="w-4 h-4 animate-spin text-[#00A3E0]" />}
-              {isDone && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-            </div>
+              {isDone && (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                </motion.div>
+              )}
+            </motion.div>
           );
         })}
       </div>
-    </div>
+    </motion.div>
   );
 };
