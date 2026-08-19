@@ -11,7 +11,7 @@ from backend.document_pipeline.normalization.normalization_service import Clause
 from backend.services.rag_service import RAGKnowledgeService
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    """Strictly routes tasks using ONLY the Admin-provided API key with maximum token horizons."""
+    """Strictly routes tasks using ONLY the Admin-provided API key."""
     if not api_key or not model_name:
         raise ValueError("ADMIN_CONFIG_MISSING: No API Key or Model found in Admin Settings.")
         
@@ -44,7 +44,7 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
-    """Heals truncated JSON arrays and strips chatty LLM preambles."""
+    """The 'Tail-Drop Healer': Discards broken JSON tails to rescue completed objects."""
     if not raw_text: return "[]"
     text = str(raw_text).strip()
     
@@ -67,24 +67,19 @@ def clean_llm_json_response(raw_text: str) -> str:
     else:
         text = text[start_brace:]
 
-    # 🚀 JSON AUTO-HEALER
-    text = re.sub(r',\s*$', '', text) 
-    
-    if text.count('"') % 2 != 0:
-        text += '"'
+    # Find the last completed object closing brace
+    last_brace = text.rfind('}')
+    if last_brace != -1:
+        text = text[:last_brace+1] # Chop off everything after the last complete object
         
-    open_braces = text.count('{') - text.count('}')
-    open_brackets = text.count('[') - text.count(']')
-    
-    if open_braces > 0:
-        text += '}' * open_braces
-    if open_brackets > 0:
-        text += ']' * open_brackets
-
-    if not is_list and text.startswith('{'):
-        return "[" + text + "]"
+        if is_list:
+            if not text.endswith(']'):
+                text += ']'
+        else:
+            text = "[" + text + "]"
+        return text
         
-    return text
+    return "[]"
 
 class LegalPipelineState(TypedDict):
   ocr_text: str
@@ -123,7 +118,6 @@ def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
   api_key = config.get("api_key", "")
   selected_llm = config.get("llm_model", "")
 
-  # 🚀 TOKEN OPTIMIZATION FIX: Force extreme brevity to bypass free-tier output caps.
   prompt = f"""
     You are Aadhya, Enterprise Legal AI. Analyze the document for Business Unit: '{business_unit}' and Role: '{user_role}'.
 
