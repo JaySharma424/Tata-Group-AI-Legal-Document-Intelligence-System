@@ -17,7 +17,47 @@ from ragas import evaluate
 from ragas.run_config import RunConfig
 from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+from langchain_core.outputs import ChatResult
 from backend.services.llm_config import get_llm_config
+
+# 🚀 FIX: Removes conversational filler ("Here is a thinking process...") from RAGAS logic
+def force_json_structure(raw_text: Any) -> str:
+    text = str(raw_text).strip()
+    idx_list = text.find('[')
+    idx_dict = text.find('{')
+    
+    if idx_list == -1 and idx_dict == -1: return text
+        
+    start_idx = min(idx_list, idx_dict) if (idx_list != -1 and idx_dict != -1) else max(idx_list, idx_dict)
+    text = text[start_idx:]
+    
+    idx_list_end = text.rfind(']')
+    idx_dict_end = text.rfind('}')
+    end_idx = max(idx_list_end, idx_dict_end)
+    
+    if end_idx != -1: text = text[:end_idx+1]
+    return text
+
+class RagasJSONWrapper(BaseChatModel):
+    llm: BaseChatModel
+    @property
+    def _llm_type(self) -> str: return "ragas_json_wrapper"
+        
+    def _generate(self, messages: List[BaseMessage], stop: List[str] | None = None, run_manager: Any | None = None, **kwargs: Any) -> ChatResult:
+        res = self.llm._generate(messages, stop, run_manager, **kwargs)
+        for g in res.generations:
+            if hasattr(g, 'text'): g.text = force_json_structure(g.text)
+            if hasattr(g, 'message') and hasattr(g.message, 'content'): g.message.content = force_json_structure(g.message.content)
+        return res
+
+    async def _agenerate(self, messages: List[BaseMessage], stop: List[str] | None = None, run_manager: Any | None = None, **kwargs: Any) -> ChatResult:
+        res = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+        for g in res.generations:
+            if hasattr(g, 'text'): g.text = force_json_structure(g.text)
+            if hasattr(g, 'message') and hasattr(g.message, 'content'): g.message.content = force_json_structure(g.message.content)
+        return res
 
 def generate_ragas_scorecard(clauses: list) -> dict:
     if not clauses: return {}
@@ -46,7 +86,6 @@ def generate_ragas_scorecard(clauses: list) -> dict:
 
     model_lower = eval_model_name.lower()
     
-    # 🚀 FIX: Pass LLMs directly to RAGAS without mutating their JSON outputs
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         base_llm = ChatNVIDIA(model=eval_model_name, api_key=admin_key, temperature=0, max_tokens=2048, timeout=120)
@@ -57,6 +96,9 @@ def generate_ragas_scorecard(clauses: list) -> dict:
         from langchain_google_genai import ChatGoogleGenerativeAI
         gemini_target_key = admin_key if (admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_")) else google_key
         base_llm = ChatGoogleGenerativeAI(model=eval_model_name, google_api_key=gemini_target_key, temperature=0, max_retries=0)
+
+    # 🚀 FIX: Wrap the LLM so RAGAS can parse NVIDIA outputs safely
+    evaluator_llm = RagasJSONWrapper(llm=base_llm)
 
     sample_clauses = sorted(clauses, key=lambda x: 0 if str(x.get("risk_level")).upper() == "HIGH" else 1)[:1]
     data = {"user_input": [], "retrieved_contexts": [], "response": [], "reference": []}
@@ -72,10 +114,9 @@ def generate_ragas_scorecard(clauses: list) -> dict:
     metrics = [faithfulness, answer_relevancy, context_precision, context_recall]
     
     for m in metrics:
-        m.llm = base_llm 
+        m.llm = evaluator_llm 
         if hasattr(m, 'embeddings'): m.embeddings = evaluator_embeddings
 
-    # 🚀 FIX: Prevent RAGAS from internally looping and causing 429 timeouts
     run_config = RunConfig(timeout=120, max_retries=0, max_workers=1) 
 
     try:
