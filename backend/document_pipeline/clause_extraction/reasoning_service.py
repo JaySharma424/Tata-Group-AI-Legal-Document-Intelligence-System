@@ -55,4 +55,127 @@ def clean_llm_json_response(raw_text: str) -> str:
     
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     
-    md_match = re.search(r"```(?:json)?\s*(.*?)\s*
+    md_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    if md_match:
+        text = md_match.group(1).strip()
+        
+    start_idx = text.find('[')
+    start_brace = text.find('{')
+    
+    if start_idx == -1 and start_brace == -1:
+        return "[]"
+        
+    is_list = False
+    if start_idx != -1 and (start_brace == -1 or start_idx < start_brace):
+        text = text[start_idx:]
+        is_list = True
+    else:
+        text = text[start_brace:]
+
+    # 🚀 JSON AUTO-HEALER: Fixes Token Truncation Errors
+    text = re.sub(r',\s*$', '', text) # Strip dangling commas
+    
+    # Close unclosed strings
+    if text.count('"') % 2 != 0:
+        text += '"'
+        
+    open_braces = text.count('{') - text.count('}')
+    open_brackets = text.count('[') - text.count(']')
+    
+    if open_braces > 0:
+        text += '}' * open_braces
+    if open_brackets > 0:
+        text += ']' * open_brackets
+
+    if not is_list and text.startswith('{'):
+        return "[" + text + "]"
+        
+    return text
+
+class LegalReasoningService:
+  def evaluate_risk_and_reasoning(
+      self,
+      normalized_clauses: List[Dict[str, Any]],
+      business_unit: str,
+      user_role: str,
+  ) -> List[Dict[str, Any]]:
+    
+    if not normalized_clauses: return []
+
+    config = get_llm_config()
+    api_key = config.get("api_key", "")
+    selected_llm = config.get("llm_model", "")
+
+    clauses_json_str = json.dumps(normalized_clauses, indent=2)
+
+    prompt = f"""
+        You are Senior Legal Counsel at Tata Group evaluating contracts for the '{business_unit}' business unit from the perspective of a '{user_role}'.
+        Analyze the following array of normalized contract clauses:
+        {clauses_json_str}
+        
+        INSTRUCTIONS:
+        1. Determine the risk level strictly as: "HIGH", "MEDIUM", or "LOW".
+        2. Provide a professional legal rationale explaining exposure.
+        3. Specify the appropriate RAG policy reference ID cited from the context.
+        4. Suggest a recommended action.
+        
+        Return ONLY a valid JSON array matching the exact length and order of the input clauses. Each object in the array MUST contain these exact keys:
+        ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"]
+        
+        CRITICAL INSTRUCTION: You are a JSON parser. Output NOTHING but the raw JSON array. NO explanations, NO thinking process, NO markdown.
+        """
+
+    ordered_candidates = []
+    if selected_llm and api_key:
+        ordered_candidates.append(selected_llm)
+    else:
+        ordered_candidates.append("nvidia/nemotron-3.5-lightning-30b-a3b")
+        ordered_candidates.append("gemini-3.5-flash")
+    
+    seen = set()
+    cascade = [m for m in ordered_candidates if m and not (m in seen or seen.add(m))]
+
+    for model_name in cascade:
+      try:
+        raw_output = _invoke_dynamic_llm(prompt, model_name, api_key)
+        text_res = clean_llm_json_response(raw_output)
+
+        if not text_res or text_res == "[]":
+            print(f"⚠️ Model {model_name} returned empty output. Trying next.")
+            continue
+
+        python_str = text_res.replace('true', 'True').replace('false', 'False').replace('null', 'None')
+        try:
+            evaluated_array = json.loads(text_res)
+        except json.JSONDecodeError:
+            try:
+                evaluated_array = ast.literal_eval(python_str)
+            except Exception as ast_err:
+                print(f"⚠️ Parsing failed for {model_name}: {ast_err}")
+                continue
+            
+        if isinstance(evaluated_array, dict): evaluated_array = [evaluated_array]
+
+        if isinstance(evaluated_array, list):
+          valid_clauses = []
+          for item in evaluated_array:
+            if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item:
+              valid_clauses.append(item)
+
+          if len(valid_clauses) == len(normalized_clauses):
+            print(f"✅ Successfully batch-evaluated all {len(valid_clauses)} clauses in 1 call using model: {model_name}")
+            return valid_clauses
+          elif len(valid_clauses) > 0:
+            print(f"✅ Batch evaluated {len(valid_clauses)} valid clauses using model: {model_name}")
+            return valid_clauses
+
+      except Exception as e:
+        error_str = str(e)
+        if any(serious in error_str for serious in ["INVALID_ARGUMENT", "API_KEY_INVALID", "NOT_FOUND", "PERMISSION_DENIED"]):
+          print(f"❌ Model {model_name} failed with API error: {e}")
+          continue
+        print(f"⚠️ Model {model_name} processing error, trying next: {e}")
+        continue
+
+    print("⚡ All reasoning models rate-limited or unavailable. Retaining normalized clause defaults.")
+    return normalized_clauses
