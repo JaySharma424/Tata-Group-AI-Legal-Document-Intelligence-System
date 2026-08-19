@@ -11,7 +11,6 @@ from backend.document_pipeline.normalization.normalization_service import Clause
 from backend.services.rag_service import RAGKnowledgeService
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    """Strictly routes tasks using ONLY the Admin-provided API key."""
     if not api_key or not model_name:
         raise ValueError("ADMIN_CONFIG_MISSING: No API Key or Model found in Admin Settings.")
         
@@ -19,37 +18,32 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=1, max_tokens=4096, timeout=180).invoke(prompt).content
+        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096, timeout=120).invoke(prompt).content
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096, timeout=120).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
-            return ChatGroq(model=model_name, api_key=api_key, temperature=1).invoke(prompt).content
+            return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
             
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=1).invoke(prompt)
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt)
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def robust_json_harvester(raw_text: str) -> List[Dict[str, Any]]:
-    """
-    The 'Object Harvester': Bypasses array-level syntax errors (like missing commas)
-    by extracting and parsing individual JSON objects one by one.
-    """
     if not raw_text: return []
-    
     text = re.sub(r"<think>.*?</think>", "", str(raw_text), flags=re.DOTALL)
     md_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
     if md_match: text = md_match.group(1)
@@ -58,7 +52,6 @@ def robust_json_harvester(raw_text: str) -> List[Dict[str, Any]]:
     depth = 0
     start_idx = -1
     
-    # Pluck individual JSON objects out of the text string
     for i, char in enumerate(text):
         if char == '{':
             if depth == 0: start_idx = i
@@ -67,21 +60,17 @@ def robust_json_harvester(raw_text: str) -> List[Dict[str, Any]]:
             depth -= 1
             if depth == 0 and start_idx != -1:
                 obj_str = text[start_idx:i+1].replace('\n', ' ').replace('\r', ' ')
-                
                 try:
-                    # Attempt standard JSON parse
                     parsed = json.loads(obj_str)
                     extracted_objects.append(parsed)
                 except json.JSONDecodeError:
                     try:
-                        # Fallback to AST literal eval for malformed boolean/nulls
                         python_str = obj_str.replace('true', 'True').replace('false', 'False').replace('null', 'None')
                         parsed = ast.literal_eval(python_str)
                         if isinstance(parsed, dict):
                             extracted_objects.append(parsed)
                     except Exception:
-                        continue # Gracefully skip the corrupted object and keep harvesting!
-                        
+                        continue 
     return extracted_objects
 
 class LegalPipelineState(TypedDict):
@@ -115,31 +104,30 @@ def deduplicate_extracted_clauses(clauses: List[Dict[str, Any]]) -> List[Dict[st
 def extract_clauses_node(state: LegalPipelineState) -> Dict[str, Any]:
   ocr_text = state.get("ocr_text", "")
   business_unit = state.get("business_unit", "Enterprise")
-  user_role = state.get("user_role", "Senior Reviewer")
 
   config = get_llm_config()
   api_key = config.get("api_key", "")
   selected_llm = config.get("llm_model", "")
 
+  # 🚀 ANTI-THINKING PROMPT: Forces AI to extract ALL clauses without wasting tokens
   prompt = f"""
-    Extract clauses from document for BU: '{business_unit}'.
+    You are a strict data extraction API. Extract EVERY SINGLE Article and Section from the document for BU: '{business_unit}'.
     DOC: {ocr_text[:6000]}
+    
+    INSTRUCTIONS:
+    1. Extract ALL distinct clauses. Do not stop early.
+    2. Keep "extracted_text" to max 2 sentences. Keep "risk_rationale" to max 5 words.
+    3. ABSOLUTELY NO PREAMBLE. NO THINKING PROCESS. Do not type "Here is the output". Start your response exactly with '['.
     
     Output ONLY a JSON array. Each object MUST have these EXACT keys:
     ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "page_reference", "obligation_owner", "recommended_action"]
-    
-    CRITICAL: Keep "extracted_text" to max 2 sentences. Keep "risk_rationale" to max 5 words. Do not explain.
     """
 
   raw_clauses = []
-  
   if selected_llm and api_key:
     try:
       raw_output = _invoke_dynamic_llm(prompt, selected_llm, api_key)
-      
-      # 🚀 Use the Harvester instead of standard parsing
       parsed_list = robust_json_harvester(raw_output)
-
       valid_clauses = [item for item in parsed_list if isinstance(item, dict) and "clause_type" in item and "extracted_text" in item]
 
       if valid_clauses:
