@@ -104,9 +104,15 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       window.dispatchEvent(new Event('audit_updated'));
       setActiveTab('ragas');
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload error:', error);
-      alert('Failed to process document through backend pipeline.');
+      
+      // 🚀 FRONTEND CATCH: Display the Gatekeeper message
+      if (error.response && error.response.data && error.response.data.detail) {
+        alert(`⚠️ SYSTEM OFFLINE\n\n${error.response.data.detail}`);
+      } else {
+        alert('Failed to process document through backend pipeline.');
+      }
     } finally {
       setLoading(false);
     }
