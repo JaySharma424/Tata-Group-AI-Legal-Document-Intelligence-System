@@ -232,7 +232,6 @@ async def get_document_history(
     current_user: UserModel = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """Filter history archive securely by the authenticated user's email."""
     query = db.query(DocumentModel)
     if current_user.role != "Admin":
         query = query.filter(DocumentModel.uploaded_by == current_user.email)
@@ -263,13 +262,44 @@ async def get_document_history(
     ]
 
 
+@router.get("/system-status")
+async def check_system_status(current_user: UserModel = Depends(get_current_user)):
+    """Allows normal users to ping the AI engine and verify if it's online and has quota."""
+    config = get_llm_config()
+    api_key = config.get("api_key", "")
+    model_name = config.get("llm_model", "gemini-3.5-flash")
+
+    if not api_key:
+        return {"status": "offline", "message": "System Offline: Administrator has not configured an AI API Key."}
+
+    try:
+        model_lower = model_name.lower()
+        if "nvidia" in model_lower or "nemotron" in model_lower:
+            from langchain_nvidia_ai_endpoints import ChatNVIDIA
+            ChatNVIDIA(model=model_name, api_key=api_key, max_tokens=10).invoke("Test")
+        elif "gpt" in model_lower:
+            from langchain_openai import ChatOpenAI
+            ChatOpenAI(model=model_name, api_key=api_key, max_tokens=10).invoke("Test")
+        else:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, max_tokens=10).invoke("Test")
+        
+        return {"status": "online", "message": f"System Online: {model_name} is active and ready."}
+    except Exception as e:
+        error_str = str(e)
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+            return {"status": "offline", "message": "System Offline: The AI's daily quota has been exhausted. Admin must provide a fresh key."}
+        elif "API_KEY_INVALID" in error_str or "401" in error_str or "403" in error_str:
+            return {"status": "offline", "message": "System Offline: The configured API key is invalid or expired."}
+        return {"status": "offline", "message": f"System Offline: API Connectivity Issue. Please notify Admin."}
+
+
 @router.get("/{document_id}")
 async def get_document_details(
     document_id: str, 
     current_user: UserModel = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """Fetches previously analyzed document details including RAGAS metrics."""
     try:
         doc = None
         try:
