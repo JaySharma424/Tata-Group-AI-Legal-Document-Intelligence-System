@@ -48,7 +48,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
   const [reviewComments, setReviewComments] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🚀 NEW: LLM Configuration Check & Quick-Key Setup Modal States
+  // LLM Configuration Check & Quick-Key Setup Modal States
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [runtimeApiKey, setRuntimeApiKey] = useState('');
   const [isSavingKey, setIsSavingKey] = useState(false);
@@ -149,7 +149,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       setClauses(safeClauses);
 
       window.dispatchEvent(new Event('audit_updated'));
-      setActiveTab('ragas');
+      setActiveTab('clauses');
 
     } catch (error) {
       console.error('Upload error:', error);
@@ -182,7 +182,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       });
       
       setClauses(safeClauses);
-      
       setReviewStatus(null);
       setReviewComments('');
     } catch (error) {
@@ -217,6 +216,33 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     } catch (error) {
       console.error("PDF download failed:", error);
       alert("Failed to download audit package.");
+    }
+  };
+
+  const handleDownloadRemediationDocx = async () => {
+    const targetId = selectedHistoryJobId || activeJobId;
+    if (!targetId) {
+      alert("Please select or analyze a document first.");
+      return;
+    }
+    const token = sessionStorage.getItem('access_token');
+    try {
+      const response = await axios.get(`${API_BASE_URL}/documents/${targetId}/export-remediation-docx`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Schedule_of_Deviations_${targetId}.docx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("DOCX download failed:", error);
+      alert("Failed to download Schedule of Deviations report.");
     }
   };
 
@@ -267,7 +293,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
   return (
     <div className="p-8 space-y-8 min-h-screen text-slate-200 font-sans max-w-7xl mx-auto bg-[#000D1A] relative">
       
-      {/* 🚀 BLOCKING LLM CONFIGURATION MODAL (If API Key is missing) */}
+      {/* BLOCKING LLM CONFIGURATION MODAL */}
       {isConfigured === false && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
           <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
@@ -332,7 +358,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Upload Form Panel & Pipeline Visualizer Wrapper */}
+        {/* Upload Form Panel & Pipeline Visualizer */}
         <div className="flex flex-col gap-6">
           <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 shadow-2xl relative overflow-hidden flex flex-col justify-between">
             <div className="absolute top-0 right-0 w-32 h-32 bg-[#003B73]/10 rounded-full blur-2xl pointer-events-none"></div>
@@ -425,7 +451,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           <PipelineVisualizer isAnalyzing={loading} />
         </div>
 
-        {/* Processing Metric KPI Cards */}
+        {/* Processing Metric KPI Cards & Export Buttons */}
         <div className="lg:col-span-2 flex flex-col justify-between gap-6">
           <div className="grid grid-cols-3 gap-5">
             
@@ -461,23 +487,33 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
           </div>
 
-          {/* Executive PDF Report Banner */}
-          <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 shadow-xl flex justify-between items-center">
+          {/* Executive Report & Remediation Export Banners */}
+          <div className="bg-[#00182C] border border-[#002B49] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Executive Compliance Report
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Compliance Reports & Remediation
               </h3>
               <p className="text-xs text-slate-400 mt-1">
-                Download certified ReportLab PDF audit package with RAG rationale and sign-offs.
+                Export certified PDF audit packages or download the automated Word (.docx) Schedule of Deviations.
               </p>
             </div>
-            <button 
-              onClick={handleDownloadPdf} 
-              disabled={!activeJobId && !selectedHistoryJobId}
-              className="bg-[#002B49] hover:bg-[#003B73] border border-[#004B87] text-white px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-[#00A3E0]" /> Export Audit PDF
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handleDownloadPdf} 
+                disabled={!activeJobId && !selectedHistoryJobId}
+                className="bg-[#002B49] hover:bg-[#003B73] border border-[#004B87] text-white px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-[#00A3E0]" /> Audit PDF
+              </button>
+              
+              <button 
+                onClick={handleDownloadRemediationDocx} 
+                disabled={!activeJobId && !selectedHistoryJobId}
+                className="bg-[#002B49] hover:bg-[#003B73] border border-[#004B87] text-white px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer"
+              >
+                <FileText className="w-4 h-4 text-[#00A3E0]" /> Schedule of Deviations (.docx)
+              </button>
+            </div>
           </div>
         </div>
 
@@ -540,7 +576,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           )}
         </div>
 
-        {/* TAB 1: RAGAS SCORECARD WITH KEY TRACKING */}
+        {/* TAB 1: RAGAS SCORECARD */}
         {activeTab === 'ragas' && (
           <div className="space-y-6">
             <div className="bg-[#001021] p-5 rounded-xl border border-[#002B49] flex justify-between items-center text-xs shadow-md">
@@ -579,7 +615,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           </div>
         )}
 
-        {/* TAB 2: EXTRACTED CLAUSES & VECTOR RAG RISK MATRIX */}
+        {/* TAB 2: EXTRACTED CLAUSES & AUTOMATED REDLINES */}
         {activeTab === 'clauses' && (
           <div className="space-y-5">
             {clauses.length > 0 ? (
@@ -631,6 +667,41 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
                         </span>
                       </div>
                     </div>
+
+                    {/* 🚀 AUTOMATED REMEDIATION: AI PROPOSED REDLINE */}
+                    {clause?.proposed_redline && (
+                      <div className="bg-[#002B49]/40 border border-[#00A3E0]/30 p-4 rounded-xl space-y-2 mt-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[11px] font-black text-[#00A3E0] uppercase tracking-wider flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5" /> AI Proposed Redline (Remediation)
+                          </span>
+                          <button 
+                            onClick={async () => {
+                              try {
+                                const token = sessionStorage.getItem('access_token');
+                                await axios.post(`${API_BASE_URL}/review/actions`, {
+                                  document_id: activeJobId,
+                                  user_email: currentUser,
+                                  action: "EDIT",
+                                  file_name: file?.name || "Contract",
+                                  edited_clauses: [{ id: clause.id, extracted_text: clause.proposed_redline }]
+                                }, { headers: { Authorization: `Bearer ${token}` } });
+                                alert("Success: AI Redline accepted and applied to clause!");
+                                loadDocumentFromHistory(activeJobId!);
+                              } catch(err) {
+                                alert("Failed to apply redline.");
+                              }
+                            }}
+                            className="px-3 py-1 bg-[#00A3E0] hover:bg-[#0082B3] text-[#001021] rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                          >
+                            Accept AI Redline
+                          </button>
+                        </div>
+                        <div className="text-[12px] text-emerald-300 font-mono bg-[#000814] p-3 rounded-lg border border-emerald-500/20 leading-relaxed">
+                          "{clause.proposed_redline}"
+                        </div>
+                      </div>
+                    )}
                     
                   </div>
                 );
@@ -645,7 +716,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           </div>
         )}
 
-        {/* TAB 3: PAGE-BY-PAGE OCR CONFIDENCE */}
+        {/* TAB 3: OCR QUALITY */}
         {activeTab === 'ocr' && (
           <div className="space-y-4">
             <div className="bg-[#001021] p-4 rounded-xl border border-[#002B49] flex justify-between items-center text-xs">
@@ -688,7 +759,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           </div>
         )}
 
-        {/* TAB 4: PAGE-BY-PAGE PARSED SECTIONS */}
+        {/* TAB 4: PARSED SECTIONS */}
         {activeTab === 'parsing' && (
           <div className="space-y-4">
             <div className="bg-[#001021] p-4 rounded-xl border border-[#002B49] flex justify-between items-center text-xs">
