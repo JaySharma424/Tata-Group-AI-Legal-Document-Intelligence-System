@@ -102,6 +102,8 @@ class ClauseModel(Base):
     risk_level = Column(String, nullable=False)
     risk_rationale = Column(String, nullable=True)
     involved_party = Column(String, nullable=True)
+    # NEW: Automated Redlining & Remediation Support
+    proposed_redline = Column(Text, nullable=True)
     
     # Expanded Clause Details (Stage 3 Gap Fix)
     page_reference = Column(String, default="N/A")
