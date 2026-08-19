@@ -19,27 +19,27 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
+        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=1, max_tokens=4096, timeout=180).invoke(prompt).content
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
         
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
         
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
+            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
-            return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
+            return ChatGroq(model=model_name, api_key=api_key, temperature=1).invoke(prompt).content
             
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt)
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=1).invoke(prompt)
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
