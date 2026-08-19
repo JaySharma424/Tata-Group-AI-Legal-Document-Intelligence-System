@@ -171,11 +171,12 @@ async def upload_document(
                 "rag_reference_used": default_kb_ref,
                 "page_reference": "N/A",
                 "obligation_owner": "N/A",
-                "recommended_action": "Review Document"
+                "recommended_action": "Review Document",
+                "proposed_redline": None
             }
         ]
 
-    # 4. Save Extracted Clauses
+    # 4. Save Extracted Clauses (Including proposed_redline)
     for clause in extracted_clauses:
         db_clause = ClauseModel(
             job_id=job_id,
@@ -187,7 +188,8 @@ async def upload_document(
             involved_party=sanitize_text(clause.get("involved_party", "Tata Group & Counterparty")),
             page_reference=sanitize_text(clause.get("page_reference", "N/A")),
             obligation_owner=sanitize_text(clause.get("obligation_owner", "N/A")),
-            recommended_action=sanitize_text(clause.get("recommended_action", "Review"))
+            recommended_action=sanitize_text(clause.get("recommended_action", "Review")),
+            proposed_redline=sanitize_text(clause.get("proposed_redline")) if clause.get("proposed_redline") else None
         )
 
         ref_val = sanitize_text(clause.get("rag_reference_used", default_kb_ref))
@@ -269,130 +271,71 @@ async def export_remediation_docx(
     current_user: Optional[UserModel] = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """Generates and downloads a Word (.docx) Schedule of Deviations and AI Redlines report."""
-    if not current_user and token:
-        try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            email = payload.get("sub")
-            current_user = db.query(UserModel).filter(UserModel.email == email).first()
-        except Exception:
-            pass
+    """Generates and downloads a Word (.docx) Schedule of Deviations and AI Redlines report safely."""
+    try:
+        if not current_user and token:
+            try:
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                email = payload.get("sub")
+                current_user = db.query(UserModel).filter(UserModel.email == email).first()
+            except Exception:
+                pass
 
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Not authenticated")
 
-    doc = db.query(DocumentModel).filter(DocumentModel.job_id == job_id).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found.")
+        doc = db.query(DocumentModel).filter(DocumentModel.job_id == job_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found.")
+            
+        if current_user.role != "Admin" and doc.uploaded_by != current_user.email:
+             raise HTTPException(status_code=403, detail="Access denied.")
         
-    if current_user.role != "Admin" and doc.uploaded_by != current_user.email:
-         raise HTTPException(status_code=403, detail="Access denied.")
-    
-    clauses = db.query(ClauseModel).filter(ClauseModel.job_id == job_id).all()
+        clauses = db.query(ClauseModel).filter(ClauseModel.job_id == job_id).all()
 
-    doc_data = {
-        "job_id": doc.job_id,
-        "filename": doc.filename,
-    }
-    
-    clause_list = [
-        {
-            "clause_type": getattr(c, 'clause_type', 'General Provision'),
-            "extracted_text": getattr(c, 'extracted_text', ''),
-            "risk_level": getattr(c, 'risk_level', 'LOW'),
-            "risk_rationale": getattr(c, 'risk_rationale', 'N/A'),
-            "rag_reference_used": (
+        doc_data = {
+            "job_id": doc.job_id,
+            "filename": doc.filename,
+        }
+        
+        clause_list = []
+        for c in clauses:
+            ref_val = (
                 getattr(c, 'rag_reference_used', None) or 
                 getattr(c, 'rag_reference', None) or 
                 getattr(c, 'policy_citation', None) or 
                 getattr(c, 'reference_id', None) or 
                 "TAX-1"
-            ),
-            "proposed_redline": getattr(c, 'proposed_redline', None)
-        } for c in clauses
-    ]
+            )
+            clause_list.append({
+                "clause_type": getattr(c, 'clause_type', 'General Provision'),
+                "extracted_text": getattr(c, 'extracted_text', ''),
+                "risk_level": getattr(c, 'risk_level', 'LOW'),
+                "risk_rationale": getattr(c, 'risk_rationale', 'N/A'),
+                "rag_reference_used": ref_val,
+                "proposed_redline": getattr(c, 'proposed_redline', None)
+            })
 
-    base_name = doc.filename
-    for ext in ['.pdf', '.jpg', '.jpeg', '.png', '.docx', '.txt']:
-        if base_name.lower().endswith(ext):
-            base_name = base_name[:-len(ext)]
-            break
-    
-    safe_filename = sanitize_text(base_name).replace(" ", "_")
-    docx_path = os.path.join(REPORTS_DIR, f"Schedule_of_Deviations_{safe_filename}.docx")
-    
-    docx_remediation_service.generate_schedule_of_deviations(doc_data, clause_list, docx_path)
-
-    return FileResponse(
-        docx_path, 
-        media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
-        filename=f"Schedule_of_Deviations_{safe_filename}.docx"
-    )
-
-
-@router.get("/system-status")
-async def check_system_status(current_user: UserModel = Depends(get_current_user)):
-    """Validates configured LLM keys without draining generation quotas."""
-    config = get_llm_config()
-    api_key = config.get("api_key", "")
-    model_name = config.get("llm_model", "gemini-3.5-flash")
-
-    if not api_key:
-        return {
-            "status": "offline",
-            "message": "System Offline: Administrator has not configured an AI API Key."
-        }
-
-    # Format sanity check
-    model_lower = model_name.lower()
-    if ("nvidia" in model_lower or "nemotron" in model_lower) and not api_key.startswith("nvapi-"):
-        return {
-            "status": "offline",
-            "message": "Configuration Warning: Selected NVIDIA model requires an 'nvapi-' API key."
-        }
-    if "gpt" in model_lower and not api_key.startswith("sk-"):
-        return {
-            "status": "offline",
-            "message": "Configuration Warning: Selected OpenAI model requires an 'sk-' API key."
-        }
-
-    try:
-        if "nvidia" in model_lower or "nemotron" in model_lower:
-            from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            ChatNVIDIA(model=model_name, api_key=api_key, max_tokens=5).invoke("ping")
-        elif "gpt" in model_lower:
-            from langchain_openai import ChatOpenAI
-            ChatOpenAI(model=model_name, api_key=api_key, max_tokens=5, max_retries=0).invoke("ping")
-        else:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            # Use max_retries=0 and a 1-token query to avoid consuming throughput
-            ChatGoogleGenerativeAI(
-                model=model_name,
-                google_api_key=api_key,
-                max_tokens=1,
-                max_retries=0
-            ).invoke("ping")
+        base_name = doc.filename
+        for ext in ['.pdf', '.jpg', '.jpeg', '.png', '.docx', '.txt']:
+            if base_name.lower().endswith(ext):
+                base_name = base_name[:-len(ext)]
+                break
         
-        return {
-            "status": "online",
-            "message": f"System Online: {model_name} is active and ready."
-        }
+        safe_filename = sanitize_text(base_name).replace(" ", "_")
+        docx_path = os.path.join(REPORTS_DIR, f"Schedule_of_Deviations_{safe_filename}.docx")
+        
+        docx_remediation_service.generate_schedule_of_deviations(doc_data, clause_list, docx_path)
+
+        return FileResponse(
+            docx_path, 
+            media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+            filename=f"Schedule_of_Deviations_{safe_filename}.docx"
+        )
     except Exception as e:
-        error_str = str(e)
-        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-            return {
-                "status": "online",
-                "message": f"System Active ({model_name}): Key registered, but currently rate-limited. Wait ~30s before running document analysis."
-            }
-        elif any(auth_err in error_str for auth_err in ["API_KEY_INVALID", "401", "403"]):
-            return {
-                "status": "offline",
-                "message": "System Offline: The configured API key is invalid or expired."
-            }
-        return {
-            "status": "offline",
-            "message": f"System Offline: API connectivity error ({error_str[:60]})."
-        }
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate remediation report: {str(e)}")
 
 @router.get("/{document_id}")
 async def get_document_details(
@@ -453,6 +396,7 @@ async def get_document_details(
             },
             "clauses": [
                 {
+                    "id": getattr(c, "id", None),
                     "clause_type": getattr(c, "clause_type", "General Clause"),
                     "extracted_text": getattr(c, "extracted_text", ""),
                     "confidence_score": getattr(c, "confidence_score", 0.95),
@@ -467,7 +411,8 @@ async def get_document_details(
                     ),
                     "page_reference": getattr(c, "page_reference", "Section 1"),
                     "obligation_owner": getattr(c, "obligation_owner", "Both Parties"),
-                    "recommended_action": getattr(c, "recommended_action", "Review")
+                    "recommended_action": getattr(c, "recommended_action", "Review"),
+                    "proposed_redline": getattr(c, "proposed_redline", None)
                 } for c in clauses
             ]
         }
@@ -486,7 +431,6 @@ async def get_document_details(
             },
             "clauses": []
         }
-        
 
 @router.get("/{job_id}/export-pdf")
 async def export_document_pdf(
