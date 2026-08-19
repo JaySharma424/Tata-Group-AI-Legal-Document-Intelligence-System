@@ -3,6 +3,8 @@ from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 
 class DocxRemediationService:
     def generate_schedule_of_deviations(self, doc_data: dict, clauses: list, output_path: str) -> str:
@@ -34,7 +36,7 @@ class DocxRemediationService:
                     run.font.bold = True
                     run.font.size = Pt(9)
                     run.font.color.rgb = RGBColor(255, 255, 255)
-            # Set header background color
+            # Set header background color to Tata Navy
             shading_elm = parse_xml(r'<w:shd {} w:fill="002B49"/>'.format(nsdecls('w')))
             hdr_cells[i]._tc.get_or_add_tcPr().append(shading_elm)
 
