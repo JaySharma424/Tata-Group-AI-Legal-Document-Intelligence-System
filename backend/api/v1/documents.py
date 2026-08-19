@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
+from backend.document_pipeline.reporting.docx_remediation_service import DocxRemediationService
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from fastapi.concurrency import run_in_threadpool
@@ -29,7 +30,7 @@ except ImportError as e:
 from sqlalchemy import func
 
 router = APIRouter()
-
+docx_remediation_service = DocxRemediationService()
 ocr_service = OCRService()
 parsing_service = ParsingService()
 report_service = ReportService()
@@ -260,6 +261,67 @@ async def get_document_history(
         }
         for doc in documents
     ]
+
+@router.get("/{job_id}/export-remediation-docx")
+async def export_remediation_docx(
+    job_id: str, 
+    token: Optional[str] = Query(None),
+    current_user: Optional[UserModel] = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    """Generates and downloads a Word (.docx) Schedule of Deviations and AI Redlines report."""
+    if not current_user and token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            email = payload.get("sub")
+            current_user = db.query(UserModel).filter(UserModel.email == email).first()
+        except Exception:
+            pass
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    doc = db.query(DocumentModel).filter(DocumentModel.job_id == job_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found.")
+        
+    if current_user.role != "Admin" and doc.uploaded_by != current_user.email:
+         raise HTTPException(status_code=403, detail="Access denied.")
+    
+    clauses = db.query(ClauseModel).filter(ClauseModel.job_id == job_id).all()
+
+    doc_data = {
+        "job_id": doc.job_id,
+        "filename": doc.filename,
+    }
+    
+    clause_list = [
+        {
+            "clause_type": c.clause_type,
+            "extracted_text": c.extracted_text,
+            "risk_level": c.risk_level,
+            "risk_rationale": c.risk_rationale,
+            "rag_reference_used": c.rag_reference_used,
+            "proposed_redline": getattr(c, 'proposed_redline', None)
+        } for c in clauses
+    ]
+
+    base_name = doc.filename
+    for ext in ['.pdf', '.jpg', '.jpeg', '.png', '.docx', '.txt']:
+        if base_name.lower().endswith(ext):
+            base_name = base_name[:-len(ext)]
+            break
+    
+    safe_filename = sanitize_text(base_name).replace(" ", "_")
+    docx_path = os.path.join(REPORTS_DIR, f"Schedule_of_Deviations_{safe_filename}.docx")
+    
+    docx_remediation_service.generate_schedule_of_deviations(doc_data, clause_list, docx_path)
+
+    return FileResponse(
+        docx_path, 
+        media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+        filename=f"Schedule_of_Deviations_{safe_filename}.docx"
+    )
 
 
 @router.get("/system-status")
