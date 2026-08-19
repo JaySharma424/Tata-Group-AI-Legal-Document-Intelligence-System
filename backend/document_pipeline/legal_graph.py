@@ -3,7 +3,7 @@ import ast
 from typing import Dict, Any
 from langsmith import traceable
 # Assuming these services are in the same folder or properly accessible
-from .reasoning_service import _invoke_dynamic_llm, clean_llm_json_response, deduplicate_extracted_clauses
+from backend.document_pipeline.reasoning_service import _invoke_dynamic_llm, clean_llm_json_response, deduplicate_extracted_clauses
 from backend.services.llm_config import get_llm_config
 
 @traceable(name="LLM Clause Extraction Node")
