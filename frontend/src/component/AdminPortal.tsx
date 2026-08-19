@@ -86,8 +86,15 @@ export const AdminPortal: React.FC = () => {
   useEffect(() => {
     fetchAdminDocuments();
     fetchLlmConfig();
-    const interval = setInterval(fetchAdminDocuments, 5000);
-    return () => clearInterval(interval);
+
+    // 🚀 FIX: Hardcoded 5-second setInterval removed to stop log flooding
+    // Switched to event-driven sync
+    const handleAuditUpdate = () => fetchAdminDocuments();
+    window.addEventListener('audit_updated', handleAuditUpdate);
+
+    return () => {
+      window.removeEventListener('audit_updated', handleAuditUpdate);
+    };
   }, []);
 
   const handleSaveLlmConfig = async (e: React.FormEvent) => {
