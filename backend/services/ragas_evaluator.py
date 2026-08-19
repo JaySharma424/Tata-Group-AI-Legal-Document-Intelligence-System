@@ -1,4 +1,3 @@
-import os
 import time
 import asyncio
 import math
@@ -33,7 +32,6 @@ from langchain_core.outputs import ChatResult
 from backend.services.llm_config import get_llm_config
 
 def clean_json_output(raw_text: Any) -> str:
-    """Bulletproof Auto-Healing Regex for strict RAGAS JSON outputs."""
     if isinstance(raw_text, list):
         raw_text = "".join([str(item.get("text", item)) if isinstance(item, dict) else str(item) for item in raw_text])
     text = str(raw_text).strip()
@@ -107,13 +105,13 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     config = get_llm_config()
     admin_key = config.get("api_key", "")
     eval_model_name = config.get("llm_model", "")
+    import os
     emb_model = config.get("embedding_model", "gemini-embedding-001")
     
     if not admin_key or not eval_model_name:
         print("[WARN] No Admin API Key configured. Skipping RAGAS evaluation.")
         return {}
     
-    # 🚀 RAGAS EMBEDDING FIX: Always attempt to fetch from Env if Admin key is NVIDIA
     if admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_"):
         google_key = admin_key
     else:
@@ -131,10 +129,13 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
         base_llm = ChatNVIDIA(model=eval_model_name, api_key=admin_key, temperature=0, max_tokens=2048)
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        base_llm = ChatOpenAI(model=eval_model_name, api_key=admin_key, temperature=0)
+        # 🚀 FIX: Force Fail-Fast for RAGAS evaluation
+        base_llm = ChatOpenAI(model=eval_model_name, api_key=admin_key, temperature=0, max_retries=0)
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        base_llm = ChatGoogleGenerativeAI(model=eval_model_name, google_api_key=admin_key, temperature=0)
+        gemini_target_key = admin_key if (admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_")) else google_key
+        # 🚀 FIX: Force Fail-Fast for RAGAS evaluation to prevent Sleep Trap
+        base_llm = ChatGoogleGenerativeAI(model=eval_model_name, google_api_key=gemini_target_key, temperature=0, max_retries=0)
 
     evaluator_llm = RateLimitedLLM(llm=base_llm)
 
