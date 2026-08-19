@@ -53,8 +53,7 @@ def clean_json_output(raw_text: Any) -> str:
     else:
         text = text[idx_list:]
 
-    # 🚀 JSON AUTO-HEALER: Fixes Token Truncation Errors
-    text = re.sub(r',\s*$', '', text) # Strip dangling commas
+    text = re.sub(r',\s*$', '', text) 
     
     if text.count('"') % 2 != 0:
         text += '"'
@@ -112,9 +111,11 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
     
     eval_model_name = selected_llm if (admin_key and selected_llm) else "gemini-3.5-flash"
     
-    google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not google_key and admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_"):
+    # 🚀 FIX: Hard Override. If an Admin Key is provided, force it for embeddings.
+    if admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_"):
         google_key = admin_key
+    else:
+        google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
     if not google_key:
         print("[WARN] Missing Google API Key for Embeddings. RAGAS cannot run.")
