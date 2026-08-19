@@ -38,6 +38,25 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
+def clean_llm_json_response(raw_output: str) -> str:
+    """Cleans markdown code blocks and trims whitespace to isolate raw JSON strings from LLM outputs."""
+    if not raw_output:
+        return "[]"
+    
+    text = str(raw_output).strip()
+    
+    # Remove markdown code blocks (e.g., ```json ... ```)
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+        
+    return text
+
+
 def robust_json_harvester(raw_text: str) -> List[Dict[str, Any]]:
     if not raw_text: return []
     text = re.sub(r"<think>.*?</think>", "", str(raw_text), flags=re.DOTALL)
