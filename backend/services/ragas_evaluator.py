@@ -2,7 +2,8 @@ import os
 import math
 import asyncio
 import warnings
-from typing import List, Dict, Any
+from typing import List, Dict, Any # 🚀 FIX: Imported 'Any' to resolve NameError
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import sys
@@ -22,7 +23,6 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
 from backend.services.llm_config import get_llm_config
 
-# 🚀 FIX: Removes conversational filler ("Here is a thinking process...") from RAGAS logic
 def force_json_structure(raw_text: Any) -> str:
     text = str(raw_text).strip()
     idx_list = text.find('[')
@@ -97,7 +97,6 @@ def generate_ragas_scorecard(clauses: list) -> dict:
         gemini_target_key = admin_key if (admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_")) else google_key
         base_llm = ChatGoogleGenerativeAI(model=eval_model_name, google_api_key=gemini_target_key, temperature=0, max_retries=0)
 
-    # 🚀 FIX: Wrap the LLM so RAGAS can parse NVIDIA outputs safely
     evaluator_llm = RagasJSONWrapper(llm=base_llm)
 
     sample_clauses = sorted(clauses, key=lambda x: 0 if str(x.get("risk_level")).upper() == "HIGH" else 1)[:1]
