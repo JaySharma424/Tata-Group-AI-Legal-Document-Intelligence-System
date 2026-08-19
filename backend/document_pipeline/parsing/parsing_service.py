@@ -2,13 +2,14 @@ import spacy
 import fitz  # PyMuPDF for true PDF page counting
 
 class ParsingService:
-    def __init__(self):
-        # Load the English NLP model
-        try:
-            self.nlp = spacy.load("en_core_web_sm")
-            self.nlp.max_length = 5000000   
-        except OSError:
-            raise RuntimeError("spaCy model 'en_core_web_sm' not found. Please run: python -m spacy download en_core_web_sm")
+    _nlp = None
+
+    def _get_nlp(self):
+        if self._nlp is None:
+            print("Loading spaCy model lazily...")
+            # This only runs once, the first time you call parse()
+            self._nlp = spacy.load("en_core_web_sm")
+        return self._nlp
 
     # FIX: Added actual_confidence parameter with a default fallback of 100.0
     def parse(self, text: str, file_path: str = None, actual_confidence: float = 100.0) -> dict:
@@ -16,6 +17,8 @@ class ParsingService:
         Wrapper method to match documents.py expectations while 
         leveraging parse_text logic and extracting true PDF page counts.
         """
+        nlp = self._get_nlp() # Load only when needed
+        doc = nlp(text[:100000]) # Process
         raw_result = self.parse_text(text)
         
         # Calculate true page count if a valid PDF path is provided
