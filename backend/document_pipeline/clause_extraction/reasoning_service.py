@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import ast
 from typing import Any, Dict, List
@@ -6,7 +7,7 @@ from typing import Any, Dict, List
 from backend.services.llm_config import get_llm_config
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    """Strictly routes tasks using ONLY the Admin-provided API key with maximum token horizons."""
+    """Strictly routes tasks using ONLY the Admin-provided API key."""
     if not api_key or not model_name:
         raise ValueError("ADMIN_CONFIG_MISSING: No API Key or Model found in Admin Settings.")
         
@@ -14,33 +15,32 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        # 🚀 FIX: Aggressively increased max_tokens to prevent truncation
-        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         
     elif "claude" in model_lower:
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         
     elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
         if api_key.startswith("nvapi-"):
             from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=1, max_tokens=4096).invoke(prompt).content
+            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096).invoke(prompt).content
         else:
             from langchain_groq import ChatGroq
-            return ChatGroq(model=model_name, api_key=api_key, temperature=1).invoke(prompt).content
+            return ChatGroq(model=model_name, api_key=api_key, temperature=0).invoke(prompt).content
             
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=1).invoke(prompt)
+        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0).invoke(prompt)
         if isinstance(response, list): return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
 
 def clean_llm_json_response(raw_text: str) -> str:
-    """Heals truncated JSON arrays and strips chatty LLM preambles."""
+    """The 'Tail-Drop Healer': Discards broken JSON tails to rescue completed objects."""
     if not raw_text: return "[]"
     text = str(raw_text).strip()
     
@@ -63,23 +63,18 @@ def clean_llm_json_response(raw_text: str) -> str:
     else:
         text = text[start_brace:]
 
-    text = re.sub(r',\s*$', '', text) 
-    
-    if text.count('"') % 2 != 0:
-        text += '"'
+    last_brace = text.rfind('}')
+    if last_brace != -1:
+        text = text[:last_brace+1]
         
-    open_braces = text.count('{') - text.count('}')
-    open_brackets = text.count('[') - text.count(']')
-    
-    if open_braces > 0:
-        text += '}' * open_braces
-    if open_brackets > 0:
-        text += ']' * open_brackets
-
-    if not is_list and text.startswith('{'):
-        return "[" + text + "]"
+        if is_list:
+            if not text.endswith(']'):
+                text += ']'
+        else:
+            text = "[" + text + "]"
+        return text
         
-    return text
+    return "[]"
 
 class LegalReasoningService:
   def evaluate_risk_and_reasoning(
@@ -98,20 +93,20 @@ class LegalReasoningService:
     clauses_json_str = json.dumps(normalized_clauses, indent=2)
 
     prompt = f"""
-        You are Senior Legal Counsel at Tata Group evaluating contracts for the '{business_unit}' business unit from the perspective of a '{user_role}'.
+        You are Senior Legal Counsel at Tata Group evaluating contracts for '{business_unit}'.
         Analyze the following array of normalized contract clauses:
         {clauses_json_str}
         
         INSTRUCTIONS:
         1. Determine the risk level strictly as: "HIGH", "MEDIUM", or "LOW".
-        2. Provide a professional legal rationale explaining exposure.
+        2. Keep `risk_rationale` to a maximum of 10 words.
         3. Specify the appropriate RAG policy reference ID cited from the context.
         4. Suggest a recommended action.
         
-        Return ONLY a valid JSON array matching the exact length and order of the input clauses. Each object in the array MUST contain these exact keys:
+        Return ONLY a valid JSON array matching the exact length and order of the input clauses. Each object MUST contain these exact keys:
         ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"]
         
-        CRITICAL INSTRUCTION: You are a JSON parser. Output NOTHING but the raw JSON array. NO explanations, NO thinking process, NO markdown.
+        CRITICAL INSTRUCTION: Output NOTHING but the raw JSON array. DO NOT STOP EARLY.
         """
 
     if selected_llm and api_key:
