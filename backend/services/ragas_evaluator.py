@@ -1,4 +1,3 @@
-import os
 import time
 import asyncio
 import math
@@ -106,37 +105,32 @@ def generate_ragas_scorecard(clauses: List[Dict[str, Any]]) -> Dict[str, float]:
 
     config = get_llm_config()
     admin_key = config.get("api_key", "")
-    selected_llm = config.get("llm_model", "")
+    eval_model_name = config.get("llm_model", "")
     emb_model = config.get("embedding_model", "gemini-embedding-001")
     
-    eval_model_name = selected_llm if (admin_key and selected_llm) else "gemini-3.5-flash"
+    if not admin_key or not eval_model_name:
+        print("[WARN] No Admin API Key configured. Skipping RAGAS evaluation.")
+        return {}
     
-    # 🚀 FIX: Hard Override. If an Admin Key is provided, force it for embeddings.
-    if admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_"):
+    # RAGAS requires Google Embeddings. Ensure the Admin Key is a Google Key.
+    if not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_"):
         google_key = admin_key
     else:
-        google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-
-    if not google_key:
-        print("[WARN] Missing Google API Key for Embeddings. RAGAS cannot run.")
+        print("[WARN] RAGAS embeddings require a Google Gemini key. The configured admin key is not a Google key. Skipping.")
         return {}
+
     evaluator_embeddings = GoogleGenerativeAIEmbeddings(model=emb_model, google_api_key=google_key)
 
     model_lower = eval_model_name.lower()
     if "nvidia" in model_lower or "nemotron" in model_lower:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        nv_key = admin_key if (admin_key and admin_key.startswith("nvapi-")) else os.getenv("NVIDIA_API_KEY")
-        if not nv_key: return {}
-        base_llm = ChatNVIDIA(model=eval_model_name, api_key=nv_key, temperature=0, max_tokens=2048)
+        base_llm = ChatNVIDIA(model=eval_model_name, api_key=admin_key, temperature=0, max_tokens=2048)
     elif "gpt" in model_lower:
         from langchain_openai import ChatOpenAI
-        sk_key = admin_key if (admin_key and admin_key.startswith("sk-")) else os.getenv("OPENAI_API_KEY")
-        if not sk_key: return {}
-        base_llm = ChatOpenAI(model=eval_model_name, api_key=sk_key, temperature=0)
+        base_llm = ChatOpenAI(model=eval_model_name, api_key=admin_key, temperature=0)
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        gemini_target_key = admin_key if (admin_key and not admin_key.startswith("nvapi-") and not admin_key.startswith("sk-") and not admin_key.startswith("gsk_")) else google_key
-        base_llm = ChatGoogleGenerativeAI(model=eval_model_name, google_api_key=gemini_target_key, temperature=0)
+        base_llm = ChatGoogleGenerativeAI(model=eval_model_name, google_api_key=admin_key, temperature=0)
 
     evaluator_llm = RateLimitedLLM(llm=base_llm)
 
