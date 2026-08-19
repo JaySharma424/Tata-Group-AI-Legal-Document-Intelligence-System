@@ -16,13 +16,11 @@ class UserModel(Base):
     business_unit = Column(String, nullable=False)
     role = Column(String, nullable=False)
     
-    # NEW: Account status and tracking concepts
     is_active = Column(Boolean, default=True, index=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
 
-    # NEW: Relational Mappings 
     sessions = relationship("SessionModel", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLogModel", back_populates="user")
     documents_uploaded = relationship("DocumentModel", back_populates="uploader")
@@ -42,7 +40,6 @@ class SessionModel(Base):
     expires_at = Column(DateTime, nullable=False)
     is_active = Column(Boolean, default=True)
     
-    # Relationship
     user = relationship("UserModel", back_populates="sessions")
 
 
@@ -68,7 +65,6 @@ class DocumentModel(Base):
     entities_detected = Column(Integer, default=0)
     requires_manual_review = Column(Boolean, default=False)
     
-    # 🚀 NEW: RAGAS AI Confidence Metrics
     ragas_faithfulness = Column(Float, nullable=True, default=0.0)
     ragas_answer_relevancy = Column(Float, nullable=True, default=0.0)
     ragas_context_precision = Column(Float, nullable=True, default=0.0)
@@ -81,7 +77,6 @@ class DocumentModel(Base):
     uploaded_by = Column(String, ForeignKey("users.email", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
-    
     uploader = relationship("UserModel", back_populates="documents_uploaded")
     clauses = relationship("ClauseModel", back_populates="document", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLogModel", back_populates="document", cascade="all, delete-orphan")
@@ -92,8 +87,6 @@ class ClauseModel(Base):
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
-    
-    # CONCEPT FIX: Converted to a strict Foreign Key linked to DocumentModel
     job_id = Column(String, ForeignKey("documents.job_id", ondelete="CASCADE"), index=True, nullable=False)
     
     clause_type = Column(String, nullable=False)
@@ -102,20 +95,18 @@ class ClauseModel(Base):
     risk_level = Column(String, nullable=False)
     risk_rationale = Column(String, nullable=True)
     involved_party = Column(String, nullable=True)
-    # NEW: Automated Redlining & Remediation Support
-    proposed_redline = Column(Text, nullable=True)
     
-    # Expanded Clause Details (Stage 3 Gap Fix)
     page_reference = Column(String, default="N/A")
     obligation_owner = Column(String, default="N/A")
     recommended_action = Column(String, default="Review")
     
-    # CONCEPT FIX: Added Edit Tracking Capabilities
+    # 🚀 NEW: Automated Redlining & Remediation Support
+    proposed_redline = Column(Text, nullable=True)
+    
     edited_text = Column(Text, nullable=True)
     edited_at = Column(DateTime, nullable=True)
     edited_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
-    # NEW: Relational Mappings
     document = relationship("DocumentModel", back_populates="clauses")
     edited_by_user = relationship("UserModel")
 
@@ -127,23 +118,18 @@ class AuditLogModel(Base):
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
-    
-    # CONCEPT FIX: Converted to strict Foreign Keys linked to DocumentModel and UserModel
     job_id = Column(String, ForeignKey("documents.job_id", ondelete="CASCADE"), nullable=False)
     user_email = Column(String, ForeignKey("users.email", ondelete="CASCADE"), nullable=False)
     
-    action = Column(String, nullable=False)  # e.g., APPROVED, REJECTED, ESCALATED
+    action = Column(String, nullable=False)
     notes = Column(String, nullable=True)
-    
-    # Enhanced Approval Workflow (Stage 5 Gap Fix)
     reviewer_comment = Column(String, nullable=True)
     escalation_status = Column(Boolean, default=False)
-    
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
     
-    # NEW: Relational Mappings
     document = relationship("DocumentModel", back_populates="audit_logs")
     user = relationship("UserModel", back_populates="audit_logs")
+
 
 # ==================== SYSTEM CONFIGURATION ====================
 
@@ -153,15 +139,10 @@ class SystemConfigModel(Base):
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
-    config_key = Column(String, unique=True, index=True, nullable=False) # e.g., "default"
+    config_key = Column(String, unique=True, index=True, nullable=False)
     
     llm_model = Column(String, default="gemini-2.0-flash-lite")
     embedding_model = Column(String, default="gemini-embedding-001")
-    api_key = Column(String, nullable=True) # Securely stores the active key
+    api_key = Column(String, nullable=True)
     
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-    
-    
-    
-# Migration should be run separately via Alembic or a migration script
-# NOT on import to avoid startup issues
