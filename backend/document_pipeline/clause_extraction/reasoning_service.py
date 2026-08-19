@@ -86,15 +86,21 @@ class LegalReasoningService:
     clauses_json_str = json.dumps(normalized_clauses, indent=2)
 
     prompt = f"""
-        Evaluate contracts for '{business_unit}'. Clauses: {clauses_json_str}
+        You are Senior Legal Counsel at Tata Group evaluating contracts for the '{business_unit}' business unit from the perspective of a '{user_role}'.
+        Analyze the following array of normalized contract clauses and their matched corporate RAG guidelines:
+        {clauses_json_str}
         
         INSTRUCTIONS:
-        1. Determine risk: "HIGH", "MEDIUM", or "LOW".
-        2. Keep `risk_rationale` to max 5 words.
-        3. ABSOLUTELY NO PREAMBLE. NO THINKING PROCESS. Start exactly with '['.
+        1. Determine the risk level strictly as: "HIGH", "MEDIUM", or "LOW".
+        2. Provide a professional legal rationale explaining exposure.
+        3. Specify the appropriate RAG policy reference ID cited from the context.
+        4. Suggest a recommended action.
+        5. **AUTOMATED REMEDIATION:** If risk level is HIGH or MEDIUM, draft a precise "proposed_redline" contract clause written in formal legal English that fully complies with Tata corporate policies. If risk is LOW, set "proposed_redline" to null or repeat the original text.
         
-        Return ONLY a JSON array matching the exact length/order of the input. Each object MUST contain these keys:
-        ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action"]
+        Return ONLY a valid JSON array matching the exact length and order of the input clauses. Each object in the array MUST contain these exact keys:
+        ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action", "proposed_redline"]
+        
+        CRITICAL INSTRUCTION: You are a JSON parser. Output NOTHING but the raw JSON array. NO explanations, NO thinking process, NO markdown.
         """
 
     if selected_llm and api_key:
