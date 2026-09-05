@@ -114,3 +114,17 @@ def extract_clauses_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     unique_clauses = deduplicate_extracted_clauses(raw_clauses)
     return {"final_clauses": unique_clauses}
+from langgraph.graph import StateGraph, END
+
+# Initialize the state graph (using dict to match your node's signature)
+workflow = StateGraph(dict)
+
+# Add the extraction node defined in this file
+workflow.add_node("extract_clauses", extract_clauses_node)
+
+# Set the flow from start to finish
+workflow.set_entry_point("extract_clauses")
+workflow.add_edge("extract_clauses", END)
+
+# Compile it into the exact variable name documents.py is attempting to import
+legal_pipeline_graph = workflow.compile()
