@@ -1,0 +1,14 @@
+# Ignore Virtual Environments
+venv/
+env/
+
+# Ignore Node Modules
+node_modules/
+frontend/node_modules/
+
+# Ignore Python Caches
+__pycache__/
+*.pyc
+
+# Ignore Git
+.git/

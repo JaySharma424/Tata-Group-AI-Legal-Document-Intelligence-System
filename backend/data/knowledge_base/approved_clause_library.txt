@@ -1,0 +1,131 @@
+TITLE: Limitation of Liability Cap Standard
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: CLS-LIAB-001
+JURISDICTION: India / Global
+GUIDANCE: Vendor liability must be capped at 100% of the Annual Contract Value (ACV) or total fees paid in the preceding 12 months, avoiding unlimited liability exposures.
+
+TITLE: Comprehensive Indemnification for IP Infringement
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: CLS-IND-002
+JURISDICTION: Global
+GUIDANCE: Vendors must fully indemnify Tata Group against any third-party claims alleging patent, copyright, or trademark infringement arising from delivered software or services.
+
+TITLE: Mutual Confidentiality and NDA Terms
+CATEGORY: CONFIDENTIALITY & PRIVACY
+REFERENCE_ID: CLS-NDA-003
+JURISDICTION: India / Global
+GUIDANCE: Protect all proprietary and commercially sensitive data, defining a mandatory survival period of 3 to 5 years post-termination.
+
+TITLE: Termination for Convenience Clause
+CATEGORY: TERMINATION & EXIT
+REFERENCE_ID: CLS-TERM-004
+JURISDICTION: India
+GUIDANCE: Grant Tata Group the unilateral right to terminate any contract for convenience by giving a 30 to 60 days advance written notice without penalty.
+
+TITLE: Termination for Material Breach
+CATEGORY: TERMINATION & EXIT
+REFERENCE_ID: CLS-TERM-005
+JURISDICTION: Global
+GUIDANCE: Permit immediate termination upon an un-remedied material breach after a standard 15 to 30 days cure period provided in the notice.
+
+TITLE: Intellectual Property Ownership (Work Made for Hire)
+CATEGORY: INTELLECTUAL PROPERTY
+REFERENCE_ID: CLS-IP-006
+JURISDICTION: India / Global
+GUIDANCE: Ensure all custom code, deliverables, documentation, and created IP vest exclusively and entirely with Tata Group as a work made for hire.
+
+TITLE: Standard Commercial Payment Terms
+CATEGORY: FINANCIAL & PAYMENT
+REFERENCE_ID: CLS-PAY-007
+JURISDICTION: India
+GUIDANCE: Establish standard payment cycles of Net 45 or Net 60 days, incorporating tax handling rules and the right to withhold disputed invoice amounts.
+
+TITLE: Governing Law and Exclusive Jurisdiction
+CATEGORY: LEGAL & JURISDICTION
+REFERENCE_ID: CLS-LAW-008
+JURISDICTION: India
+GUIDANCE: Specify that agreements are governed by the laws of India, with exclusive legal jurisdiction designated in Mumbai courts.
+
+TITLE: Dispute Resolution and Institutional Arbitration
+CATEGORY: DISPUTE RESOLUTION
+REFERENCE_ID: CLS-DIS-009
+JURISDICTION: India / International
+GUIDANCE: Mandate a phased resolution process starting with senior executive negotiation, followed by binding institutional arbitration under MCIA or SIAC rules in Mumbai.
+
+TITLE: Data Protection and Privacy Obligation
+CATEGORY: DATA PRIVACY & COMPLIANCE
+REFERENCE_ID: CLS-DATA-010
+JURISDICTION: India / Global
+GUIDANCE: Mandate strict compliance with data protection laws including the DPDP Act and GDPR, requiring encryption at rest and in transit.
+
+TITLE: Force Majeure Scope and Notification
+CATEGORY: RISK MANAGEMENT
+REFERENCE_ID: CLS-FM-011
+JURISDICTION: Global
+GUIDANCE: Clearly define force majeure events (acts of God, war, pandemics) and require written notice within 48 hours of occurrence to claim relief.
+
+TITLE: Subcontracting Approval Mandate
+CATEGORY: VENDOR MANAGEMENT
+REFERENCE_ID: CLS-SUB-012
+JURISDICTION: Global
+GUIDANCE: Prohibit vendors from subcontracting any part of their contractual obligations without prior written consent from authorized Tata leadership.
+
+TITLE: Anti-Bribery and Anti-Corruption Clause
+CATEGORY: ETHICS & COMPLIANCE
+REFERENCE_ID: CLS-ETH-013
+JURISDICTION: Global
+GUIDANCE: Enforce strict adherence to anti-corruption laws (such as FCPA and Prevention of Corruption Act) with zero tolerance for illicit payments or kickbacks.
+
+TITLE: Mutual Non-Solicitation of Employees
+CATEGORY: HUMAN RESOURCES
+REFERENCE_ID: CLS-SOL-014
+JURISDICTION: India / Global
+GUIDANCE: Restrict both parties from directly or indirectly hiring each other's employees during the contract term and for 1 year post-termination.
+
+TITLE: Audit and Inspection Rights
+CATEGORY: GOVERNANCE & AUDIT
+REFERENCE_ID: CLS-AUD-015
+JURISDICTION: Global
+GUIDANCE: Grant Tata Group or its designated third-party auditors unconditional access to inspect vendor financial records, security systems, and operational facilities.
+
+TITLE: Mandatory Insurance Coverage Limits
+CATEGORY: RISK & INSURANCE
+REFERENCE_ID: CLS-INS-016
+JURISDICTION: Global
+GUIDANCE: Require vendors to maintain specified minimum thresholds of Professional Liability, Cyber Liability, and Commercial General Insurance throughout the term.
+
+TITLE: Warranties and Service Level Agreements (SLAs)
+CATEGORY: PERFORMANCE & SERVICE
+REFERENCE_ID: CLS-SLA-017
+JURISDICTION: Global
+GUIDANCE: Enforce high operational standards including 99.9% uptime, bug-free software deliverables, and predefined financial remedies for performance failure.
+
+TITLE: Exit Management and Transition Assistance
+CATEGORY: TERMINATION & EXIT
+REFERENCE_ID: CLS-EXIT-018
+JURISDICTION: Global
+GUIDANCE: Obligate vendors to provide seamless data migration, knowledge transfer, and operational support for up to 90 days upon contract expiration.
+
+TITLE: Export Control and Sanctions Compliance
+CATEGORY: TRADE & COMPLIANCE
+REFERENCE_ID: CLS-EXP-019
+JURISDICTION: Global
+GUIDANCE: Prohibit transactions or routing involving sanctioned jurisdictions, embargoed entities, or restricted individuals under international trade regulations.
+
+TITLE: Severability and Waiver Documentation
+CATEGORY: GENERAL PROVISIONS
+REFERENCE_ID: CLS-GEN-020
+JURISDICTION: Global
+GUIDANCE: Ensure that invalidating one clause does not void the entire agreement, and require any waiver of rights to be explicitly documented in writing.
+
+TITLE: Assignment and Transfer Restrictions
+CATEGORY: GENERAL PROVISIONS
+REFERENCE_ID: CLS-ASG-021
+JURISDICTION: Global
+GUIDANCE: Prohibit assigning or transferring rights or duties under the agreement to any corporate affiliate or third party without prior written authorization.
+
+TITLE: Brand Usage and Publicity Restrictions
+CATEGORY: BRAND & MARKETING
+REFERENCE_ID: CLS-BRD-022
+JURISDICTION: Global
+GUIDANCE: Restrict vendors from using Tata logos, trademarks, trade names, or issuing press releases without prior explicit written consent from corporate communications.

@@ -1,0 +1,131 @@
+TITLE: Competition Act and Anti-Cartel Compliance
+CATEGORY: STATUTORY COMPLIANCE
+REFERENCE_ID: REG-COMP-001
+JURISDICTION: India
+GUIDANCE: Strictly prohibit anti-competitive agreements, bid-rigging, price-fixing cartels, and abuse of market dominance under competition law.
+
+TITLE: Prevention of Money Laundering Act (PMLA) Guidelines
+CATEGORY: FINANCIAL REGULATION
+REFERENCE_ID: REG-PMLA-002
+JURISDICTION: India
+GUIDANCE: Implement robust Know Your Customer (KYC) screening to detect suspicious financial transactions and prevent illicit fund flows.
+
+TITLE: Foreign Exchange Management Act (FEMA) Compliance
+CATEGORY: CROSS-BORDER REGULATION
+REFERENCE_ID: REG-FEMA-003
+JURISDICTION: India
+GUIDANCE: Monitor and regulate cross-border capital flows, foreign investments, external commercial borrowings, and currency transfers per statutory limits.
+
+TITLE: Information Technology Rules and Cybersecurity Mandates
+CATEGORY: CYBER REGULATION
+REFERENCE_ID: REG-ITR-004
+JURISDICTION: India
+GUIDANCE: Comply with statutory intermediary due diligence rules, data protection standards, and mandatory reporting protocols for digital systems.
+
+TITLE: Digital Personal Data Protection (DPDP) Act Compliance
+CATEGORY: DATA PROTECTION
+REFERENCE_ID: REG-DPDP-005
+JURISDICTION: India
+GUIDANCE: Enforce lawful personal data processing, explicit consent collection, data fiduciary duties, and data principal rights under national law.
+
+TITLE: Consumer Protection Act Standards
+CATEGORY: REGULATORY COMPLIANCE
+REFERENCE_ID: REG-CONS-006
+JURISDICTION: India
+GUIDANCE: Ensure product safety, accurate warranty representations, elimination of deceptive trade practices, and efficient consumer grievance redressal.
+
+TITLE: Environmental Protection Act & Waste Management Rules
+CATEGORY: ENVIRONMENTAL REGULATION
+REFERENCE_ID: REG-ENV-007
+JURISDICTION: India
+GUIDANCE: Regulate industrial emissions, hazardous waste disposal, ecological clearances, and pollution control statutory standards.
+
+TITLE: Factories Act and Occupational Health & Safety (OH&S)
+CATEGORY: WORKPLACE SAFETY
+REFERENCE_ID: REG-FAC-008
+JURISDICTION: India
+GUIDANCE: Maintain mandatory workplace safety infrastructure, controlled working hours, proper ventilation, and employee welfare facilities.
+
+TITLE: Labor Codes and Minimum Wages Regulations
+CATEGORY: EMPLOYMENT LAW
+REFERENCE_ID: REG-LAB-009
+JURISDICTION: India
+GUIDANCE: Guarantee compliance with statutory minimum wages, provident fund (PF) contributions, gratuity, and employee insurance mandates.
+
+TITLE: Prevention of Sexual Harassment (POSH) Act Compliance
+CATEGORY: WORKPLACE GOVERNANCE
+REFERENCE_ID: REG-POSH-010
+JURISDICTION: India
+GUIDANCE: Mandate the establishment of Internal Committees (ICs), regular employee awareness training, and transparent grievance redressal mechanisms.
+
+TITLE: Goods and Services Tax (GST) Compliance
+CATEGORY: TAXATION
+REFERENCE_ID: REG-GST-011
+JURISDICTION: India
+GUIDANCE: Ensure accurate tax invoicing, timely input tax credit (ITC) reconciliation, and compliant reverse charge mechanism (RCM) filings.
+
+TITLE: Direct Tax and Transfer Pricing Regulations
+CATEGORY: TAXATION
+REFERENCE_ID: REG-TAX-012
+JURISDICTION: India / Global
+GUIDANCE: Maintain arm's length pricing for international related-party transactions and comply with statutory tax deduction at source (TDS) mandates.
+
+TITLE: SEBI (LODR) Regulations Compliance
+CATEGORY: SECURITIES REGULATION
+REFERENCE_ID: REG-SEBI-013
+JURISDICTION: India
+GUIDANCE: Adhere strictly to mandatory disclosure obligations, material event reporting, and corporate governance rules for listed entities.
+
+TITLE: Reserve Bank of India (RBI) Payment System Guidelines
+CATEGORY: FINANCIAL REGULATION
+REFERENCE_ID: REG-RBI-014
+JURISDICTION: India
+GUIDANCE: Comply with statutory regulations governing digital payment gateways, escrow structures, and cross-border settlements.
+
+TITLE: Intellectual Property Rights Statutory Protection
+CATEGORY: IP LAW
+REFERENCE_ID: REG-IPR-015
+JURISDICTION: India / Global
+GUIDANCE: Protect corporate assets under national Patent, Trademark, Copyright, and Trade Secret statutes against unauthorized infringement.
+
+TITLE: National Cyber Security Policy Framework
+CATEGORY: CYBERSECURITY
+REFERENCE_ID: REG-NCSP-016
+JURISDICTION: India
+GUIDANCE: Implement critical information infrastructure protection standards and defensive architectures against state-sponsored or advanced cyber threats.
+
+TITLE: International Trade Sanctions (OFAC / UN) Compliance
+CATEGORY: TRADE REGULATION
+REFERENCE_ID: REG-SANC-017
+JURISDICTION: Global
+GUIDANCE: Screen counterparties against international sanction lists to prohibit commercial engagement with embargoed countries or blacklisted entities.
+
+TITLE: Electricity Act and Energy Compliance Mandates
+CATEGORY: ENERGY REGULATION
+REFERENCE_ID: REG-ELEC-018
+JURISDICTION: India
+GUIDANCE: Comply with industrial power procurement tariffs, grid connectivity rules, and renewable purchase obligations (RPOs).
+
+TITLE: Mines and Minerals (Development & Regulation) Act
+CATEGORY: INDUSTRIAL REGULATION
+REFERENCE_ID: REG-MINE-019
+JURISDICTION: India
+GUIDANCE: Adhere to statutory mining concessions, mineral extraction rights, and mandatory ecological restoration rules for manufacturing sectors.
+
+TITLE: Telecommunications Act and TRAI Regulations
+CATEGORY: TELECOM REGULATION
+REFERENCE_ID: REG-TEL-020
+JURISDICTION: India
+GUIDANCE: Comply with telecom infrastructure sharing norms, data transmission security standards, and regulatory oversight by TRAI.
+
+TITLE: CERT-In Cyber Security Incident Directives
+CATEGORY: CYBER REGULATION
+REFERENCE_ID: REG-CERT-021
+JURISDICTION: India
+GUIDANCE: Mandate immediate logging and reporting of cybersecurity incidents to national coordination authorities within 6 hours of detection.
+
+TITLE: Competition Commission of India (CCI) Combination Rules
+CATEGORY: STATUTORY COMPLIANCE
+REFERENCE_ID: REG-CCI-022
+JURISDICTION: India
+GUIDANCE: File mandatory pre-notifications and obtain merger control approvals for corporate restructurings, joint ventures, and acquisitions meeting thresholds.

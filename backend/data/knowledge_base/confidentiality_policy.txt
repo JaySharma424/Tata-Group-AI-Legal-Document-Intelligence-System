@@ -1,0 +1,131 @@
+TITLE: Tata Enterprise Data Protection & NDA Standard
+CATEGORY: CONFIDENTIALITY & COMPLIANCE
+REFERENCE_ID: POL-IND-2026-01
+JURISDICTION: India / Global
+GUIDANCE: All third-party vendors must adhere strictly to Tata Group confidentiality standards, ensuring encryption at rest and in transit, with mandatory breach notification within 48 hours.
+
+TITLE: Standard Corporate Jurisdiction & Venue Protocol
+CATEGORY: GOVERNING LAW & JURISDICTION
+REFERENCE_ID: LAW-CORP-882
+JURISDICTION: India
+GUIDANCE: Commercial agreements involving Tata business units must prioritize courts of appropriate national jurisdiction with standard dispute resolution or binding arbitration.
+
+TITLE: Liability Capping & Indemnity Policy
+CATEGORY: INDEMNIFICATION & LIABILITY
+REFERENCE_ID: RISK-CAP-99
+JURISDICTION: Global
+GUIDANCE: Vendor liability caps must not be unlimited. Standard cap is 100 percent of annual contract value unless explicitly approved by the General Counsel.
+
+TITLE: Intellectual Property Rights & Work Made for Hire
+CATEGORY: INTELLECTUAL PROPERTY
+REFERENCE_ID: IP-WNF-2026-04
+JURISDICTION: India / Global
+GUIDANCE: All custom code, software, documentation, and deliverables produced during vendor engagements must vest exclusively with Tata Group as work made for hire.
+
+TITLE: Termination for Convenience Clause Standard
+CATEGORY: TERMINATION & EXIT
+REFERENCE_ID: TERM-CON-102
+JURISDICTION: Global
+GUIDANCE: Contracts must grant Tata Group the unilateral right to terminate for convenience by providing a 30 to 60 days advance written notice without penalty.
+
+TITLE: Termination for Material Breach & Cure Period
+CATEGORY: TERMINATION & EXIT
+REFERENCE_ID: TERM-BRC-103
+JURISDICTION: Global
+GUIDANCE: Immediate termination is permitted upon an un-remedied material breach following a mandatory cure period ranging from 15 to 30 days.
+
+TITLE: Commercial Payment Terms & Invoice Dispute Protocol
+CATEGORY: FINANCIAL & PAYMENT
+REFERENCE_ID: FIN-PAY-405
+JURISDICTION: India
+GUIDANCE: Enforce standard payment cycles of Net 45 or Net 60 days, incorporating tax handling rules and the right to withhold disputed invoice amounts.
+
+TITLE: Institutional Dispute Resolution & Arbitration Mandate
+CATEGORY: DISPUTE RESOLUTION
+REFERENCE_ID: DIS-ARB-501
+JURISDICTION: India / International
+GUIDANCE: Mandate a phased resolution process starting with senior executive negotiation, followed by binding institutional arbitration under MCIA or SIAC rules in Mumbai.
+
+TITLE: Force Majeure Scope and Notification Requirements
+CATEGORY: RISK MANAGEMENT
+REFERENCE_ID: RSK-FM-206
+JURISDICTION: Global
+GUIDANCE: Clearly define force majeure events (acts of God, war, pandemics) and require written notice within 48 hours of occurrence to claim relief.
+
+TITLE: Subcontracting Approval and Restriction Policy
+CATEGORY: VENDOR MANAGEMENT
+REFERENCE_ID: VEND-SUB-303
+JURISDICTION: Global
+GUIDANCE: Prohibit vendors from subcontracting any part of their contractual obligations without prior written consent from authorized Tata leadership.
+
+TITLE: Anti-Bribery and Anti-Corruption (ABAC) Compliance
+CATEGORY: ETHICS & COMPLIANCE
+REFERENCE_ID: ETH-ABAC-701
+JURISDICTION: Global
+GUIDANCE: Enforce strict adherence to anti-corruption laws (such as FCPA and Prevention of Corruption Act) with zero tolerance for illicit payments or kickbacks.
+
+TITLE: Mutual Non-Solicitation of Employees Standard
+CATEGORY: HUMAN RESOURCES
+REFERENCE_ID: HR-SOL-804
+JURISDICTION: India / Global
+GUIDANCE: Restrict both parties from directly or indirectly hiring each other's employees during the contract term and for 1 year post-termination.
+
+TITLE: Vendor Audit and Facility Inspection Rights
+CATEGORY: GOVERNING AUDIT
+REFERENCE_ID: AUD-INSP-909
+JURISDICTION: Global
+GUIDANCE: Grant Tata Group or its designated third-party auditors unconditional access to inspect vendor financial records, security systems, and operational facilities.
+
+TITLE: Mandatory Insurance Coverage Thresholds
+CATEGORY: RISK & INSURANCE
+REFERENCE_ID: INS-COV-602
+JURISDICTION: Global
+GUIDANCE: Require vendors to maintain specified minimum thresholds of Professional Liability, Cyber Liability, and Commercial General Insurance throughout the term.
+
+TITLE: Software Warranties and Uptime SLAs
+CATEGORY: PERFORMANCE & SERVICE
+REFERENCE_ID: PERF-SLA-410
+JURISDICTION: Global
+GUIDANCE: Enforce high operational standards including 99.9% uptime, bug-free software deliverables, and predefined financial remedies for performance failure.
+
+TITLE: Exit Management and Transition Assistance Protocol
+CATEGORY: TERMINATION & EXIT
+REFERENCE_ID: EXIT-TRN-115
+JURISDICTION: Global
+GUIDANCE: Obligate vendors to provide seamless data migration, knowledge transfer, and operational support for up to 90 days upon contract expiration.
+
+TITLE: Export Control and International Sanctions Compliance
+CATEGORY: TRADE & COMPLIANCE
+REFERENCE_ID: TRD-SNC-331
+JURISDICTION: Global
+GUIDANCE: Prohibit transactions or routing involving sanctioned jurisdictions, embargoed entities, or restricted individuals under international trade regulations.
+
+TITLE: Severability and Formal Waiver Documentation
+CATEGORY: GENERAL PROVISIONS
+REFERENCE_ID: GEN-SEV-555
+JURISDICTION: Global
+GUIDANCE: Ensure that invalidating one clause does not void the entire agreement, and require any waiver of rights to be explicitly documented in writing.
+
+TITLE: Contractual Assignment and Transfer Restrictions
+CATEGORY: GENERAL PROVISIONS
+REFERENCE_ID: GEN-ASG-442
+JURISDICTION: Global
+GUIDANCE: Prohibit assigning or transferring rights or duties under the agreement to any corporate affiliate or third party without prior written authorization.
+
+TITLE: Brand Usage and Publicity Restrictions
+CATEGORY: BRAND & MARKETING
+REFERENCE_ID: BRD-PRV-101
+JURISDICTION: Global
+GUIDANCE: Restrict vendors from using Tata logos, trademarks, trade names, or issuing press releases without prior explicit written consent from corporate communications.
+
+TITLE: Digital Personal Data Protection (DPDP) Act Compliance
+CATEGORY: DATA PROTECTION & PRIVACY
+REFERENCE_ID: REG-DPDP-2026
+JURISDICTION: India
+GUIDANCE: Ensure lawful processing of personal data, explicit consent collection, data fiduciary duties, and data principal rights under national legislation.
+
+TITLE: Prevention of Sexual Harassment (POSH) Mandate
+CATEGORY: WORKPLACE GOVERNANCE
+REFERENCE_ID: POSH-IND-012
+JURISDICTION: India
+GUIDANCE: Require vendor organizations working on Tata premises to maintain an active Internal Committee (IC) and enforce zero-tolerance harassment policies.

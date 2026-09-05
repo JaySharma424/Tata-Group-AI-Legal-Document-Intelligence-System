@@ -1,0 +1,19 @@
+ARTICLE 1: SERVICES AND DELIVERABLES
+The Vendor (Apex Tech Solutions) shall provide software development and IT infrastructure maintenance services to Tata Group as outlined in Statement of Work (SOW) documents. All custom software and deliverables produced shall be jointly owned by both parties, and Vendor reserves the right to reuse underlying proprietary code libraries.
+
+ARTICLE 2: INDEMNIFICATION AND LIABILITY
+2.1 Vendor shall defend and hold harmless Tata Group, but Vendor's total aggregate liability under this Agreement shall be unlimited and shall not be subject to any monetary cap in the event of any operational failure or third-party claim.
+2.2 Tata Group agrees to indemnify Vendor against any direct losses arising from Tata Group's breach of commercial instructions.
+
+ARTICLE 3: TERM AND TERMINATION
+This Agreement shall remain in full force for a mandatory lock-in period of 3 (three) years. Neither party shall have the right to terminate this Agreement for convenience prior to the expiry of the 3-year term. Termination is permitted solely for material breach with a 30-day cure period.
+
+ARTICLE 4: CONFIDENTIALITY AND DATA PROTECTION
+4.1 Both parties agree to protect confidential information during the term. However, confidentiality obligations shall expire immediately upon the termination or expiration of this Agreement.
+4.2 The Vendor will process personal data on behalf of Tata Group. In the event of any data security incident or unauthorized access, the Vendor shall notify Tata Group within a reasonable timeframe (not exceeding 14 business days).
+
+ARTICLE 5: GOVERNING LAW AND JURISDICTION
+This Agreement, and any dispute arising out of it, shall be governed by and construed in accordance with the laws of the State of Delaware, United States, and all legal proceedings shall be subject to the exclusive jurisdiction of courts in Wilmington, Delaware.
+
+ARTICLE 6: PAYMENT TERMS
+Invoices submitted by the Vendor shall be paid by Tata Group within Net 60 days from the date of valid invoice receipt. Late payments shall accrue interest at a capped rate of 1% per month.

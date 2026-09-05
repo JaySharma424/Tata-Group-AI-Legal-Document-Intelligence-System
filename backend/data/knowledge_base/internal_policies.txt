@@ -1,0 +1,131 @@
+TITLE: Tata Code of Conduct (TCoC) Enforcement
+CATEGORY: ETHICS & GOVERNANCE
+REFERENCE_ID: POL-TCOC-001
+JURISDICTION: Global
+GUIDANCE: Uphold core ethical values of integrity, responsibility, excellence, and transparency across all business operations and partner engagements.
+
+TITLE: Group Information Security Policy (GISP)
+CATEGORY: CYBERSECURITY
+REFERENCE_ID: POL-SEC-002
+JURISDICTION: Global
+GUIDANCE: Implement mandatory information security baselines, network firewalls, multi-factor authentication, and asset protection protocols across all systems.
+
+TITLE: Enterprise Data Privacy and Governance Framework
+CATEGORY: DATA PRIVACY
+REFERENCE_ID: POL-PRIV-003
+JURISDICTION: India / Global
+GUIDANCE: Ensure compliant collection, processing, storage, and purging of personal data aligned with internal privacy standards and statutory data protection laws.
+
+TITLE: Vendor Code of Conduct (VCoC)
+CATEGORY: VENDOR GOVERNANCE
+REFERENCE_ID: POL-VEND-004
+JURISDICTION: Global
+GUIDANCE: Mandate third-party adherence to ethical labor standards, environmental protection, safe working conditions, and anti-corruption practices.
+
+TITLE: Anti-Bribery and Anti-Corruption (ABAC) Policy
+CATEGORY: ETHICS & COMPLIANCE
+REFERENCE_ID: POL-ABAC-005
+JURISDICTION: Global
+GUIDANCE: Enforce zero tolerance for bribery, improper gifts, entertainment expenses, and facilitation payments across all commercial operations.
+
+TITLE: Conflict of Interest Disclosure Policy
+CATEGORY: GOVERNANCE
+REFERENCE_ID: POL-COI-006
+JURISDICTION: Global
+GUIDANCE: Require employees and business partners to promptly declare any personal, familial, or financial relationships that could compromise objective decision-making.
+
+TITLE: Related Party Transactions (RPT) Review Policy
+CATEGORY: FINANCIAL GOVERNANCE
+REFERENCE_ID: POL-RPT-007
+JURISDICTION: India
+GUIDANCE: Subject all transactions with group affiliates, subsidiaries, or promoters to rigorous audit committee oversight and prior regulatory approval.
+
+TITLE: Corporate Social Responsibility (CSR) Sourcing Guidelines
+CATEGORY: SUSTAINABILITY
+REFERENCE_ID: POL-CSR-008
+JURISDICTION: India
+GUIDANCE: Prioritize sustainable, community-impact driven sourcing practices and allocate procurement budgets to approved social enterprise initiatives.
+
+TITLE: Diversity, Equity, and Inclusion (DEI) Sourcing Standards
+CATEGORY: WORKFORCE & VENDORS
+REFERENCE_ID: POL-DEI-009
+JURISDICTION: Global
+GUIDANCE: Promote supplier diversity by actively onboarding minority-owned, women-owned, and socially inclusive vendor businesses.
+
+TITLE: Environmental, Social, and Governance (ESG) Procurement Policy
+CATEGORY: SUSTAINABILITY
+REFERENCE_ID: POL-ESG-010
+JURISDICTION: Global
+GUIDANCE: Evaluate suppliers based on carbon footprint reduction metrics, renewable energy usage, and transparent ESG reporting standards.
+
+TITLE: Insider Trading Prevention Policy
+CATEGORY: FINANCIAL COMPLIANCE
+REFERENCE_ID: POL-INS-011
+JURISDICTION: India
+GUIDANCE: Control access to and prevent unlawful trading based on Unpublished Price Sensitive Information (UPSI) within listed Tata entities.
+
+TITLE: Whistleblower Protection and Reporting Policy
+CATEGORY: GOVERNANCE
+REFERENCE_ID: POL-WBL-012
+JURISDICTION: Global
+GUIDANCE: Maintain secure, confidential, and anonymous reporting channels for employees and vendors to flag fraud, misconduct, or policy violations.
+
+TITLE: Third-Party Risk Management (TPRM) Protocol
+CATEGORY: RISK MANAGEMENT
+REFERENCE_ID: POL-TPRM-013
+JURISDICTION: Global
+GUIDANCE: Execute comprehensive due diligence, background screening, security vetting, and ongoing performance monitoring for all external vendors.
+
+TITLE: IT Infrastructure and Asset Usage Policy
+CATEGORY: IT & SECURITY
+REFERENCE_ID: POL-ITA-014
+JURISDICTION: Global
+GUIDANCE: Govern appropriate and secure utilization of corporate hardware, software licenses, cloud accounts, and internal communications infrastructure.
+
+TITLE: Generative AI and Tool Governance Policy
+CATEGORY: TECHNOLOGY & AI
+REFERENCE_ID: POL-GAI-015
+JURISDICTION: Global
+GUIDANCE: Regulate approved enterprise usage of external AI models, prompt security safeguards, and strict prevention of proprietary data leakage.
+
+TITLE: Gift, Hospitality, and Entertainment Thresholds
+CATEGORY: ETHICS
+REFERENCE_ID: POL-GIFT-016
+JURISDICTION: Global
+GUIDANCE: Define strict monetary caps, registration mandates, and prior approval workflows for accepting or offering business gifts and entertainment.
+
+TITLE: Business Continuity and Disaster Recovery Plan
+CATEGORY: OPERATIONS
+REFERENCE_ID: POL-BCDR-017
+JURISDICTION: Global
+GUIDANCE: Ensure organizational resilience, backup system readiness, and recovery protocols to maintain operations during major disruptions.
+
+TITLE: Human Rights and Labor Standards Framework
+CATEGORY: WORKFORCE
+REFERENCE_ID: POL-HR-018
+JURISDICTION: Global
+GUIDANCE: Prohibit child labor, forced labor, discrimination, and unsafe working conditions across all internal facilities and vendor supply chains.
+
+TITLE: Record Retention and Document Archival Policy
+CATEGORY: LEGAL OPERATIONS
+REFERENCE_ID: POL-RET-019
+JURISDICTION: Global
+GUIDANCE: Define mandatory preservation periods, secure storage formats, and secure destruction protocols for all corporate legal records and files.
+
+TITLE: Official Travel and Expense Management Rules
+CATEGORY: FINANCIAL OPERATIONS
+REFERENCE_ID: POL-EXP-020
+JURISDICTION: Global
+GUIDANCE: Establish authorized spending limits, approved booking channels, and audit verification workflows for business travel expenses.
+
+TITLE: Social Media and Public Communications Policy
+CATEGORY: CORPORATE COMMUNICATIONS
+REFERENCE_ID: POL-SOC-021
+JURISDICTION: Global
+GUIDANCE: Restrict unauthorized public statements, media engagement, or posting of sensitive corporate information on public social media networks.
+
+TITLE: Brand Usage and Trademark Licensing Standards
+CATEGORY: BRAND MANAGEMENT
+REFERENCE_ID: POL-BRD-022
+JURISDICTION: Global
+GUIDANCE: Enforce strict brand protection guidelines governing the visual identity, trademarks, and corporate nomenclature of the Tata brand.
