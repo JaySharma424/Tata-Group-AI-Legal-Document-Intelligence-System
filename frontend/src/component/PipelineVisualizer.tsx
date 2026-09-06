@@ -1,37 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { Scan, FileText, Database, Scale, FileCheck2, Loader2, CheckCircle2 } from 'lucide-react';
 
 const pipelineStages = [
-  { id: 1, label: "Running Multimodal OCR Scanning...", icon: Scan, time: 0 },
-  { id: 2, label: "Parsing & Chunking Document Clauses...", icon: FileText, time: 2000 },
-  { id: 3, label: "Querying Qdrant Vector DB for Policies...", icon: Database, time: 5000 },
-  { id: 4, label: "Cross-Referencing Citations & Risk (Gemini)...", icon: Scale, time: 8500 },
-  { id: 5, label: "Compiling Final Audit Report...", icon: FileCheck2, time: 13000 },
+  { id: 1, label: "Running Multimodal OCR Scanning...", icon: Scan },
+  { id: 2, label: "Deterministic Indian Legal Parsing & Cosine Chunking...", icon: FileText },
+  { id: 3, label: "Querying Qdrant Vector DB & Redis Policy Cache...", icon: Database },
+  { id: 4, label: "Batch Reasoning & Automated Policy Redlines (Gemini)...", icon: Scale },
+  { id: 5, label: "Compiling Final Audit Report & Storing Knowledge...", icon: FileCheck2 },
 ];
 
-export const PipelineVisualizer = ({ isAnalyzing }: { isAnalyzing: boolean }) => {
-  const [activeStage, setActiveStage] = useState(1);
+interface PipelineVisualizerProps {
+  isAnalyzing: boolean;
+  activeStage?: number;
+  statusMessage?: string;
+}
+
+export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ 
+  isAnalyzing, 
+  activeStage: propActiveStage = 1,
+  statusMessage = "Processing legal document pipeline..."
+}) => {
+  const [currentStage, setCurrentStage] = useState<number>(propActiveStage);
 
   useEffect(() => {
-    let timeouts: number[] = [];
-    
-    if (isAnalyzing) {
-      setActiveStage(1);
-      pipelineStages.forEach((stage) => {
-        if (stage.time > 0) {
-          const timeout = window.setTimeout(() => {
-            setActiveStage(stage.id);
-          }, stage.time);
-          timeouts.push(timeout);
-        }
-      });
+    if (propActiveStage) {
+      setCurrentStage(propActiveStage);
     }
-
-    return () => {
-      timeouts.forEach((t) => window.clearTimeout(t));
-    };
-  }, [isAnalyzing]);
+  }, [propActiveStage]);
 
   if (!isAnalyzing) return null;
 
@@ -42,14 +38,20 @@ export const PipelineVisualizer = ({ isAnalyzing }: { isAnalyzing: boolean }) =>
       exit={{ opacity: 0, y: -10 }}
       className="w-full bg-[#001021]/90 backdrop-blur-md border border-[#00A3E0]/40 rounded-2xl p-6 mt-6 shadow-[0_0_25px_rgba(0,163,224,0.15)]"
     >
-      <h3 className="text-[#00A3E0] text-xs font-black tracking-widest mb-5 uppercase flex items-center gap-2">
-        <Loader2 className="w-4 h-4 animate-spin" /> Live LangGraph AI Pipeline Execution
-      </h3>
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-[#00A3E0] text-xs font-black tracking-widest uppercase flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" /> Live V2 Async Streaming Execution
+        </h3>
+        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded">
+          WebSocket Live
+        </span>
+      </div>
+
       <div className="space-y-3.5">
         {pipelineStages.map((stage) => {
           const Icon = stage.icon;
-          const isActive = activeStage === stage.id;
-          const isDone = activeStage > stage.id;
+          const isActive = currentStage === stage.id;
+          const isDone = currentStage > stage.id;
           
           return (
             <motion.div 
@@ -79,6 +81,11 @@ export const PipelineVisualizer = ({ isAnalyzing }: { isAnalyzing: boolean }) =>
                 }`}>
                   {stage.label}
                 </span>
+                {isActive && statusMessage && (
+                  <p className="text-[10px] text-cyan-300 font-mono mt-0.5">
+                    {statusMessage}
+                  </p>
+                )}
               </div>
               
               {isActive && <Loader2 className="w-4 h-4 animate-spin text-[#00A3E0]" />}

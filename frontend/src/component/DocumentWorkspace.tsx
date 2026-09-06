@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
   Upload, CheckCircle2, ShieldAlert, Download, ArrowRight, Zap,
@@ -44,6 +44,11 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [clauses, setClauses] = useState<any[]>([]);
 
+  // WebSocket Live Pipeline States
+  const [pipelineStage, setPipelineStage] = useState<number>(1);
+  const [pipelineMessage, setPipelineMessage] = useState<string>('');
+  const activeWsRef = useRef<WebSocket | null>(null);
+
   const [reviewStatus, setReviewStatus] = useState<string | null>(null);
   const [reviewComments, setReviewComments] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,6 +62,11 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
   useEffect(() => {
     checkLLMConfig();
+    return () => {
+      if (activeWsRef.current) {
+        activeWsRef.current.close();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -135,6 +145,16 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     }
   };
 
+  // Convert HTTP API URL to WebSocket protocol safely
+  const getWebSocketUrl = (jobId: string) => {
+    const httpUrl = API_BASE_URL.startsWith('http')
+      ? API_BASE_URL
+      : `${window.location.protocol}//${window.location.host}${API_BASE_URL}`;
+    const wsProtocol = httpUrl.startsWith('https') ? 'wss:' : 'ws:';
+    const cleanUrl = httpUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    return `${wsProtocol}//${cleanUrl}/documents/ws/${jobId}`;
+  };
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
@@ -157,6 +177,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     setLoading(true);
     setReviewStatus(null); 
     setReviewComments('');
+    setPipelineStage(1);
+    setPipelineMessage('Uploading legal contract to secure pipeline...');
     
     try {
       const token = sessionStorage.getItem('access_token');
@@ -174,16 +196,53 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
       setActiveJobId(jobId);
 
-      // Poll background status every 2 seconds until processing completes
+      // 1. Establish Real-Time WebSocket Connection
+      let wsCompleted = false;
+      const wsUrl = getWebSocketUrl(jobId);
+      const ws = new WebSocket(wsUrl);
+      activeWsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.stage) setPipelineStage(data.stage);
+          if (data.message) setPipelineMessage(data.message);
+
+          if (data.step === "COMPLETED") {
+            wsCompleted = true;
+            ws.close();
+            loadDocumentFromHistory(jobId);
+            window.dispatchEvent(new Event('audit_updated'));
+            setLoading(false);
+            setActiveTab('clauses');
+          } else if (data.step === "FAILED") {
+            wsCompleted = true;
+            ws.close();
+            setLoading(false);
+            alert(data.message || 'Processing failed on the background worker.');
+          }
+        } catch (err) {
+          console.error('WebSocket message parsing error:', err);
+        }
+      };
+
+      ws.onerror = () => {
+        console.warn('WebSocket connection failed; switching to polling fallback.');
+      };
+
+      // 2. Resilient Polling Fallback (ensures UI finishes even if WebSockets are blocked by proxies)
       const startTime = Date.now();
       const pollInterval = setInterval(async () => {
-        try {
-          const statusRes = await axios.get(`${API_BASE_URL}/documents/status/${jobId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+        if (wsCompleted) {
+          clearInterval(pollInterval);
+          return;
+        }
 
+        try {
+          const statusRes = await axios.get(`${API_BASE_URL}/documents/status/${jobId}`);
           if (statusRes.data?.status === 'completed') {
             clearInterval(pollInterval);
+            if (activeWsRef.current) activeWsRef.current.close();
             await loadDocumentFromHistory(jobId);
             window.dispatchEvent(new Event('audit_updated'));
             setLoading(false);
@@ -191,14 +250,12 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           } else if (Date.now() - startTime > 120000) {
             clearInterval(pollInterval);
             setLoading(false);
-            alert('Analysis is taking longer than expected. You can check the Audit & History Archive shortly.');
+            alert('Analysis is taking longer than expected. Check the Audit & History Archive shortly.');
           }
-        } catch (pollError) {
-          console.error('Polling status error:', pollError);
-          clearInterval(pollInterval);
-          setLoading(false);
+        } catch (pollErr) {
+          console.error('Polling status error:', pollErr);
         }
-      }, 2000);
+      }, 2500);
 
     } catch (error) {
       console.error('Upload error:', error);
@@ -214,11 +271,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       return;
     }
 
-    const token = sessionStorage.getItem('access_token');
-    
     try {
       const response = await axios.get(`${API_BASE_URL}/documents/${targetId}/export-pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob',
       });
 
@@ -243,10 +297,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       alert("Please select or analyze a document first.");
       return;
     }
-    const token = sessionStorage.getItem('access_token');
     try {
       const response = await axios.get(`${API_BASE_URL}/documents/${targetId}/export-remediation-docx`, {
-        headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob',
       });
       const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -272,12 +324,15 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
 
     setIsSubmitting(true);
     try {
+      const token = sessionStorage.getItem('access_token');
       await axios.post(`${API_BASE_URL}/review/actions`, {
         document_id: activeJobId,
         user_email: currentUser,
         action: action,
         file_name: file?.name || "Analyzed Document",
         comments: reviewComments
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       setReviewStatus(action);
@@ -457,7 +512,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
                   className="w-full mt-4 bg-[#00A3E0] hover:bg-[#0082B3] text-[#001021] font-black py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-[#00A3E0]/20 disabled:opacity-50 cursor-pointer uppercase tracking-wider text-xs"
                 >
                   {loading ? (
-                    <><CheckCircle2 className="w-4 h-4 animate-spin text-[#001021]" /> Executing Analysis Pipeline...</>
+                    <><CheckCircle2 className="w-4 h-4 animate-spin text-[#001021]" /> Executing V2 Streaming Pipeline...</>
                   ) : (
                     <>Analyze Document <ArrowRight className="w-4 h-4 text-[#001021]" /></>
                   )}
@@ -466,7 +521,11 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
             </div>
           </div>
           
-          <PipelineVisualizer isAnalyzing={loading} />
+          <PipelineVisualizer 
+            isAnalyzing={loading} 
+            activeStage={pipelineStage} 
+            statusMessage={pipelineMessage} 
+          />
         </div>
 
         {/* Processing Metric KPI Cards & Export Buttons */}
@@ -594,7 +653,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           )}
         </div>
 
-        {/* TAB 1: RAGAS SCORECARD (Ground-truth-free metrics) */}
+        {/* TAB 1: RAGAS SCORECARD */}
         {activeTab === 'ragas' && (
           <div className="space-y-6">
             <div className="bg-[#001021] p-5 rounded-xl border border-[#002B49] flex justify-between items-center text-xs shadow-md">
@@ -603,8 +662,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
                   <BarChart3 className="w-5 h-5 text-[#00A3E0]"/> Document AI Evaluation Report
                 </span>
                 <p className="text-[11px] text-slate-400 mt-1 font-mono">
-                  Engine: <strong className="text-[#00A3E0]">{analysisResult?.llm_model_used || analysisResult?.document?.llm_model_used || 'gemini-3.5-flash'}</strong>
-                  {' • '} Active Key: <strong className="text-emerald-400">{analysisResult?.api_key_masked || analysisResult?.document?.api_key_masked || '...N/A'}</strong>
+                  Engine: <strong className="text-[#00A3E0]">{analysisResult?.llm_model_used || 'gemini-3.5-flash'}</strong>
+                  {' • '} Active Key: <strong className="text-emerald-400">{analysisResult?.api_key_masked || '...N/A'}</strong>
                 </p>
               </div>
               <span className="text-emerald-400 font-mono font-bold bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/30">
@@ -686,6 +745,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
                       </div>
                     </div>
 
+                    {/* AI Proposed Redline */}
                     {clause?.proposed_redline && (
                       <div className="bg-[#002B49]/40 border border-[#00A3E0]/30 p-4 rounded-xl space-y-2 mt-3">
                         <div className="flex justify-between items-center">
