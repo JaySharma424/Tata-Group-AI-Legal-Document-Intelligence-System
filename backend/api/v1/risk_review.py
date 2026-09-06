@@ -1,41 +1,28 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import DocumentModel, ClauseModel, UserModel
 from backend.api.v1.auth import get_current_user
+from backend.api.v1.review_2 import is_admin_user
 
 router = APIRouter()
-
-AUTHORIZED_ADMIN_EMAILS = [
-    "admin@tata.com",
-    "generalcounsel@tata.com",
-    "senior.reviewer@tata.com"
-]
-
-def check_is_admin(user: UserModel) -> bool:
-    email_lower = user.email.lower() if user.email else ""
-    is_role_admin = user.role in ["Admin", "General Counsel", "Senior Reviewer"]
-    is_email_admin = email_lower in AUTHORIZED_ADMIN_EMAILS
-    return is_role_admin or is_email_admin
 
 @router.get("/console/high-risk")
 async def get_risk_review_console(
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Returns all high-risk clauses securely for the authenticated user."""
+    """Retrieves high-risk clauses scoped by administrative or BU access."""
     query = db.query(ClauseModel, DocumentModel).join(
         DocumentModel, ClauseModel.job_id == DocumentModel.job_id
     ).filter(ClauseModel.risk_level == "HIGH")
     
-    if not check_is_admin(current_user):
+    if not is_admin_user(current_user):
         query = query.filter(DocumentModel.business_unit == current_user.business_unit)
         
-    high_risk_clauses = query.all()
-    
-    results = []
-    for clause, doc in high_risk_clauses:
-        results.append({
+    records = query.all()
+    return [
+        {
             "job_id": doc.job_id,
             "filename": getattr(doc, 'filename', 'Contract.pdf'),
             "business_unit": doc.business_unit,
@@ -45,8 +32,9 @@ async def get_risk_review_console(
             "rag_reference_used": clause.rag_reference_used,
             "obligation_owner": clause.obligation_owner,
             "recommended_action": clause.recommended_action
-        })
-    return results
+        }
+        for clause, doc in records
+    ]
 
 @router.get("/{job_id}/clause-intelligence")
 async def get_clause_intelligence_panel(
@@ -54,13 +42,13 @@ async def get_clause_intelligence_panel(
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Returns deep clause intelligence metrics, protected by user business unit."""
+    """Returns clause metadata secured by administrative role or BU tenancy."""
     doc = db.query(DocumentModel).filter(DocumentModel.job_id == job_id).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
         
-    if not check_is_admin(current_user) and doc.business_unit != current_user.business_unit:
-        raise HTTPException(status_code=403, detail="Access denied. Document belongs to a different business unit.")
+    if not is_admin_user(current_user) and doc.business_unit != current_user.business_unit:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied across business unit.")
         
     clauses = db.query(ClauseModel).filter(ClauseModel.job_id == job_id).all()
     

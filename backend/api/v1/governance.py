@@ -1,38 +1,50 @@
-from fastapi import APIRouter, Depends, HTTPException
+import os
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
 from backend.database import get_db
 from backend.models import AuditLogModel, UserModel
 from backend.api.v1.auth import get_current_user
-from datetime import datetime
 
 router = APIRouter()
 
-@router.post("/review")
+class ReviewActionEnum(str, Enum):
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    ESCALATE = "ESCALATE"
+    EDIT = "EDIT"
+
+class GovernanceReviewRequest(BaseModel):
+    job_id: str = Field(..., description="Target document or job identifier")
+    action: ReviewActionEnum = Field(..., description="Governance action taken")
+    notes: Optional[str] = Field(default="", description="Reviewer feedback or notes")
+
+@router.post("/review", status_code=status.HTTP_201_CREATED)
 async def submit_review(
-    payload: dict, 
+    payload: GovernanceReviewRequest, 
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    job_id = payload.get("job_id") or payload.get("document_id")
-    action = payload.get("action") # APPROVED or REJECTED
-    notes = payload.get("notes") or payload.get("comments") or ""
-
-    if not job_id or not action:
-        raise HTTPException(status_code=400, detail="job_id and action are required.")
-
-    # Create and save audit log record to PostgreSQL
+    action_value = payload.action.value.upper()
     db_audit = AuditLogModel(
-        job_id=job_id,
+        job_id=payload.job_id,
         user_email=current_user.email,
-        action=action.upper(),
-        notes=notes,
-        reviewer_comment=notes,
-        timestamp=datetime.utcnow()
+        action=action_value,
+        notes=payload.notes,
+        reviewer_comment=payload.notes,
+        escalation_status=(action_value == "ESCALATE"),
+        timestamp=datetime.now(timezone.utc)
     )
     db.add(db_audit)
     db.commit()
 
     return {
         "status": "success",
-        "message": f"Review action '{action}' recorded successfully and saved to audit logs."
+        "job_id": payload.job_id,
+        "action": action_value,
+        "message": f"Review action '{action_value}' recorded successfully."
     }
