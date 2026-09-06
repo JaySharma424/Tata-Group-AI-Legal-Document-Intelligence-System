@@ -13,32 +13,39 @@ load_dotenv()
 
 # Issue all DDL statements to create mapped database tables if they do not exist
 Base.metadata.create_all(bind=engine)
+
 def ensure_database_schema_upgrades():
-    """Automatically adds missing columns (like proposed_redline) to live PostgreSQL tables."""
+    """Automatically adds missing columns to live PostgreSQL tables without manual migrations."""
     try:
         with engine.begin() as connection:
-            # Check and add proposed_redline column to extracted_clauses if missing
             connection.execute(text("""
                 ALTER TABLE extracted_clauses 
                 ADD COLUMN IF NOT EXISTS proposed_redline TEXT;
             """))
-            print("✅ Database schema verified: 'proposed_redline' column exists.")
+            connection.execute(text("""
+                ALTER TABLE extracted_clauses 
+                ADD COLUMN IF NOT EXISTS rag_reference_used VARCHAR(255) DEFAULT 'POL-IND-2026-01';
+            """))
+            print("✅ Database schema verified: 'proposed_redline' and 'rag_reference_used' columns exist.")
     except Exception as e:
         print(f"⚠️ Schema migration notice: {e}")
+
 ensure_database_schema_upgrades()
+
 app = FastAPI(title="Tata AI Legal Intelligence API", version="1.0.0")
 
 # -------------------------------------------------------------------------
-# CORS HARDENING: FIXES THE RENDER CROSS-ORIGIN BLOCK
+# HEALTH CHECK (Supports both GET and HEAD for Render orchestrator)
 # -------------------------------------------------------------------------
-# Allow all Render subdomains + localhost for development
-
 @app.get("/")
 @app.head("/")
 async def health_check():
     """Unauthenticated health check for Render deployment."""
     return {"status": "healthy", "service": "tata-ai-backend", "version": "v2-async"}
 
+# -------------------------------------------------------------------------
+# CORS CONFIGURATION
+# -------------------------------------------------------------------------
 allowed_origins = [
     "https://tata-ai-frontend.onrender.com",
     "http://localhost:5173",
@@ -46,7 +53,6 @@ allowed_origins = [
     "http://127.0.0.1:5173",
 ]
 
-# More permissive regex to catch all onrender.com subdomains including preview deployments
 allow_origin_regex = r"https://([a-zA-Z0-9-]+\.)*onrender\.com"
 
 app.add_middleware(
@@ -57,7 +63,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
-    max_age=86400,  # Cache preflight for 24 hours
+    max_age=86400,
 )
 
 # Global Exception Handler to guarantee CORS headers on 500 errors
@@ -77,11 +83,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # -------------------------------------------------------------------------
-# CENTRALIZED API GATEWAY MOUNTING (Avoids Duplicate Prefix Bugs)
+# CENTRALIZED API GATEWAY MOUNTING
 # -------------------------------------------------------------------------
-# Includes auth, documents, review, governance, chat, monitoring, risk, and kb
 app.include_router(api_router, prefix="/api/v1")
-
-@app.get("/")
-def health_check():
-    return {"status": "healthy", "database": "Connected"}

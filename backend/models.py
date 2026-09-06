@@ -12,7 +12,7 @@ class UserModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
-    password = Column(String, nullable=False) # Will store the hashed password
+    password = Column(String, nullable=False)
     business_unit = Column(String, nullable=False)
     role = Column(String, nullable=False)
     
@@ -100,7 +100,10 @@ class ClauseModel(Base):
     obligation_owner = Column(String, default="N/A")
     recommended_action = Column(String, default="Review")
     
-    # 🚀 NEW: Automated Redlining & Remediation Support
+    # RAG Knowledge Citation
+    rag_reference_used = Column(String, nullable=True, default="POL-IND-2026-01")
+    
+    # Automated Redlining & Remediation Support
     proposed_redline = Column(Text, nullable=True)
     
     edited_text = Column(Text, nullable=True)
@@ -141,7 +144,7 @@ class SystemConfigModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     config_key = Column(String, unique=True, index=True, nullable=False)
     
-    llm_model = Column(String, default="gemini-2.0-flash-lite")
+    llm_model = Column(String, default="gemini-3.5-flash-lite")
     embedding_model = Column(String, default="gemini-embedding-001")
     api_key = Column(String, nullable=True)
     
