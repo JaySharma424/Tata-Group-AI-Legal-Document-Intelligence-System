@@ -1,9 +1,8 @@
 import os
 import re
 import asyncio
+import google.generativeai as genai
 from sqlalchemy.orm import Session
-from paddleocr import PaddleOCR
-from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from backend.database import SessionLocal
@@ -11,45 +10,49 @@ from backend.models import DocumentModel, ClauseModel
 from backend.services.llm_config import get_llm_config
 
 # ---------------------------------------------------------
-# INITIALIZE ML MODELS ONCE PER WORKER PROCESS
+# INITIALIZE LIGHTWEIGHT CLOUD APIs
 # ---------------------------------------------------------
-print("Loading PaddleOCR and Sentence-Transformers...")
-# PaddleOCR for cost-cutting Phase 2
-ocr_engine = PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
-# Lightweight sentence transformer for Cosine Similarity chunking Phase 3
-embedder = SentenceTransformer('all-MiniLM-L6-v2') 
+print("Loading Google Generative AI Configuration...")
+GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
 
-
-def hybrid_ocr_extract(file_path: str) -> tuple[str, float, int]:
-    """Phase 2: Hybrid OCR (PaddleOCR -> Google Vision Fallback)"""
+def extract_text_google_vision(file_path: str) -> tuple[str, float, int]:
+    """Phase 2: Replaces PaddleOCR using Google Vision (Gemini 1.5 Flash)"""
+    print("Uploading file to Google Vision API...")
     try:
-        result = ocr_engine.ocr(file_path, cls=True)
-        full_text = ""
-        total_confidence = 0.0
-        word_count = 0
-        pages = 1 
+        vision_model = genai.GenerativeModel('gemini-1.5-flash')
         
-        if result and result[0]:
-            for line in result[0]:
-                text = line[1][0]
-                confidence = line[1][1]
-                full_text += text + " \n"
-                total_confidence += confidence
-                word_count += 1
-                
-        avg_confidence = (total_confidence / word_count) if word_count > 0 else 0
+        # Upload the file securely to Google's API
+        uploaded_file = genai.upload_file(path=file_path)
         
-        # Threshold Logic: Route to Vision API only if confidence is too low
-        if avg_confidence < 0.85:
-            print(f"⚠️ Confidence {avg_confidence:.2f} is below 85% threshold. Routing to Google Vision API...")
-            # Placeholder for Google Vision API logic
-            # full_text = google_vision_extract(file_path)
-            
-        return full_text.strip(), avg_confidence * 100, pages
+        # Ask the model to extract text
+        response = vision_model.generate_content([
+            "Extract all the text from this legal document accurately. Maintain the original structure. Do not add any extra conversational text.", 
+            uploaded_file
+        ])
+        
+        # Clean up the file from Google's servers
+        genai.delete_file(uploaded_file.name)
+        
+        # Return extracted text, a simulated confidence score (99.0), and estimated page count (1)
+        return response.text.strip(), 99.0, 1
     except Exception as e:
         print(f"OCR Exception: {e}")
         return "Failed to extract text.", 0.0, 1
 
+def get_google_embeddings(texts: list) -> list:
+    """Replaces SentenceTransformer with Google embedding-001 API"""
+    if not texts:
+        return []
+    
+    result = genai.embed_content(
+        model="models/embedding-001",
+        content=texts,
+        task_type="retrieval_document"
+    )
+    # The API returns a dictionary where 'embedding' contains the vector lists
+    return result['embedding']
 
 def regex_indian_clauses(text: str) -> tuple[list, str]:
     """Phase 2: Regex Preprocessing for standard Indian legal clauses."""
@@ -82,17 +85,16 @@ def regex_indian_clauses(text: str) -> tuple[list, str]:
         
     return extracted_clauses, remaining_text
 
-
 def semantic_chunking(text: str, similarity_threshold: float = 0.5) -> list:
-    """Phase 3: Context-Aware Chunking using Cosine Similarity"""
-    # Split text roughly into sentences
+    """Phase 3: Context-Aware Chunking using Cosine Similarity and Google Embeddings"""
     sentences = re.split(r'(?<=[.!?]) +|\n+', text)
     sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
     
     if not sentences:
         return []
         
-    embeddings = embedder.encode(sentences)
+    print(f"Generating embeddings for {len(sentences)} sentences via Google API...")
+    embeddings = get_google_embeddings(sentences)
     chunks = []
     current_chunk = [sentences[0]]
     
@@ -100,11 +102,9 @@ def semantic_chunking(text: str, similarity_threshold: float = 0.5) -> list:
         # Calculate cosine similarity between consecutive sentences
         sim = cosine_similarity([embeddings[i-1]], [embeddings[i]])[0][0]
         
-        # If similarity is high, keep them in the same chunk (topic continues)
         if sim >= similarity_threshold:
             current_chunk.append(sentences[i])
         else:
-            # Topic shifted: close the chunk and start a new one
             chunks.append(" ".join(current_chunk))
             current_chunk = [sentences[i]]
             
@@ -113,25 +113,21 @@ def semantic_chunking(text: str, similarity_threshold: float = 0.5) -> list:
         
     return chunks
 
-
 def process_document(job_id: str, file_path: str, user_email: str, user_role: str, business_unit: str):
     """Phase 4, 5 & 6: The Main Background Orchestrator"""
     print(f"🚀 Starting background pipeline for job: {job_id}")
     db: Session = SessionLocal()
     
     try:
-        # Step 1: Hybrid OCR (No Truncation)
-        full_text, conf, pages = hybrid_ocr_extract(file_path)
+        # Step 1: Lightweight API OCR Extraction
+        full_text, conf, pages = extract_text_google_vision(file_path)
         
-        # Step 2: Regex Pre-Extraction (Reduces LLM load)
+        # Step 2: Regex Pre-Extraction
         regex_clauses, remaining_text = regex_indian_clauses(full_text)
         
-        # Step 3: Semantic Chunking (Prevents cutting clauses in half)
+        # Step 3: Semantic Chunking via API Embeddings
         chunks = semantic_chunking(remaining_text)
         
-        # Step 4: Batch Processing (Simulated batch processing)
-        # In a full LangChain setup, you would wrap these chunks in an async array 
-        # and execute: await llm.abatch(chunks) to process concurrently.
         llm_clauses = []
         print(f"📦 Processing {len(chunks)} semantic chunks in batches...")
         for i, chunk in enumerate(chunks):
