@@ -55,3 +55,4 @@ langchain-google-vertexai
 # V2 Architecture: Async Workers, Semantic Chunking & Hybrid OCR
 rq>=1.15.0
 redis>=5.0.0
+scikit-learn
