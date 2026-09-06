@@ -7,6 +7,7 @@ import jwt
 import os
 import uuid
 import datetime
+import base64
 from typing import Optional
 
 from backend.database import get_db
@@ -72,9 +73,14 @@ async def upload_document(
         raise HTTPException(status_code=413, detail=f"File size exceeds maximum allowed ({MAX_FILE_SIZE // (1024*1024)}MB)")
 
     clean_filename = sanitize_text(file.filename)
+    
+    # Save locally for the backend's own records
     file_path = os.path.join(upload_dir, f"{job_id}_{clean_filename}")
     with open(file_path, "wb") as f:
         f.write(contents)
+        
+    # Encode for the isolated worker
+    encoded_file_data = base64.b64encode(contents).decode('utf-8')
 
     db_doc = DocumentModel(
         job_id=job_id,
@@ -100,7 +106,8 @@ async def upload_document(
         task_queue.enqueue(
             'backend.document_pipeline.workers.redis_worker.process_document',
             job_id=job_id,
-            file_path=file_path,
+            file_data_base64=encoded_file_data,
+            filename=clean_filename,
             user_email=current_user.email,
             user_role=current_user.role,
             business_unit=business_unit,
@@ -153,8 +160,7 @@ async def get_document_history(current_user: UserModel = Depends(get_current_use
                 "faithfulness": getattr(doc, "ragas_faithfulness", 0.0),
                 "answer_relevancy": getattr(doc, "ragas_answer_relevancy", 0.0),
                 "context_precision": getattr(doc, "ragas_context_precision", 0.0),
-                "context_recall": getattr(doc, "ragas_context_recall", 0.0),
-                "answer_correctness": getattr(doc, "ragas_answer_correctness", 0.0)
+                "context_recall": getattr(doc, "ragas_context_recall", 0.0)
             }
         }
         for doc in documents
@@ -183,8 +189,7 @@ async def get_document_details(document_id: str, current_user: UserModel = Depen
                 "ragas_faithfulness": getattr(doc, "ragas_faithfulness", 0.0),
                 "ragas_answer_relevancy": getattr(doc, "ragas_answer_relevancy", 0.0),
                 "ragas_context_precision": getattr(doc, "ragas_context_precision", 0.0),
-                "ragas_context_recall": getattr(doc, "ragas_context_recall", 0.0),
-                "ragas_answer_correctness": getattr(doc, "ragas_answer_correctness", 0.0)
+                "ragas_context_recall": getattr(doc, "ragas_context_recall", 0.0)
             },
             "clauses": [
                 {
