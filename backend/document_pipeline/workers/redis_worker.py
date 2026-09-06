@@ -5,20 +5,18 @@ import base64
 import numpy as np
 import google.generativeai as genai
 from sqlalchemy.orm import Session
+from rq import get_current_job
 
 from backend.database import SessionLocal
 from backend.models import DocumentModel, ClauseModel
 
-# ---------------------------------------------------------
-# INITIALIZE LIGHTWEIGHT CLOUD APIs
-# ---------------------------------------------------------
 print("Loading Google Generative AI Configuration...")
 GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
 
 def calculate_cosine_similarity(vec1: list, vec2: list) -> float:
-    """Pure NumPy Cosine Similarity (Eliminates sklearn dependency)"""
+    """Pure NumPy Cosine Similarity without external ML dependencies"""
     v1 = np.array(vec1, dtype=float)
     v2 = np.array(vec2, dtype=float)
     norm1 = np.linalg.norm(v1)
@@ -28,22 +26,21 @@ def calculate_cosine_similarity(vec1: list, vec2: list) -> float:
     return float(np.dot(v1, v2) / (norm1 * norm2))
 
 def extract_text_google_vision(file_path: str) -> tuple[str, float, int]:
-    """Extract text from legal PDF using Gemini 1.5 Flash Vision"""
+    """Extract legal text using Gemini 1.5 Flash Vision API"""
     print(f"Uploading {file_path} to Google Vision API...")
     try:
         vision_model = genai.GenerativeModel('gemini-1.5-flash')
         uploaded_file = genai.upload_file(path=file_path)
 
-        # Wait until Google finishes processing the PDF file
         while uploaded_file.state.name == "PROCESSING":
             time.sleep(1)
             uploaded_file = genai.get_file(uploaded_file.name)
 
         if uploaded_file.state.name == "FAILED":
-            raise ValueError("Google Gemini Vision failed to parse the file.")
+            raise ValueError("Google Gemini Vision failed to process the PDF document.")
 
         response = vision_model.generate_content([
-            "Extract all legal clauses and text accurately from this document. Maintain structure without conversational commentary.",
+            "Extract all legal clauses and document text accurately. Preserve headings and contract structure without conversational commentary.",
             uploaded_file
         ])
 
@@ -58,7 +55,7 @@ def extract_text_google_vision(file_path: str) -> tuple[str, float, int]:
         return "Failed to extract text.", 0.0, 1
 
 def get_google_embeddings(texts: list) -> list:
-    """Generate vector embeddings with fallback error protection"""
+    """Batch embeddings using Google embedding-001 API"""
     if not texts:
         return []
     embeddings = []
@@ -76,7 +73,7 @@ def get_google_embeddings(texts: list) -> list:
     return embeddings
 
 def regex_indian_clauses(text: str) -> tuple[list, str]:
-    """Statutory clause pre-filtering"""
+    """Statutory Indian legal clause pre-filtering"""
     extracted, remaining = [], text
     patterns = {
         "Dispute Resolution (India)": r"(?i)(arbitration\s+and\s+conciliation\s+act,?\s*1996.*?)(?=\n\n|\Z)",
@@ -89,7 +86,7 @@ def regex_indian_clauses(text: str) -> tuple[list, str]:
                 "clause_type": clause_type,
                 "extracted_text": match.group(0).strip(),
                 "risk_level": "LOW" if "Arbitration" in clause_type else "MEDIUM",
-                "risk_rationale": f"Identified via statutory regex pattern: {clause_type}"
+                "risk_rationale": f"Identified via statutory pattern: {clause_type}"
             })
             remaining = remaining.replace(match.group(0), "")
     return extracted, remaining
@@ -115,23 +112,29 @@ def semantic_chunking(text: str, similarity_threshold: float = 0.5) -> list:
         chunks.append(" ".join(current_chunk))
     return chunks
 
-def process_document(job_id: str, file_data_base64: str, filename: str, user_email: str, user_role: str, business_unit: str):
+def process_document(
+    job_id: str = None,
+    file_data_base64: str = "",
+    filename: str = "",
+    user_email: str = "",
+    user_role: str = "",
+    business_unit: str = "",
+    **kwargs
+):
     """Main background worker execution orchestrator"""
-    print(f"🚀 Starting background pipeline for job: {job_id}")
+    job = get_current_job()
+    effective_job_id = job_id or (job.id if job else None) or kwargs.get("document_id")
+    print(f"🚀 Starting background pipeline for job: {effective_job_id}")
+
     db: Session = SessionLocal()
-    temp_path = f"/tmp/{job_id}_{filename}"
+    temp_path = f"/tmp/{effective_job_id}_{filename}"
 
     with open(temp_path, "wb") as f:
         f.write(base64.b64decode(file_data_base64))
 
     try:
-        # 1. OCR Extraction
         full_text, conf, pages = extract_text_google_vision(temp_path)
-
-        # 2. Regex Rule Filtering
         regex_clauses, remaining_text = regex_indian_clauses(full_text)
-
-        # 3. Semantic Chunking
         chunks = semantic_chunking(remaining_text)
 
         llm_clauses = [
@@ -146,8 +149,7 @@ def process_document(job_id: str, file_data_base64: str, filename: str, user_ema
 
         final_clauses = regex_clauses + llm_clauses
 
-        # 4. Save metrics and clauses directly to PostgreSQL
-        doc = db.query(DocumentModel).filter(DocumentModel.job_id == job_id).first()
+        doc = db.query(DocumentModel).filter(DocumentModel.job_id == effective_job_id).first()
         if doc:
             doc.ocr_confidence = conf
             doc.pages = pages
@@ -155,7 +157,7 @@ def process_document(job_id: str, file_data_base64: str, filename: str, user_ema
 
         for c in final_clauses:
             db.add(ClauseModel(
-                job_id=job_id,
+                job_id=effective_job_id,
                 clause_type=c["clause_type"],
                 extracted_text=c["extracted_text"],
                 risk_level=c["risk_level"],
@@ -168,7 +170,7 @@ def process_document(job_id: str, file_data_base64: str, filename: str, user_ema
             ))
 
         db.commit()
-        print(f"✅ Background job {job_id} completed successfully. Extracted {len(final_clauses)} clauses.")
+        print(f"✅ Background job {effective_job_id} completed successfully. Extracted {len(final_clauses)} clauses.")
 
     except Exception as e:
         print(f"❌ Background processing failed: {e}")

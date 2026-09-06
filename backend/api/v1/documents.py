@@ -73,13 +73,10 @@ async def upload_document(
         raise HTTPException(status_code=413, detail=f"File size exceeds maximum allowed ({MAX_FILE_SIZE // (1024*1024)}MB)")
 
     clean_filename = sanitize_text(file.filename)
-    
-    # Save locally for the backend's own records
     file_path = os.path.join(upload_dir, f"{job_id}_{clean_filename}")
     with open(file_path, "wb") as f:
         f.write(contents)
         
-    # Encode for the isolated worker
     encoded_file_data = base64.b64encode(contents).decode('utf-8')
 
     db_doc = DocumentModel(
@@ -105,12 +102,13 @@ async def upload_document(
     try:
         task_queue.enqueue(
             'backend.document_pipeline.workers.redis_worker.process_document',
+            job_id,
+            encoded_file_data,
+            clean_filename,
+            current_user.email,
+            current_user.role,
+            business_unit,
             job_id=job_id,
-            file_data_base64=encoded_file_data,
-            filename=clean_filename,
-            user_email=current_user.email,
-            user_role=current_user.role,
-            business_unit=business_unit,
             job_timeout='1h'
         )
     except Exception as e:
