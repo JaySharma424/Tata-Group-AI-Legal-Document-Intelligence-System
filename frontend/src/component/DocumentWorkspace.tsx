@@ -55,7 +55,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
   
   const currentUser = getSessionUser();
 
-  // Check configuration status on mount
   useEffect(() => {
     checkLLMConfig();
   }, []);
@@ -103,65 +102,12 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
     }
   };
 
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file) {
-      alert('Please select a legal contract file first.');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('business_unit', businessUnit);
-    formData.append('document_category', category);
-    formData.append('document_type', documentType);
-    formData.append('counterparty', counterparty || 'Unknown');
-    formData.append('jurisdiction', jurisdiction || 'Global');
-    formData.append('confidentiality_level', confidentiality);
-    formData.append('review_priority', priority);
-    formData.append('user_email', currentUser);
-    formData.append('user_role', 'Compliance Officer');
-
-    setLoading(true);
-    setReviewStatus(null); 
-    setReviewComments('');
-    
-    try {
-      const response = await axios.post(`${API_BASE_URL}/documents/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-
-      const rawClauses = response.data?.clauses;
-      const safeClauses = Array.isArray(rawClauses) 
-        ? rawClauses.filter((c: any) => c !== null && typeof c === 'object') 
-        : [];
-      
-      const safeMetrics = response.data?.metrics || {};
-
-      setActiveJobId(response.data?.job_id || null);
-      
-      setAnalysisResult({ 
-        ...response.data, 
-        metrics: safeMetrics,
-        llm_model_used: response.data?.llm_model_used,
-        api_key_masked: response.data?.api_key_masked 
-      });
-      setClauses(safeClauses);
-
-      window.dispatchEvent(new Event('audit_updated'));
-      setActiveTab('clauses');
-
-    } catch (error) {
-      console.error('Upload error:', error);
-      alert('Failed to process document through backend pipeline.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const loadDocumentFromHistory = async (jobId: string) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/documents/${jobId}`);
+      const token = sessionStorage.getItem('access_token');
+      const response = await axios.get(`${API_BASE_URL}/documents/${jobId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       
       const safeClauses = Array.isArray(response.data?.clauses) 
         ? response.data.clauses.filter((c: any) => c !== null && typeof c === 'object') 
@@ -186,6 +132,78 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
       setReviewComments('');
     } catch (error) {
       console.error('Failed to load document details:', error);
+    }
+  };
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file) {
+      alert('Please select a legal contract file first.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('business_unit', businessUnit);
+    formData.append('document_category', category);
+    formData.append('document_type', documentType);
+    formData.append('counterparty', counterparty || 'Unknown');
+    formData.append('jurisdiction', jurisdiction || 'Global');
+    formData.append('confidentiality_level', confidentiality);
+    formData.append('review_priority', priority);
+    formData.append('user_email', currentUser);
+    formData.append('user_role', 'Compliance Officer');
+
+    setLoading(true);
+    setReviewStatus(null); 
+    setReviewComments('');
+    
+    try {
+      const token = sessionStorage.getItem('access_token');
+      const response = await axios.post(`${API_BASE_URL}/documents/upload`, formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+
+      const jobId = response.data?.job_id;
+      if (!jobId) {
+        throw new Error('No job identifier returned by backend queue.');
+      }
+
+      setActiveJobId(jobId);
+
+      // Poll background status every 2 seconds until processing completes
+      const startTime = Date.now();
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await axios.get(`${API_BASE_URL}/documents/status/${jobId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (statusRes.data?.status === 'completed') {
+            clearInterval(pollInterval);
+            await loadDocumentFromHistory(jobId);
+            window.dispatchEvent(new Event('audit_updated'));
+            setLoading(false);
+            setActiveTab('clauses');
+          } else if (Date.now() - startTime > 120000) {
+            clearInterval(pollInterval);
+            setLoading(false);
+            alert('Analysis is taking longer than expected. You can check the Audit & History Archive shortly.');
+          }
+        } catch (pollError) {
+          console.error('Polling status error:', pollError);
+          clearInterval(pollInterval);
+          setLoading(false);
+        }
+      }, 2000);
+
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Failed to upload document to processing pipeline.');
+      setLoading(false);
     }
   };
 
@@ -576,7 +594,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
           )}
         </div>
 
-        {/* TAB 1: RAGAS SCORECARD */}
+        {/* TAB 1: RAGAS SCORECARD (Ground-truth-free metrics) */}
         {activeTab === 'ragas' && (
           <div className="space-y-6">
             <div className="bg-[#001021] p-5 rounded-xl border border-[#002B49] flex justify-between items-center text-xs shadow-md">
@@ -668,7 +686,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
                       </div>
                     </div>
 
-                    {/* 🚀 AUTOMATED REMEDIATION: AI PROPOSED REDLINE */}
                     {clause?.proposed_redline && (
                       <div className="bg-[#002B49]/40 border border-[#00A3E0]/30 p-4 rounded-xl space-y-2 mt-3">
                         <div className="flex justify-between items-center">
