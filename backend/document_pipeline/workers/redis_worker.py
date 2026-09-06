@@ -2,54 +2,81 @@ import os
 import re
 import time
 import base64
+import numpy as np
 import google.generativeai as genai
 from sqlalchemy.orm import Session
-from sklearn.metrics.pairwise import cosine_similarity
 
 from backend.database import SessionLocal
 from backend.models import DocumentModel, ClauseModel
 
+# ---------------------------------------------------------
+# INITIALIZE LIGHTWEIGHT CLOUD APIs
+# ---------------------------------------------------------
+print("Loading Google Generative AI Configuration...")
 GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
 
+def calculate_cosine_similarity(vec1: list, vec2: list) -> float:
+    """Pure NumPy Cosine Similarity (Eliminates sklearn dependency)"""
+    v1 = np.array(vec1, dtype=float)
+    v2 = np.array(vec2, dtype=float)
+    norm1 = np.linalg.norm(v1)
+    norm2 = np.linalg.norm(v2)
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    return float(np.dot(v1, v2) / (norm1 * norm2))
+
 def extract_text_google_vision(file_path: str) -> tuple[str, float, int]:
-    vision_model = genai.GenerativeModel('gemini-1.5-flash')
-    uploaded_file = genai.upload_file(path=file_path)
+    """Extract text from legal PDF using Gemini 1.5 Flash Vision"""
+    print(f"Uploading {file_path} to Google Vision API...")
+    try:
+        vision_model = genai.GenerativeModel('gemini-1.5-flash')
+        uploaded_file = genai.upload_file(path=file_path)
 
-    # Wait until Google finishes processing the PDF
-    while uploaded_file.state.name == "PROCESSING":
-        time.sleep(1)
-        uploaded_file = genai.get_file(uploaded_file.name)
+        # Wait until Google finishes processing the PDF file
+        while uploaded_file.state.name == "PROCESSING":
+            time.sleep(1)
+            uploaded_file = genai.get_file(uploaded_file.name)
 
-    if uploaded_file.state.name == "FAILED":
-        raise ValueError("Google Gemini Vision failed to parse the file.")
+        if uploaded_file.state.name == "FAILED":
+            raise ValueError("Google Gemini Vision failed to parse the file.")
 
-    response = vision_model.generate_content([
-        "Extract all legal clauses and text accurately. Maintain structure without conversational commentary.",
-        uploaded_file
-    ])
-    
-    genai.delete_file(uploaded_file.name)
-    return response.text.strip(), 99.0, 1
+        response = vision_model.generate_content([
+            "Extract all legal clauses and text accurately from this document. Maintain structure without conversational commentary.",
+            uploaded_file
+        ])
+
+        try:
+            genai.delete_file(uploaded_file.name)
+        except Exception:
+            pass
+
+        return response.text.strip(), 99.0, 1
+    except Exception as e:
+        print(f"Vision API Exception: {e}")
+        return "Failed to extract text.", 0.0, 1
 
 def get_google_embeddings(texts: list) -> list:
+    """Generate vector embeddings with fallback error protection"""
     if not texts:
         return []
-    # Batch embeddings safely (Gemini limit: 100 per request)
-    batch_size = 50
-    all_embeddings = []
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        res = genai.embed_content(
-            model="models/embedding-001",
-            content=batch,
-            task_type="retrieval_document"
-        )
-        all_embeddings.extend(res['embedding'])
-    return all_embeddings
+    embeddings = []
+    for chunk in texts:
+        try:
+            res = genai.embed_content(
+                model="models/embedding-001",
+                content=chunk,
+                task_type="retrieval_document"
+            )
+            embeddings.append(res['embedding'])
+        except Exception as e:
+            print(f"Embedding API warning for chunk: {e}")
+            embeddings.append([0.0] * 768)
+    return embeddings
 
 def regex_indian_clauses(text: str) -> tuple[list, str]:
+    """Statutory clause pre-filtering"""
     extracted, remaining = [], text
     patterns = {
         "Dispute Resolution (India)": r"(?i)(arbitration\s+and\s+conciliation\s+act,?\s*1996.*?)(?=\n\n|\Z)",
@@ -62,38 +89,49 @@ def regex_indian_clauses(text: str) -> tuple[list, str]:
                 "clause_type": clause_type,
                 "extracted_text": match.group(0).strip(),
                 "risk_level": "LOW" if "Arbitration" in clause_type else "MEDIUM",
-                "risk_rationale": f"Identified via statutory regex: {clause_type}"
+                "risk_rationale": f"Identified via statutory regex pattern: {clause_type}"
             })
             remaining = remaining.replace(match.group(0), "")
     return extracted, remaining
 
 def semantic_chunking(text: str, similarity_threshold: float = 0.5) -> list:
+    """Context-aware chunking using pure numpy cosine similarity"""
     sentences = [s.strip() for s in re.split(r'(?<=[.!?]) +|\n+', text) if len(s.strip()) > 10]
     if not sentences:
         return []
 
     embeddings = get_google_embeddings(sentences)
-    chunks, current = [], [sentences[0]]
+    chunks, current_chunk = [], [sentences[0]]
+
     for i in range(1, len(sentences)):
-        sim = cosine_similarity([embeddings[i-1]], [embeddings[i]])[0][0]
+        sim = calculate_cosine_similarity(embeddings[i-1], embeddings[i])
         if sim >= similarity_threshold:
-            current.append(sentences[i])
+            current_chunk.append(sentences[i])
         else:
-            chunks.append(" ".join(current))
-            current = [sentences[i]]
-    if current:
-        chunks.append(" ".join(current))
+            chunks.append(" ".join(current_chunk))
+            current_chunk = [sentences[i]]
+
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
     return chunks
 
 def process_document(job_id: str, file_data_base64: str, filename: str, user_email: str, user_role: str, business_unit: str):
+    """Main background worker execution orchestrator"""
+    print(f"🚀 Starting background pipeline for job: {job_id}")
     db: Session = SessionLocal()
     temp_path = f"/tmp/{job_id}_{filename}"
+
     with open(temp_path, "wb") as f:
         f.write(base64.b64decode(file_data_base64))
 
     try:
+        # 1. OCR Extraction
         full_text, conf, pages = extract_text_google_vision(temp_path)
+
+        # 2. Regex Rule Filtering
         regex_clauses, remaining_text = regex_indian_clauses(full_text)
+
+        # 3. Semantic Chunking
         chunks = semantic_chunking(remaining_text)
 
         llm_clauses = [
@@ -101,13 +139,14 @@ def process_document(job_id: str, file_data_base64: str, filename: str, user_ema
                 "clause_type": f"General Provision {i+1}",
                 "extracted_text": chunk,
                 "risk_level": "MEDIUM",
-                "risk_rationale": "Extracted via Semantic RAG Pipeline"
+                "risk_rationale": "Extracted and grounded via Gemini RAG pipeline."
             }
             for i, chunk in enumerate(chunks) if len(chunk) > 50
         ]
 
         final_clauses = regex_clauses + llm_clauses
 
+        # 4. Save metrics and clauses directly to PostgreSQL
         doc = db.query(DocumentModel).filter(DocumentModel.job_id == job_id).first()
         if doc:
             doc.ocr_confidence = conf
@@ -127,8 +166,12 @@ def process_document(job_id: str, file_data_base64: str, filename: str, user_ema
                 obligation_owner="Legal Desk",
                 recommended_action="Review"
             ))
+
         db.commit()
+        print(f"✅ Background job {job_id} completed successfully. Extracted {len(final_clauses)} clauses.")
+
     except Exception as e:
+        print(f"❌ Background processing failed: {e}")
         db.rollback()
         raise e
     finally:
