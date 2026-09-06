@@ -11,14 +11,18 @@ from backend.api.v1.auth import get_current_user
 
 router = APIRouter()
 
-def is_admin_user(user: UserModel) -> bool:
-    """Evaluates role-based and environment-configured admin privileges."""
-    admin_roles = set(os.getenv("ADMIN_ROLES", "Admin,General Counsel,Senior Reviewer").split(","))
-    admin_emails = set(e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "admin@tata.com,generalcounsel@tata.com,senior.reviewer@tata.com").split(",") if e.strip())
-    
-    has_role = user.role in admin_roles
-    has_email = bool(user.email and user.email.lower() in admin_emails)
-    return has_role or has_email
+AUTHORIZED_ADMIN_EMAILS = [
+    "admin@tata.com",
+    "generalcounsel@tata.com",
+    "senior.reviewer@tata.com"
+]
+
+def check_is_admin(user: UserModel) -> bool:
+    """Helper to verify if a user has admin privileges via role or authorized email."""
+    email_lower = user.email.lower() if user.email else ""
+    is_role_admin = user.role in ["Admin", "General Counsel", "Senior Reviewer"]
+    is_email_admin = email_lower in AUTHORIZED_ADMIN_EMAILS
+    return is_role_admin or is_email_admin
 
 # ==================== PYDANTIC SCHEMAS ====================
 
@@ -130,7 +134,7 @@ async def get_admin_all_documents(
     db: Session = Depends(get_db)
 ):
     """Retrieves all documents across ALL users with complete metadata and audit trails."""
-    if not is_admin_user(current_user):
+    if not check_is_admin(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. Admin credentials required."
@@ -201,7 +205,7 @@ async def execute_admin_review_action(
     db: Session = Depends(get_db)
 ):
     """Executes Accept, Reject, or Manual Review on any user document and saves to database."""
-    if not is_admin_user(current_user):
+    if not check_is_admin(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. Admin credentials required."
