@@ -232,7 +232,7 @@ def process_document(
                 "rag_reference_used": ref_id,
                 "matched_policy_text": policy_rule,
                 "handling_guidelines": guidelines,
-                "confidence_score": similarity_score if similarity_score > 0 else 0.95,
+                "confidence_score": similarity_score
             })
 
         # Stage 4: Batch LLM Reasoning to prevent JSON Truncation
