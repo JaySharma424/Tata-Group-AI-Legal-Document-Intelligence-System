@@ -130,53 +130,36 @@ def get_cached_embedding(text: str, client: genai.Client) -> list:
 
 
 def segment_contract_clauses(text: str) -> list:
-    """Segments contract text along structural boundaries using hierarchical regex matching."""
-    # Matches: 1. DEFINITIONS, 1.1, ARTICLE 1, SCHEDULE A, WHEREAS
-    pattern = re.compile(
-        r'(?m)^(?P<header>'
-        r'(?:WHEREAS|NOW\s+THEREFORE|IN\s+WITNESS\s+WHEREOF)|'
-        r'(?:(?:ARTICLE|CLAUSE|SECTION)\s+\d+(?:\.\d+)*)|'
-        r'(?:\d+\.(?:\d+)*\s+[A-Z][A-Za-z\s]{2,40})|'
-        r'(?:SCHEDULE|ANNEXURE|EXHIBIT)\s+[A-Z0-9]+'
-        r')[:\.\-\s]'
-    )
+    """
+    Segments contract text strictly by Primary Clauses (e.g., "1. ", "2. ") 
+    so all subclauses (1.1, 1.2) stay grouped inside their parent clause.
+    """
+    # FIX: Added \s* to catch leading spaces before the primary clause numbers
+    pattern = re.compile(r'(?m)^\s*(?P<header>(?:\d{1,2}\.\s+[A-Z])|(?:(?:SCHEDULE|ARTICLE|ANNEXURE|EXHIBIT)\s+[A-Z0-9]+)|WHEREAS)')
     
-    splits = [m.start() for m in pattern.finditer(text)]
-    if not splits:
-        return [{"header": "General Provision", "text": p.strip()} for p in text.split('\n\n') if len(p.strip()) > 50]
+    matches = list(pattern.finditer(text))
+    
+    if not matches:
+        return [{"header": "General Provision", "text": text.strip()}]
         
     chunks = []
-    if splits[0] > 0:
-        preamble = text[0:splits[0]].strip()
+    
+    if matches[0].start() > 0:
+        preamble = text[0:matches[0].start()].strip()
         if len(preamble) > 50:
             chunks.append({"header": "Preamble / Recitals", "text": preamble})
             
-    for i in range(len(splits)):
-        start = splits[i]
-        end = splits[i+1] if i + 1 < len(splits) else len(text)
+    for i in range(len(matches)):
+        start = matches[i].start()
+        end = matches[i+1].start() if i + 1 < len(matches) else len(text)
+        
         chunk_text = text[start:end].strip()
-        if len(chunk_text) > 40:
-            header = chunk_text.split('\n')[0][:60].strip()
+        header = chunk_text.split('\n')[0][:80].strip()
+        
+        if len(chunk_text) > 20:
             chunks.append({"header": header, "text": chunk_text})
             
-    # Merge excessively small chunks to preserve LLM context and prevent rate-limiting
-    merged_chunks = []
-    current_text, current_header = "", ""
-    
-    for c in chunks:
-        if len(current_text) + len(c["text"]) < 1000:
-            current_text += "\n" + c["text"]
-            if not current_header: current_header = c["header"]
-        else:
-            if current_text:
-                merged_chunks.append({"header": current_header, "text": current_text.strip()})
-            current_text = c["text"]
-            current_header = c["header"]
-            
-    if current_text:
-        merged_chunks.append({"header": current_header, "text": current_text.strip()})
-        
-    return merged_chunks
+    return chunks
 
 
 def process_document(

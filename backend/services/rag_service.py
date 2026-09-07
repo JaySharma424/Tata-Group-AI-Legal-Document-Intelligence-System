@@ -63,7 +63,7 @@ class RAGKnowledgeService:
             self.qdrant = QdrantClient(":memory:")
 
         # Locate risk_taxonomy.csv and txt files dynamically across repo roots
-        self._find_data_sources()
+        self._ensure_collection_exists()
 
         # Ensure collection exists and seed knowledge
         threading.Thread(target=self._ensure_collection_exists, daemon=True).start()
