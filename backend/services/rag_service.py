@@ -24,7 +24,7 @@ class RAGKnowledgeService:
     """Production RAG service loading risk_taxonomy.csv and all *.txt knowledge base files into Qdrant."""
 
     def __init__(self, storage_path: str = "./backend/storage/qdrant_db"):
-        self.collection_name = "tata_legal_knowledge_v2"
+        self.collection_name = "tata_legal_knowledge_v3"
         self.vector_dim = 768
         self.is_seeding = False
 
