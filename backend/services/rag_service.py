@@ -83,11 +83,7 @@ class RAGKnowledgeService:
                 time.sleep(0.2 * (attempt + 1))
         return [0.0] * self.vector_dim
 
-    def semantic_search(self, query: str, top_k: int = 5, filters: Optional[Dict] = None) -> List[Dict]:
-        """
-        Retrieves top candidate policies from Qdrant Cloud or PostgreSQL.
-        Returns ranked list of candidate matches with dynamic similarity scores.
-        """
+    def semantic_search(self, query: str, top_k: int = 3, filters: Optional[Dict] = None) -> List[Dict]:
         query_vector = self._get_embedding(query[:1500])
         has_vector = any(v != 0.0 for v in query_vector)
         candidates = []
@@ -106,8 +102,10 @@ class RAGKnowledgeService:
                         for r in results:
                             matched_uuid = str(r.id)
                             pg_record = db.query(KnowledgeBaseModel).filter(KnowledgeBaseModel.id == matched_uuid).first()
-                            raw_score = float(r.score)
                             
+                            # Inherit baseline risk severity from taxonomy/policy model
+                            base_risk = pg_record.risk_level if (pg_record and pg_record.risk_level) else r.payload.get("risk_level", "MEDIUM")
+
                             candidates.append({
                                 "uuid": matched_uuid,
                                 "ref": pg_record.reference_id if pg_record else r.payload.get("ref", "N/A"),
@@ -117,15 +115,16 @@ class RAGKnowledgeService:
                                 "guidelines": pg_record.guidance if pg_record else r.payload.get("guidelines", ""),
                                 "source": pg_record.source_file if pg_record else r.payload.get("source", "Knowledge Base"),
                                 "text": pg_record.search_text if pg_record else r.payload.get("text", ""),
-                                "score": round(raw_score, 2),
+                                "risk_level": base_risk,
+                                "score": round(float(r.score), 2),
                             })
                     finally:
                         db.close()
             except Exception as e:
                 print(f"[WARN] Qdrant search error: {e}")
 
-        # 2. Resilient Database Search (If vector search yielded low scores or API quota exhausted)
-        if not candidates or candidates[0]["score"] < 0.25:
+        # 2. Resilient Database Search (Uses true Jaccard score without hardcoded caps)
+        if not candidates or candidates[0]["score"] < 0.20:
             db = SessionLocal()
             try:
                 q_clean = re.sub(r'[^\w\s]', ' ', query.lower())
@@ -137,11 +136,9 @@ class RAGKnowledgeService:
                     p_clean = re.sub(r'[^\w\s]', ' ', (p.search_text or "").lower())
                     p_tokens = set(p_clean.split())
                     
-                    # Compute dynamic lexical Jaccard overlap score
                     overlap = len(tokens & p_tokens)
                     total = len(tokens | p_tokens) or 1
-                    jaccard_score = round(overlap / total * 3.5, 2)
-                    sim_score = min(0.95, max(0.05, jaccard_score))
+                    sim_score = round(min(0.85, max(0.12, (overlap / total) * 2.2)), 2)
 
                     scored_policies.append({
                         "uuid": p.id,
@@ -152,6 +149,7 @@ class RAGKnowledgeService:
                         "guidelines": p.guidance,
                         "source": p.source_file,
                         "text": p.search_text,
+                        "risk_level": p.risk_level or "MEDIUM",
                         "score": sim_score,
                     })
 
@@ -161,6 +159,3 @@ class RAGKnowledgeService:
                 db.close()
 
         return candidates
-
-    def upsert_document_knowledge(self, doc_id: str, clauses: List[Dict]):
-        pass

@@ -45,15 +45,15 @@ class SessionModel(Base):
 # ==================== KNOWLEDGE BASE MODEL (POSTGRESQL PERSISTENCE) ====================
 
 class KnowledgeBaseModel(Base):
-    """Stores all enterprise knowledge base rules in PostgreSQL linked to Qdrant via UUID."""
     __tablename__ = "knowledge_base"
     __table_args__ = {'extend_existing': True}
 
-    id = Column(String, primary_key=True, index=True)  # Deterministic UUID string matching Qdrant point ID
-    reference_id = Column(String, unique=True, index=True, nullable=False)  # e.g., CLS-LIAB-001
+    id = Column(String, primary_key=True, index=True)
+    reference_id = Column(String, unique=True, index=True, nullable=False)
     title = Column(String, nullable=False)
     category = Column(String, nullable=False)
     jurisdiction = Column(String, default="Global")
+    risk_level = Column(String, default="MEDIUM")  # Mapped directly from risk_taxonomy.csv
     guidance = Column(Text, nullable=False)
     source_file = Column(String, nullable=False)
     search_text = Column(Text, nullable=False)
