@@ -16,6 +16,7 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
+from sqlalchemy import text
 from backend.database import SessionLocal, Base, engine
 from backend.models import KnowledgeBaseModel
 from backend.services.llm_config import get_llm_config
@@ -26,10 +27,13 @@ class RAGKnowledgeService:
         self.collection_name = "tata_legal_knowledge_v4"
         self.vector_dim = 768
 
+        # Auto-migration: Ensure table exists and add risk_level column if missing
         try:
             Base.metadata.create_all(bind=engine)
-        except Exception:
-            pass
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS risk_level VARCHAR DEFAULT 'MEDIUM';"))
+        except Exception as e:
+            print(f"[WARN] Postgres migration error: {e}")
 
         google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         config = get_llm_config()
@@ -61,15 +65,15 @@ class RAGKnowledgeService:
         else:
             self.qdrant = QdrantClient(":memory:")
 
-    def _get_embedding(self, text: str, retries: int = 2) -> List[float]:
-        if not self.has_api_key or not self.client or not text.strip():
+    def _get_embedding(self, text_input: str, retries: int = 2) -> List[float]:
+        if not self.has_api_key or not self.client or not text_input.strip():
             return [0.0] * self.vector_dim
 
         for attempt in range(retries):
             try:
                 response = self.client.models.embed_content(
                     model="gemini-embedding-001",
-                    contents=text[:2000],
+                    contents=text_input[:2000],
                     config=types.EmbedContentConfig(output_dimensionality=768),
                 )
                 if response and response.embeddings:
@@ -88,7 +92,7 @@ class RAGKnowledgeService:
         has_vector = any(v != 0.0 for v in query_vector)
         candidates = []
 
-        # 1. Primary Vector Search in Qdrant Cloud
+        # 1. Vector Search in Qdrant Cloud
         if has_vector:
             try:
                 results = self.qdrant.search(
@@ -103,8 +107,7 @@ class RAGKnowledgeService:
                             matched_uuid = str(r.id)
                             pg_record = db.query(KnowledgeBaseModel).filter(KnowledgeBaseModel.id == matched_uuid).first()
                             
-                            # Inherit baseline risk severity from taxonomy/policy model
-                            base_risk = pg_record.risk_level if (pg_record and pg_record.risk_level) else r.payload.get("risk_level", "MEDIUM")
+                            base_risk = pg_record.risk_level if (pg_record and getattr(pg_record, "risk_level", None)) else r.payload.get("risk_level", "MEDIUM")
 
                             candidates.append({
                                 "uuid": matched_uuid,
@@ -123,7 +126,7 @@ class RAGKnowledgeService:
             except Exception as e:
                 print(f"[WARN] Qdrant search error: {e}")
 
-        # 2. Resilient Database Search (Uses true Jaccard score without hardcoded caps)
+        # 2. Resilient Database Search
         if not candidates or candidates[0]["score"] < 0.20:
             db = SessionLocal()
             try:
@@ -149,7 +152,7 @@ class RAGKnowledgeService:
                         "guidelines": p.guidance,
                         "source": p.source_file,
                         "text": p.search_text,
-                        "risk_level": p.risk_level or "MEDIUM",
+                        "risk_level": getattr(p, "risk_level", "MEDIUM") or "MEDIUM",
                         "score": sim_score,
                     })
 
@@ -159,3 +162,6 @@ class RAGKnowledgeService:
                 db.close()
 
         return candidates
+
+    def upsert_document_knowledge(self, doc_id: str, clauses: List[Dict]):
+        pass
