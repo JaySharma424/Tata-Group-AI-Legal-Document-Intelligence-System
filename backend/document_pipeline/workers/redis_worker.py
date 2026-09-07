@@ -247,7 +247,7 @@ def process_document(
         normalized = normalization_service.normalize_clauses(enriched_candidates)
         
         final_clauses = []
-        BATCH_SIZE = 5 # Process 5 clauses at a time to stay safely under max_tokens
+        BATCH_SIZE = 3 # Process 3 clauses at a time to stay safely under max_tokens
         
         for i in range(0, len(normalized), BATCH_SIZE):
             batch = normalized[i:i + BATCH_SIZE]

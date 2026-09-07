@@ -247,7 +247,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ selectedHi
             window.dispatchEvent(new Event('audit_updated'));
             setLoading(false);
             setActiveTab('clauses');
-          } else if (Date.now() - startTime > 120000) {
+          } else if (Date.now() - startTime > 300000) {
             clearInterval(pollInterval);
             setLoading(false);
             alert('Analysis is taking longer than expected. Check the Audit & History Archive shortly.');
