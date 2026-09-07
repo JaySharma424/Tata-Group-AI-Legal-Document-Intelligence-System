@@ -13,17 +13,17 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
         active_key = api_key if api_key.startswith("nvapi-") else nvidia_env_key
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
         return ChatNVIDIA(
-            model="meta/llama-3.1-8b-instruct",
+            model="nvidia/nemotron-3-ultra-550b-a55b",
             api_key=active_key,
             temperature=0,
-            max_tokens=3000,
+            max_tokens=5000,
             timeout=25
         ).invoke(prompt).content
 
     elif api_key.startswith("gsk_") or os.getenv("GROQ_API_KEY"):
         active_key = api_key if api_key.startswith("gsk_") else os.getenv("GROQ_API_KEY")
         from langchain_groq import ChatGroq
-        return ChatGroq(model="llama-3.1-70b-versatile", api_key=active_key, temperature=0, max_retries=1).invoke(prompt).content
+        return ChatGroq(model="llama-3.3-70b-versatile", api_key=active_key, temperature=0, max_retries=1).invoke(prompt).content
 
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
@@ -34,10 +34,10 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
                 return str(response[0]) if response else ""
             return str(response.content) if hasattr(response, "content") else str(response)
         except Exception as e:
-            if ("429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)) and nvidia_env_key:
+            if ("429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "410" in str(e)) and nvidia_env_key:
                 from langchain_nvidia_ai_endpoints import ChatNVIDIA
                 return ChatNVIDIA(
-                    model="meta/llama-3.1-8b-instruct",
+                    model="meta/llama-3.3-70b-instruct",
                     api_key=nvidia_env_key,
                     temperature=0,
                     max_tokens=3000,
@@ -92,7 +92,7 @@ class LegalReasoningService:
 
         config = get_llm_config()
         api_key = config.get("api_key", "") or os.getenv("NVIDIA_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
-        selected_llm = "meta/llama-3.1-8b-instruct"
+        selected_llm = "meta/llama-3.3-70b-instruct"
 
         clauses_context = []
         for idx, c in enumerate(normalized_clauses, start=1):
