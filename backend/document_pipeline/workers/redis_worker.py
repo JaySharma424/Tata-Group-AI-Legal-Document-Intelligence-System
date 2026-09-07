@@ -129,29 +129,54 @@ def get_cached_embedding(text: str, client: genai.Client) -> list:
         return [0.0] * 768
 
 
-def segment_contract_clauses(text: str, client: genai.Client, threshold: float = 0.60) -> list:
-    """Segments contract text along structural boundaries using pure NumPy cosine clustering."""
-    segments = [
-        p.strip()
-        for p in re.split(r'\n{2,}|\b(?=(?:Clause|Section|Article)\s+\d+)', text)
-        if len(p.strip()) > 40
-    ]
-    if not segments:
-        return []
-
-    embeddings = [get_cached_embedding(s, client) for s in segments]
-    chunks, curr = [], [segments[0]]
-
-    for i in range(1, len(segments)):
-        sim = calculate_cosine_similarity(embeddings[i-1], embeddings[i])
-        if sim >= threshold:
-            curr.append(segments[i])
+def segment_contract_clauses(text: str) -> list:
+    """Segments contract text along structural boundaries using hierarchical regex matching."""
+    # Matches: 1. DEFINITIONS, 1.1, ARTICLE 1, SCHEDULE A, WHEREAS
+    pattern = re.compile(
+        r'(?m)^(?P<header>'
+        r'(?:WHEREAS|NOW\s+THEREFORE|IN\s+WITNESS\s+WHEREOF)|'
+        r'(?:(?:ARTICLE|CLAUSE|SECTION)\s+\d+(?:\.\d+)*)|'
+        r'(?:\d+\.(?:\d+)*\s+[A-Z][A-Za-z\s]{2,40})|'
+        r'(?:SCHEDULE|ANNEXURE|EXHIBIT)\s+[A-Z0-9]+'
+        r')[:\.\-\s]'
+    )
+    
+    splits = [m.start() for m in pattern.finditer(text)]
+    if not splits:
+        return [{"header": "General Provision", "text": p.strip()} for p in text.split('\n\n') if len(p.strip()) > 50]
+        
+    chunks = []
+    if splits[0] > 0:
+        preamble = text[0:splits[0]].strip()
+        if len(preamble) > 50:
+            chunks.append({"header": "Preamble / Recitals", "text": preamble})
+            
+    for i in range(len(splits)):
+        start = splits[i]
+        end = splits[i+1] if i + 1 < len(splits) else len(text)
+        chunk_text = text[start:end].strip()
+        if len(chunk_text) > 40:
+            header = chunk_text.split('\n')[0][:60].strip()
+            chunks.append({"header": header, "text": chunk_text})
+            
+    # Merge excessively small chunks to preserve LLM context and prevent rate-limiting
+    merged_chunks = []
+    current_text, current_header = "", ""
+    
+    for c in chunks:
+        if len(current_text) + len(c["text"]) < 1000:
+            current_text += "\n" + c["text"]
+            if not current_header: current_header = c["header"]
         else:
-            chunks.append("\n".join(curr))
-            curr = [segments[i]]
-    if curr:
-        chunks.append("\n".join(curr))
-    return chunks
+            if current_text:
+                merged_chunks.append({"header": current_header, "text": current_text.strip()})
+            current_text = c["text"]
+            current_header = c["header"]
+            
+    if current_text:
+        merged_chunks.append({"header": current_header, "text": current_text.strip()})
+        
+    return merged_chunks
 
 
 def process_document(
@@ -183,37 +208,79 @@ def process_document(
 
         # Stage 2: Context-aware chunking
         publish_pipeline_event(effective_job_id, 2, "PARSING_CHUNKING", 40, "Segmenting contract clauses...")
-        client = resolve_gemini_client()
-        chunks = segment_contract_clauses(full_text, client)
+        structured_chunks = segment_contract_clauses(full_text)
 
         # Stage 3: Dynamic Vector DB Retrieval (Searching Qdrant for policies from CSV & TXT)
         publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Retrieving matching policies from Vector DB...")
         enriched_candidates = []
-        for i, chunk in enumerate(chunks):
-            # Pure vector retrieval against Qdrant
-            retrieved = rag_service.semantic_search(chunk[:1000], top_k=1)
-            top_match = retrieved[0] if retrieved else {}
+        VECTOR_THRESHOLD = 0.90
 
-            ref_id = top_match.get("ref", "N/A")
-            policy_rule = top_match.get("policy_text") or top_match.get("text", "")
-            guidelines = top_match.get("guidelines", "")
-            derived_clause_type = top_match.get("clause_type") or f"Provision {i+1}"
+        for chunk in structured_chunks:
+            retrieved = rag_service.semantic_search(chunk["text"][:1500], top_k=1)
+            top_match = retrieved[0] if retrieved else {}
+            similarity_score = float(top_match.get("score", 0.0))
+
+            if similarity_score >= VECTOR_THRESHOLD:
+                ref_id = top_match.get("ref", "TAXONOMY-RULE")
+                policy_rule = top_match.get("policy_text") or top_match.get("text", "")
+                guidelines = top_match.get("guidelines", "")
+                derived_clause_type = top_match.get("clause_type") or chunk["header"]
+            else:
+                # Below threshold: Do not force an artificial policy violation
+                ref_id = "STANDARD-BASELINE"
+                policy_rule = "No material corporate policy deviation detected above 90% threshold."
+                guidelines = "Review against standard business terms."
+                derived_clause_type = chunk["header"]
 
             enriched_candidates.append({
                 "clause_type": derived_clause_type,
-                "extracted_text": chunk,
+                "extracted_text": chunk["text"],
                 "rag_reference_used": ref_id,
                 "matched_policy_text": policy_rule,
                 "handling_guidelines": guidelines,
-                "confidence_score": 0.95,
+                "confidence_score": similarity_score if similarity_score > 0 else 0.95,
             })
 
         # Stage 4: Batch LLM Reasoning grounded strictly in Vector DB context
-        publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 80, "Evaluating risks against retrieved guidelines...")
+        publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 80, "Evaluating risks and detecting missing clauses...")
         normalized = normalization_service.normalize_clauses(enriched_candidates)
         final_clauses = reasoning_service.evaluate_risk_and_reasoning(
             normalized, business_unit=business_unit, user_role=user_role
         )
+
+        # Stage 4.5: Missing Clause Detection
+        clause_types_found = " ".join([c.get("clause_type", "") for c in final_clauses]).lower()
+        missing_clauses = []
+        
+        if "indemn" not in clause_types_found and "defend" not in full_text.lower():
+            missing_clauses.append({
+                "clause_type": "MISSING: Indemnification",
+                "extracted_text": "No indemnification protections found in the document.",
+                "confidence_score": 0.99,
+                "risk_level": "HIGH",
+                "risk_rationale": "Failure to include standard IP and third-party indemnification exposes the Enterprise to uncapped legal liability.",
+                "rag_reference_used": "RISK-IND-101",
+                "page_reference": "Document Wide",
+                "obligation_owner": "Legal Counsel",
+                "recommended_action": "ESCALATE",
+                "proposed_redline": "Vendor shall defend, indemnify and hold harmless the Enterprise from any third-party claims alleging intellectual property infringement or bodily injury."
+            })
+            
+        if "liability" not in clause_types_found and "cap" not in full_text.lower():
+            missing_clauses.append({
+                "clause_type": "MISSING: Limitation of Liability",
+                "extracted_text": "No limitation of liability caps found in the document.",
+                "confidence_score": 0.99,
+                "risk_level": "HIGH",
+                "risk_rationale": "Missing liability caps result in unlimited financial exposure. Policy mandates capping vendor liability at 100% of ACV.",
+                "rag_reference_used": "RISK-CAP-99",
+                "page_reference": "Document Wide",
+                "obligation_owner": "Legal Counsel",
+                "recommended_action": "ESCALATE",
+                "proposed_redline": "Neither Party's aggregate liability shall exceed 100% of the annual contract value, excluding breaches of confidentiality or gross negligence."
+            })
+            
+        final_clauses.extend(missing_clauses)
 
         # Stage 5: Database Persistence
         publish_pipeline_event(effective_job_id, 5, "FINALIZING_REPORT", 95, "Committing evaluated clauses...")
