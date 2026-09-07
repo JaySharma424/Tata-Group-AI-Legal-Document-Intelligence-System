@@ -55,7 +55,7 @@ class RAGKnowledgeService:
             if not qdrant_url.startswith("http"):
                 qdrant_url = f"https://{qdrant_url}"
             try:
-                self.qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=20)
+                self.qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=25)
             except Exception:
                 self.qdrant = QdrantClient(":memory:")
         else:
@@ -83,11 +83,16 @@ class RAGKnowledgeService:
                 time.sleep(0.2 * (attempt + 1))
         return [0.0] * self.vector_dim
 
-    def semantic_search(self, query: str, top_k: int = 1, filters: Optional[Dict] = None) -> List[Dict]:
+    def semantic_search(self, query: str, top_k: int = 5, filters: Optional[Dict] = None) -> List[Dict]:
+        """
+        Retrieves top candidate policies from Qdrant Cloud or PostgreSQL.
+        Returns ranked list of candidate matches with dynamic similarity scores.
+        """
         query_vector = self._get_embedding(query[:1500])
         has_vector = any(v != 0.0 for v in query_vector)
+        candidates = []
 
-        # 1. Primary Vector Search via Qdrant Cloud
+        # 1. Primary Vector Search in Qdrant Cloud
         if has_vector:
             try:
                 results = self.qdrant.search(
@@ -95,66 +100,67 @@ class RAGKnowledgeService:
                     query_vector=query_vector,
                     limit=top_k,
                 )
-                if results and results[0].score > 0.35:
+                if results:
                     db = SessionLocal()
                     try:
-                        r = results[0]
-                        matched_uuid = str(r.id)
-                        pg_record = db.query(KnowledgeBaseModel).filter(KnowledgeBaseModel.id == matched_uuid).first()
-                        return [{
-                            "uuid": matched_uuid,
-                            "ref": pg_record.reference_id if pg_record else r.payload.get("ref", "N/A"),
-                            "title": pg_record.title if pg_record else r.payload.get("title", ""),
-                            "clause_type": pg_record.category if pg_record else r.payload.get("clause_type", "General Provision"),
-                            "policy_text": pg_record.guidance if pg_record else r.payload.get("policy_text", ""),
-                            "guidelines": pg_record.guidance if pg_record else r.payload.get("guidelines", ""),
-                            "source": pg_record.source_file if pg_record else r.payload.get("source", "Knowledge Base"),
-                            "text": pg_record.search_text if pg_record else r.payload.get("text", ""),
-                            "score": float(r.score),
-                        }]
+                        for r in results:
+                            matched_uuid = str(r.id)
+                            pg_record = db.query(KnowledgeBaseModel).filter(KnowledgeBaseModel.id == matched_uuid).first()
+                            raw_score = float(r.score)
+                            
+                            candidates.append({
+                                "uuid": matched_uuid,
+                                "ref": pg_record.reference_id if pg_record else r.payload.get("ref", "N/A"),
+                                "title": pg_record.title if pg_record else r.payload.get("title", ""),
+                                "clause_type": pg_record.category if pg_record else r.payload.get("clause_type", "General Provision"),
+                                "policy_text": pg_record.guidance if pg_record else r.payload.get("policy_text", ""),
+                                "guidelines": pg_record.guidance if pg_record else r.payload.get("guidelines", ""),
+                                "source": pg_record.source_file if pg_record else r.payload.get("source", "Knowledge Base"),
+                                "text": pg_record.search_text if pg_record else r.payload.get("text", ""),
+                                "score": round(raw_score, 2),
+                            })
                     finally:
                         db.close()
             except Exception as e:
                 print(f"[WARN] Qdrant search error: {e}")
 
-        # 2. Resilient PostgreSQL Keyword Fallback (Guarantees Real Citations on API quota limits)
-        db = SessionLocal()
-        try:
-            q_lower = query.lower()
-            target_ref = None
-            if "indemn" in q_lower or "hold harmless" in q_lower:
-                target_ref = "CLS-IND-002"
-            elif "liability" in q_lower or "consequential" in q_lower or "cap" in q_lower:
-                target_ref = "CLS-LIAB-001"
-            elif "payment" in q_lower or "penalty" in q_lower or "fee" in q_lower or "invoice" in q_lower:
-                target_ref = "CLS-PAY-007"
-            elif "terminat" in q_lower or "convenience" in q_lower:
-                target_ref = "CLS-TERM-004"
-            elif "governing law" in q_lower or "jurisdiction" in q_lower or "dispute" in q_lower:
-                target_ref = "CLS-LAW-008"
-            elif "confidential" in q_lower or "proprietary" in q_lower:
-                target_ref = "CLS-NDA-003"
-            elif "exclusive" in q_lower or "service" in q_lower:
-                target_ref = "REG-COMP-001"
+        # 2. Resilient Database Search (If vector search yielded low scores or API quota exhausted)
+        if not candidates or candidates[0]["score"] < 0.25:
+            db = SessionLocal()
+            try:
+                q_clean = re.sub(r'[^\w\s]', ' ', query.lower())
+                tokens = set(w for w in q_clean.split() if len(w) > 3)
+                all_policies = db.query(KnowledgeBaseModel).all()
 
-            if target_ref:
-                record = db.query(KnowledgeBaseModel).filter(KnowledgeBaseModel.reference_id == target_ref).first()
-                if record:
-                    return [{
-                        "uuid": record.id,
-                        "ref": record.reference_id,
-                        "title": record.title,
-                        "clause_type": record.category,
-                        "policy_text": record.guidance,
-                        "guidelines": record.guidance,
-                        "source": record.source_file,
-                        "text": record.search_text,
-                        "score": 0.88,
-                    }]
-        finally:
-            db.close()
+                scored_policies = []
+                for p in all_policies:
+                    p_clean = re.sub(r'[^\w\s]', ' ', (p.search_text or "").lower())
+                    p_tokens = set(p_clean.split())
+                    
+                    # Compute dynamic lexical Jaccard overlap score
+                    overlap = len(tokens & p_tokens)
+                    total = len(tokens | p_tokens) or 1
+                    jaccard_score = round(overlap / total * 3.5, 2)
+                    sim_score = min(0.95, max(0.05, jaccard_score))
 
-        return []
+                    scored_policies.append({
+                        "uuid": p.id,
+                        "ref": p.reference_id,
+                        "title": p.title,
+                        "clause_type": p.category,
+                        "policy_text": p.guidance,
+                        "guidelines": p.guidance,
+                        "source": p.source_file,
+                        "text": p.search_text,
+                        "score": sim_score,
+                    })
+
+                scored_policies.sort(key=lambda x: x["score"], reverse=True)
+                candidates = scored_policies[:top_k]
+            finally:
+                db.close()
+
+        return candidates
 
     def upsert_document_knowledge(self, doc_id: str, clauses: List[Dict]):
         pass

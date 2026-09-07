@@ -9,7 +9,6 @@ from backend.services.llm_config import get_llm_config
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     nvidia_env_key = os.getenv("NVIDIA_API_KEY")
 
-    # 1. NVIDIA Routing using ultra-fast, high-availability model
     if api_key.startswith("nvapi-") or (nvidia_env_key and nvidia_env_key.startswith("nvapi-")):
         active_key = api_key if api_key.startswith("nvapi-") else nvidia_env_key
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
@@ -21,13 +20,11 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
             timeout=25
         ).invoke(prompt).content
 
-    # 2. Groq Routing
     elif api_key.startswith("gsk_") or os.getenv("GROQ_API_KEY"):
         active_key = api_key if api_key.startswith("gsk_") else os.getenv("GROQ_API_KEY")
         from langchain_groq import ChatGroq
         return ChatGroq(model="llama-3.1-70b-versatile", api_key=active_key, temperature=0, max_retries=1).invoke(prompt).content
 
-    # 3. Google Gemini Routing
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
         target_model = model_name if "gemini" in model_name.lower() else "gemini-1.5-flash"
@@ -104,27 +101,31 @@ class LegalReasoningService:
                 "clause_type": c.get("clause_type", "General Provision"),
                 "extracted_text": c.get("extracted_text", ""),
                 "page_reference": str(c.get("page_reference", "1")),
-                "matched_reference_id": c.get("rag_reference_used", "STANDARD-BASELINE"),
+                "matched_reference_id": c.get("rag_reference_used", "MISSING-POLICY"),
                 "retrieved_policy_rule": c.get("matched_policy_text", "Standard enterprise terms."),
-                "vector_similarity": float(c.get("confidence_score", 0.75))
+                "vector_similarity": float(c.get("confidence_score", 0.50))
             })
 
         prompt = f"""
 You are Senior Legal Counsel at Tata Group evaluating contractual clauses for '{business_unit}'.
-Classify risk and provide legal redlines strictly using the retrieved policy rules.
+Evaluate risks strictly based on the provided Knowledge Base rules and risk taxonomy guidelines.
 
 CONTRACT CLAUSES & RETRIEVED POLICIES:
 {json.dumps(clauses_context, indent=2)}
 
 INSTRUCTIONS:
-1. Classify 'risk_level' as:
-   - "HIGH": Direct conflict (unlimited liability, uncapped customer indemnity, late payment penalties > 18% annual, 5-year lock-in without convenience exit, non-Indian jurisdiction).
-   - "MEDIUM": Ambiguous terms, excessive confidentiality survival (>5 years), vendor exclusivity.
-   - "LOW": Standard reciprocal terms fully compliant with Tata Group policies.
-2. In 'risk_rationale', write 2 sentences explaining why the clause passes or violates the policy, citing 'matched_reference_id'.
-3. Set 'rag_reference_used' to the exact 'matched_reference_id'.
-4. Set 'confidence_score' to the numeric value from 'vector_similarity'.
-5. In 'proposed_redline': If HIGH or MEDIUM, provide a specific revised clause bringing it into compliance with Tata policy. If LOW, set to null.
+1. If 'matched_reference_id' is 'MISSING-POLICY':
+   - Classify 'risk_level' as "HIGH".
+   - In 'risk_rationale': "Missing Policy: No approved corporate policy covers this clause (similarity < 20%). Represents an unmapped legal exposure."
+   - In 'proposed_redline': Provide a compliant enterprise replacement clause.
+2. Otherwise, evaluate the clause against 'retrieved_policy_rule':
+   - "HIGH": Unlimited liability, uncapped customer indemnity, late payment interest > 18% annual, multi-year lock-in without convenience termination, foreign governing law.
+   - "MEDIUM": Exclusivity restrictions, non-standard confidentiality survival (>5 years).
+   - "LOW": Standard reciprocal terms fully compliant with policy.
+3. In 'risk_rationale', write 2 sentences explaining why the clause passes or violates the policy, citing 'matched_reference_id'.
+4. CRITICAL: Maintain the exact 'matched_reference_id' in 'rag_reference_used'.
+5. Set 'confidence_score' to the exact numeric value from 'vector_similarity'.
+6. In 'proposed_redline': If HIGH or MEDIUM, write a redline amending the clause into full compliance. If LOW, set to null.
 
 Return ONLY a valid JSON array of objects with these exact keys:
 ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action", "proposed_redline"]
@@ -143,53 +144,22 @@ Return ONLY a valid JSON array of objects with these exact keys:
             except Exception as e:
                 print(f"[WARN] LLM evaluation error: {e}")
 
-        # Deterministic Grounded Fallback: Real citations, legal rationales, and compliant redlines
+        # Deterministic Grounded Fallback
+        # Clean, Dynamic Fallback: Strictly uses whatever Qdrant & Postgres retrieved
         fallback_results = []
         for c in normalized_clauses:
-            text_lower = c.get("extracted_text", "").lower()
-            ref_id = c.get("rag_reference_used", "STANDARD-BASELINE")
-            policy_text = c.get("matched_policy_text", "Standard enterprise terms.")
-            score = float(c.get("confidence_score", 0.85))
+            ref_id = c.get("rag_reference_used") or "MISSING-POLICY"
+            policy_text = c.get("matched_policy_text") or "No direct corporate policy mapped."
+            score = float(c.get("confidence_score", 0.0))
 
-            if "indemnif" in text_lower or "without any cap" in text_lower:
+            if ref_id == "MISSING-POLICY" or score < 0.20:
                 level = "HIGH"
-                ref_id = ref_id if ref_id != "STANDARD-BASELINE" else "CLS-IND-002"
-                rationale = f"Violates Tata indemnity policy [{ref_id}]. Client cannot accept uncapped third-party indemnity without monetary limitation."
-                redline = "Each party shall indemnify and hold harmless the other party from third-party claims arising from gross negligence or willful misconduct, capped at 100% of the Annual Contract Value."
-            elif "liability" in text_lower or "unlimited" in text_lower:
-                level = "HIGH"
-                ref_id = ref_id if ref_id != "STANDARD-BASELINE" else "CLS-LIAB-001"
-                rationale = f"Violates liability cap standard [{ref_id}]. Vendor disclaims consequential damages while leaving Client liability unlimited."
-                redline = "Except for breaches of confidentiality or gross negligence, each party's aggregate liability under this Agreement shall be capped at 100% of total fees paid in the preceding twelve (12) months."
-            elif "penalty of 5%" in text_lower or "payment" in text_lower:
-                level = "HIGH"
-                ref_id = ref_id if ref_id != "STANDARD-BASELINE" else "CLS-PAY-007"
-                rationale = f"Violates commercial payment policy [{ref_id}]. Imposes Net 30 terms and an excessive 5% monthly penalty (60% APR)."
-                redline = "Client shall pay all undisputed invoices within sixty (60) days of receipt. Client reserves the right to withhold disputed amounts without penalty."
-            elif "may not terminate" in text_lower or "initial term of five" in text_lower:
-                level = "HIGH"
-                ref_id = ref_id if ref_id != "STANDARD-BASELINE" else "CLS-TERM-004"
-                rationale = f"Violates exit policy [{ref_id}]. Prohibits termination for convenience during an initial 5-year lock-in period."
-                redline = "Client may terminate this Agreement or any SOW for convenience, in whole or in part, upon thirty (30) days' prior written notice to Vendor without penalty."
-            elif "new york" in text_lower or "manhattan" in text_lower:
-                level = "HIGH"
-                ref_id = ref_id if ref_id != "STANDARD-BASELINE" else "CLS-LAW-008"
-                rationale = f"Violates governing law guidelines [{ref_id}]. Specifies New York State jurisdiction rather than Indian courts."
-                redline = "This Agreement shall be governed by the laws of India, and disputes shall be subject to binding arbitration administered by the MCIA in Mumbai."
-            elif "exclusive" in text_lower:
-                level = "MEDIUM"
-                ref_id = ref_id if ref_id != "STANDARD-BASELINE" else "REG-COMP-001"
-                rationale = f"Deviates from procurement standards [{ref_id}]. Grants exclusive vendor status, restricting multi-sourcing capabilities."
-                redline = "Vendor shall provide Services on a non-exclusive basis. Client reserves the right to engage third-party providers for similar services."
-            elif "ten (10) years" in text_lower:
-                level = "MEDIUM"
-                ref_id = ref_id if ref_id != "STANDARD-BASELINE" else "CLS-NDA-003"
-                rationale = f"Deviates from confidentiality standards [{ref_id}]. A 10-year post-termination survival period exceeds the standard 3-5 year term."
-                redline = "The obligations of confidentiality under this Agreement shall survive for a period of three (3) years following termination."
+                rationale = "Unmapped Clause: Similarity to approved corporate policy library is below 20%. Requires legal desk review."
+                action = "Review Unmapped Term"
             else:
-                level = "LOW"
-                rationale = f"Evaluated against [{ref_id}]. Clause represents standard reciprocal enterprise commercial terms."
-                redline = None
+                level = "MEDIUM"  # Flag for review if LLM was unavailable to perform deep reasoning
+                rationale = f"Policy Reference [{ref_id}]: Grounded against standard '{c.get('clause_type')}'. (AI reasoning unavailable)."
+                action = "Manual Review Required"
 
             fallback_results.append({
                 "clause_type": c.get("clause_type", "General Provision"),
@@ -201,8 +171,8 @@ Return ONLY a valid JSON array of objects with these exact keys:
                 "rag_reference_used": ref_id,
                 "page_reference": str(c.get("page_reference", "1")),
                 "obligation_owner": "Legal & Procurement Desk",
-                "recommended_action": "Execute Proposed Redline" if level != "LOW" else "Accept as Standard",
-                "proposed_redline": redline,
+                "recommended_action": action,
+                "proposed_redline": None,  # No fake redlines; redlines must come from the LLM
             })
 
         return fallback_results
