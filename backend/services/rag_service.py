@@ -54,8 +54,6 @@ class RAGKnowledgeService:
         if qdrant_url and qdrant_api_key:
             try:
                 self.qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
-                self.qdrant.get_collections()
-                print("[OK] Connected to Qdrant Cloud cluster.")
             except Exception as e:
                 print(f"[WARN] Qdrant Cloud connection failed: {e}. Using in-memory.")
                 self.qdrant = QdrantClient(":memory:")
@@ -63,7 +61,6 @@ class RAGKnowledgeService:
             self.qdrant = QdrantClient(":memory:")
 
         self._find_data_sources()
-        self._ensure_collection_exists()
 
     def _find_data_sources(self):
         csv_candidates = [
@@ -88,7 +85,8 @@ class RAGKnowledgeService:
                     if base != "requirements.txt" and base not in [os.path.basename(x) for x in self.txt_files]:
                         self.txt_files.append(f)
 
-    def _ensure_collection_exists(self):
+    def ensure_seeded(self):
+        """Ensures the collection exists and seeds knowledge without blocking web service startup."""
         try:
             collections = [c.name for c in self.qdrant.get_collections().collections]
             if self.collection_name not in collections:
@@ -118,7 +116,7 @@ class RAGKnowledgeService:
                         return emb
                     return emb[:self.vector_dim] if len(emb) > self.vector_dim else emb + [0.0] * (self.vector_dim - len(emb))
             except Exception:
-                time.sleep(0.5 * (attempt + 1))
+                time.sleep(0.3 * (attempt + 1))
         return [0.0] * self.vector_dim
 
     def _seed_structured_policies(self):
@@ -224,6 +222,7 @@ class RAGKnowledgeService:
             self.is_seeding = False
 
     def semantic_search(self, query: str, top_k: int = 1, filters: Optional[Dict] = None) -> List[Dict]:
+        self.ensure_seeded()
         query_vector = self._get_embedding(query[:1500])
         qdrant_filter = None
         if filters:
