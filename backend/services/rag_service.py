@@ -27,6 +27,10 @@ class RAGKnowledgeService:
         self.collection_name = "tata_legal_knowledge_v3"
         self.vector_dim = 768
         self.is_seeding = False
+        
+        # FIX: Initialize variables first to prevent the 'csv_path' crash
+        self.csv_path = None
+        self.txt_files = []
 
         # Resolve Google API key dynamically
         google_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -55,14 +59,15 @@ class RAGKnowledgeService:
             try:
                 self.qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
                 self.qdrant.get_collections()
-                print("[OK] Connected to Qdrant Cloud cluster.")
             except Exception as e:
-                print(f"[WARN] Qdrant Cloud connection failed: {e}. Using in-memory.")
                 self.qdrant = QdrantClient(":memory:")
         else:
             self.qdrant = QdrantClient(":memory:")
 
         # Locate risk_taxonomy.csv and txt files dynamically across repo roots
+        self._find_data_sources()
+
+        # FIX: Call synchronously so the DB is fully seeded before the worker runs
         self._ensure_collection_exists()
 
         # Ensure collection exists and seed knowledge
