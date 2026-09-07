@@ -7,37 +7,48 @@ from backend.services.llm_config import get_llm_config
 
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    if not api_key:
-        raise ValueError("ADMIN_CONFIG_MISSING: No API Key found.")
+    nvidia_env_key = os.getenv("NVIDIA_API_KEY")
 
-    # 1. Automatic Key-Based Provider Routing
-    if api_key.startswith("nvapi-"):
+    # Priority 1: Direct NVIDIA invocation
+    if api_key.startswith("nvapi-") or (nvidia_env_key and nvidia_env_key.startswith("nvapi-")):
+        active_key = api_key if api_key.startswith("nvapi-") else nvidia_env_key
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        target_model = model_name if ("nvidia" in model_name.lower() or "nemotron" in model_name.lower()) else "nvidia/nemotron-3.5-lightning-30b-a3b"
-        return ChatNVIDIA(model=target_model, api_key=api_key, temperature=0, max_tokens=4096, timeout=120).invoke(prompt).content
+        return ChatNVIDIA(
+            model="nvidia/nemotron-3.5-lightning-30b-a3b",
+            api_key=active_key,
+            temperature=0,
+            max_tokens=4096,
+            timeout=120
+        ).invoke(prompt).content
 
-    elif api_key.startswith("gsk_"):
+    # Priority 2: Groq invocation
+    elif api_key.startswith("gsk_") or os.getenv("GROQ_API_KEY"):
+        active_key = api_key if api_key.startswith("gsk_") else os.getenv("GROQ_API_KEY")
         from langchain_groq import ChatGroq
-        target_model = model_name if "llama" in model_name.lower() else "llama-3.1-70b-versatile"
-        return ChatGroq(model=target_model, api_key=api_key, temperature=0, max_retries=2).invoke(prompt).content
+        return ChatGroq(model="llama-3.1-70b-versatile", api_key=active_key, temperature=0, max_retries=2).invoke(prompt).content
 
-    elif api_key.startswith("sk-") and not api_key.startswith("sk-ant-"):
-        from langchain_openai import ChatOpenAI
-        target_model = model_name if "gpt" in model_name.lower() else "gpt-4o-mini"
-        return ChatOpenAI(model=target_model, api_key=api_key, temperature=0, max_retries=1).invoke(prompt).content
-
-    elif api_key.startswith("sk-ant-"):
-        from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model_name or "claude-3-5-sonnet-20241022", api_key=api_key, temperature=0, max_retries=1).invoke(prompt).content
-
+    # Priority 3: Google Gemini with automated fallback to NVIDIA on 429
     else:
-        # Default Google Gemini routing
         from langchain_google_genai import ChatGoogleGenerativeAI
         target_model = model_name if "gemini" in model_name.lower() else "gemini-1.5-flash"
-        response = ChatGoogleGenerativeAI(model=target_model, google_api_key=api_key, temperature=0, max_retries=1).invoke(prompt)
-        if isinstance(response, list):
-            return str(response[0]) if response else ""
-        return str(response.content) if hasattr(response, "content") else str(response)
+        try:
+            response = ChatGoogleGenerativeAI(model=target_model, google_api_key=api_key, temperature=0, max_retries=0).invoke(prompt)
+            if isinstance(response, list):
+                return str(response[0]) if response else ""
+            return str(response.content) if hasattr(response, "content") else str(response)
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                if nvidia_env_key:
+                    print(f"[INFO] Gemini 429 Quota Exceeded. Automatically falling back to NVIDIA Nemotron...")
+                    from langchain_nvidia_ai_endpoints import ChatNVIDIA
+                    return ChatNVIDIA(
+                        model="nvidia/nemotron-3.5-lightning-30b-a3b",
+                        api_key=nvidia_env_key,
+                        temperature=0,
+                        max_tokens=4096,
+                        timeout=120
+                    ).invoke(prompt).content
+            raise e
 
 
 def robust_json_harvester(raw_text: str) -> List[Dict[str, Any]]:
@@ -85,10 +96,7 @@ class LegalReasoningService:
             return []
 
         config = get_llm_config()
-        api_key = config.get("api_key", "")
-        if not api_key:
-            api_key = os.getenv("NVIDIA_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
-
+        api_key = config.get("api_key", "") or os.getenv("NVIDIA_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
         selected_llm = config.get("llm_model", "nvidia/nemotron-3.5-lightning-30b-a3b")
 
         clauses_context = []
