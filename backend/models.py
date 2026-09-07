@@ -42,7 +42,7 @@ class SessionModel(Base):
     user = relationship("UserModel", back_populates="sessions")
 
 
-# ==================== KNOWLEDGE BASE MODEL (POSTGRESQL PERSISTENCE) ====================
+# ==================== KNOWLEDGE BASE MODEL ====================
 
 class KnowledgeBaseModel(Base):
     __tablename__ = "knowledge_base"
@@ -53,7 +53,7 @@ class KnowledgeBaseModel(Base):
     title = Column(String, nullable=False)
     category = Column(String, nullable=False)
     jurisdiction = Column(String, default="Global")
-    risk_level = Column(String, default="MEDIUM")  # Mapped directly from risk_taxonomy.csv
+    risk_level = Column(String, default="MEDIUM")
     guidance = Column(Text, nullable=False)
     source_file = Column(String, nullable=False)
     search_text = Column(Text, nullable=False)
@@ -117,7 +117,7 @@ class ClauseModel(Base):
     obligation_owner = Column(String, default="Legal & Procurement Desk")
     recommended_action = Column(String, default="Review")
     
-    rag_reference_used = Column(String, nullable=True, default="STANDARD-BASELINE")
+    rag_reference_used = Column(String, nullable=True, default="MISSING-POLICY")
     proposed_redline = Column(Text, nullable=True)
     
     edited_text = Column(Text, nullable=True)
