@@ -236,40 +236,26 @@ def process_document(
         publish_pipeline_event(effective_job_id, 2, "PARSING_CHUNKING", 40, f"Chunking sub-clauses across {pages_count} pages...")
         structured_chunks = segment_page_clauses_granular(pages_data)
 
-        # Stage 3: Dynamic Multi-File Knowledge Base Retrieval
-        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Retrieving policy citations across Knowledge Base...")
-        enriched_candidates = []
-        SIMILARITY_FLOOR = 0.20
-
-        # In redis_worker.py, update the Stage 3 loop:
+        # Stage 3: Cross-reference and capture taxonomy risk tier
         for chunk in structured_chunks:
             policy_query = rephrase_clause_for_policy_retrieval(chunk["header"], chunk["text"])
             candidates = rag_service.semantic_search(policy_query, top_k=1)
             top_match = candidates[0] if candidates else {}
             score = float(top_match.get("score", 0.0))
 
-            t = chunk["text"].lower()
-
-            if not top_match or score < SIMILARITY_FLOOR:
+            if not top_match or score < 0.20:
                 ref_id = "MISSING-POLICY"
                 derived_clause_type = chunk["header"]
-                policy_rule = "Unapproved contractual provision: No matching approved standard found in Knowledge Base (similarity < 20%)."
-                guidelines = "Clause represents an unmapped risk exposure. Requires explicit legal review and policy drafting."
-                taxonomy_risk = "HIGH"
-                final_score = max(0.08, score)
+                policy_rule = "Unapproved contractual provision (< 20% match)."
+                guidelines = "Unmapped exposure. Requires legal review."
+                tax_risk = "HIGH"
             else:
-                ref_id = top_match.get("ref", "CLS-GEN-020")
+                ref_id = top_match.get("ref", "POL-GEN-01")
                 derived_clause_type = top_match.get("clause_type") or chunk["header"]
                 policy_rule = top_match.get("policy_text") or top_match.get("text", "")
                 guidelines = top_match.get("guidelines", "")
-                final_score = score
-                
-                # Deterministic Deviation Detection based on risk_taxonomy.csv criteria
-                taxonomy_risk = top_match.get("risk_level", "LOW")
-                if any(kw in t for kw in ["unlimited", "without any cap", "penalty of 5%", "may not terminate", "laws of the state of new york"]):
-                    taxonomy_risk = "HIGH"
-                elif any(kw in t for kw in ["exclusive", "ten (10) years", "4 times the fees", "four (4) times"]):
-                    taxonomy_risk = "MEDIUM"
+                # Pull directly from risk_taxonomy.csv payload
+                tax_risk = top_match.get("risk_level", "MEDIUM")
 
             enriched_candidates.append({
                 "clause_type": derived_clause_type,
@@ -277,22 +263,20 @@ def process_document(
                 "rag_reference_used": ref_id,
                 "matched_policy_text": policy_rule,
                 "handling_guidelines": guidelines,
-                "taxonomy_risk": taxonomy_risk,
+                "taxonomy_risk": tax_risk,
                 "page_reference": str(chunk.get("page", 1)),
-                "confidence_score": round(final_score, 2),
+                "confidence_score": round(score, 2),
             })
 
-        # Stage 4: Batch LLM Reasoning (Chunks of 6 to guarantee sub-3s response without timeouts)
-        publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 80, "Running AI legal reasoning & risk classification...")
+        # Stage 4: Batch in chunks of 6 to prevent timeouts
         normalized = normalization_service.normalize_clauses(enriched_candidates)
-
         final_clauses = []
         BATCH_SIZE = 6
         for i in range(0, len(normalized), BATCH_SIZE):
             batch = normalized[i:i + BATCH_SIZE]
-            evaluated_batch = reasoning_service.evaluate_risk_and_reasoning(
+            final_clauses.extend(reasoning_service.evaluate_risk_and_reasoning(
                 batch, business_unit=business_unit, user_role=user_role
-            )
+            ))
             final_clauses.extend(evaluated_batch)
 
         # Stage 5: Database Commit
