@@ -112,10 +112,6 @@ def segment_page_clauses_granular(pages_data: list) -> list:
     return all_chunks
 
 def rephrase_clause_for_policy_retrieval(header: str, text: str) -> str:
-    """
-    Transforms raw contract text into a targeted policy retrieval query
-    that mirrors the format of risk_taxonomy.csv and knowledge base files.
-    """
     t = text.lower()
     h = header.lower()
 
@@ -133,7 +129,7 @@ def rephrase_clause_for_policy_retrieval(header: str, text: str) -> str:
         return "Category: CONFIDENTIALITY & PRIVACY. Policy Title: Mutual Confidentiality and NDA Terms. Guidance Rule: Mandatory survival period of 3 to 5 years post-termination, proprietary data encryption."
     elif "exclusive" in t or "subcontract" in t or "service provided" in t:
         return "Category: STATUTORY COMPLIANCE & VENDOR MANAGEMENT. Policy Title: Competition Act Anti-Cartel Compliance and Subcontracting Approval. Guidance Rule: Prohibit exclusivity and lock-in, compliance with fair procurement standards."
-    
+
     clean_header = re.sub(r'^\d+(\.\d+)*\s*', '', header).strip()
     return f"Policy Title: {clean_header}. Category: General Provision. Guidance Rule: Standard corporate contracting policy guidelines for {clean_header}."
 
@@ -167,30 +163,19 @@ def process_document(
         publish_pipeline_event(effective_job_id, 2, "PARSING_CHUNKING", 40, f"Chunking sub-clauses across {pages_count} pages...")
         structured_chunks = segment_page_clauses_granular(pages_data)
 
-        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Rephrasing queries & searching Qdrant Knowledge Base...")
+        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Cross-referencing Knowledge Base...")
         enriched_candidates = []
-        VECTOR_THRESHOLD = 0.35
 
         for chunk in structured_chunks:
-            # Rephrase raw contract text into a structured policy query
             policy_query = rephrase_clause_for_policy_retrieval(chunk["header"], chunk["text"])
             retrieved = rag_service.semantic_search(policy_query, top_k=1)
             
             top_match = retrieved[0] if retrieved else {}
-            raw_score = float(top_match.get("score", 0.0))
-
-            if raw_score >= VECTOR_THRESHOLD and top_match.get("ref"):
-                ref_id = top_match.get("ref")
-                policy_rule = top_match.get("policy_text") or top_match.get("text", "")
-                guidelines = top_match.get("guidelines", "")
-                derived_clause_type = top_match.get("clause_type") or chunk["header"]
-                final_score = round(min(0.99, max(0.50, raw_score)), 2)
-            else:
-                ref_id = "STANDARD-BASELINE"
-                policy_rule = "Standard commercial provision with no material policy conflict."
-                guidelines = "Review against standard business terms."
-                derived_clause_type = chunk["header"]
-                final_score = 0.50
+            ref_id = top_match.get("ref", "STANDARD-BASELINE")
+            policy_rule = top_match.get("policy_text") or "Standard enterprise terms."
+            guidelines = top_match.get("guidelines") or "Review against business terms."
+            derived_clause_type = top_match.get("clause_type") or chunk["header"]
+            similarity_score = float(top_match.get("score", 0.75))
 
             enriched_candidates.append({
                 "clause_type": derived_clause_type,
@@ -199,7 +184,7 @@ def process_document(
                 "matched_policy_text": policy_rule,
                 "handling_guidelines": guidelines,
                 "page_reference": str(chunk.get("page", 1)),
-                "confidence_score": final_score,
+                "confidence_score": round(similarity_score, 2),
             })
 
         publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 80, "Running AI legal reasoning & risk classification...")
@@ -222,9 +207,9 @@ def process_document(
                 job_id=effective_job_id,
                 clause_type=c.get("clause_type", "General Provision"),
                 extracted_text=c.get("extracted_text", ""),
-                confidence_score=float(c.get("confidence_score", 0.75)),
+                confidence_score=float(c.get("confidence_score", 0.85)),
                 risk_level=c.get("risk_level", "LOW"),
-                risk_rationale=c.get("risk_rationale", "Evaluated against corporate policy standards."),
+                risk_rationale=c.get("risk_rationale", "Evaluated against policy standards."),
                 involved_party=c.get("involved_party", "Tata Group & Counterparty"),
                 rag_reference_used=c.get("rag_reference_used") or "STANDARD-BASELINE",
                 page_reference=str(c.get("page_reference", "1")),
@@ -240,7 +225,7 @@ def process_document(
             "ocr_confidence": overall_confidence,
             "pages": pages_count,
         })
-        print(f"✅ Fast pipeline complete for {effective_job_id}. Processed {len(final_clauses)} clauses.")
+        print(f"✅ Pipeline complete for {effective_job_id}. Processed {len(final_clauses)} clauses.")
 
     except Exception as e:
         db.rollback()
