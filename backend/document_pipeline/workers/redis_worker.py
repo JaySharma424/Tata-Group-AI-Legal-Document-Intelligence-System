@@ -131,11 +131,18 @@ def get_cached_embedding(text: str, client: genai.Client) -> list:
 
 def segment_contract_clauses(text: str) -> list:
     """
-    Segments contract text strictly by Primary Clauses (e.g., "1. ", "2. ") 
-    so all subclauses (1.1, 1.2) stay grouped inside their parent clause.
+    Segments contract text strictly by SUB-CLAUSES (1.1, 1.2) to prevent
+    vector dilution, ensuring highly accurate RAG policy matching.
     """
-    # FIX: Added \s* to catch leading spaces before the primary clause numbers
-    pattern = re.compile(r'(?m)^\s*(?P<header>(?:\d{1,2}\.\s+[A-Z])|(?:(?:SCHEDULE|ARTICLE|ANNEXURE|EXHIBIT)\s+[A-Z0-9]+)|WHEREAS)')
+    # Matches: "1.1 ", "12.3 ", "1. DEFINITIONS", "SCHEDULE 1", "WHEREAS"
+    pattern = re.compile(
+        r'(?m)^\s*(?P<header>'
+        r'(?:\d{1,2}\.\d{1,2}\s+)|'          # Matches Sub-clauses like "1.1 " or "16.2 "
+        r'(?:\d{1,2}\.\s+[A-Z])|'            # Matches Primary clauses like "1. "
+        r'(?:(?:SCHEDULE|ARTICLE|ANNEXURE|EXHIBIT)\s+[A-Z0-9]+)|' # Matches Schedules
+        r'WHEREAS'                           # Matches Preamble
+        r')'
+    )
     
     matches = list(pattern.finditer(text))
     
@@ -144,20 +151,23 @@ def segment_contract_clauses(text: str) -> list:
         
     chunks = []
     
+    # 1. Capture the Preamble/Recitals before the first clause
     if matches[0].start() > 0:
         preamble = text[0:matches[0].start()].strip()
-        if len(preamble) > 50:
+        if len(preamble) > 30:
             chunks.append({"header": "Preamble / Recitals", "text": preamble})
             
+    # 2. Slice the document exactly at every sub-clause and clause
     for i in range(len(matches)):
         start = matches[i].start()
         end = matches[i+1].start() if i + 1 < len(matches) else len(text)
         
         chunk_text = text[start:end].strip()
-        header = chunk_text.split('\n')[0][:80].strip()
         
-        if len(chunk_text) > 20:
-            chunks.append({"header": header, "text": chunk_text})
+        if len(chunk_text) > 15:
+            # Create a clean UI header from the first line
+            first_line = chunk_text.split('\n')[0][:80].strip()
+            chunks.append({"header": first_line, "text": chunk_text})
             
     return chunks
 
