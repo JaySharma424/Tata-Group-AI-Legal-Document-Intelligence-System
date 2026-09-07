@@ -83,7 +83,7 @@ class RAGKnowledgeService:
                 time.sleep(0.3 * (attempt + 1))
         return [0.0] * self.vector_dim
 
-    def semantic_search(self, query: str, top_k: int = 1, filters: Optional[Dict] = None) -> List[Dict]:
+    def semantic_search(self, query: str, top_k: int = 3, filters: Optional[Dict] = None) -> List[Dict]:
         query_vector = self._get_embedding(query[:1500])
         qdrant_filter = None
         if filters:
@@ -105,6 +105,7 @@ class RAGKnowledgeService:
                 for r in results:
                     matched_uuid = str(r.id)
                     pg_record = db.query(KnowledgeBaseModel).filter(KnowledgeBaseModel.id == matched_uuid).first()
+                    
                     matched_items.append({
                         "uuid": matched_uuid,
                         "ref": pg_record.reference_id if pg_record else r.payload.get("ref", "N/A"),
@@ -112,9 +113,9 @@ class RAGKnowledgeService:
                         "clause_type": pg_record.category if pg_record else r.payload.get("clause_type", "General Provision"),
                         "policy_text": pg_record.guidance if pg_record else r.payload.get("policy_text", ""),
                         "guidelines": pg_record.guidance if pg_record else r.payload.get("guidelines", ""),
-                        "source": pg_record.source_file if pg_record else r.payload.get("source", ""),
+                        "source": pg_record.source_file if pg_record else r.payload.get("source", "Knowledge Base"),
                         "text": pg_record.search_text if pg_record else r.payload.get("text", ""),
-                        "score": r.score,
+                        "score": float(r.score),
                     })
             finally:
                 db.close()
