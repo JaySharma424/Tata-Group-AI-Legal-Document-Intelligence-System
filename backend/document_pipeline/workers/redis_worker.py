@@ -112,26 +112,97 @@ def segment_page_clauses_granular(pages_data: list) -> list:
     return all_chunks
 
 def rephrase_clause_for_policy_retrieval(header: str, text: str) -> str:
-    t = text.lower()
+    """
+    Granular topic routing mapping clauses to their distinct enterprise policy domain.
+    Prevents operational, SLA, insurance, retention, and security terms from defaulting to jurisdiction.
+    """
     h = header.lower()
+    t = text.lower()
 
-    if "indemnif" in t or "indemn" in h or "hold harmless" in t:
-        return "Category: INDEMNIFICATION & LIABILITY. Policy Title: Comprehensive Indemnification and Liability Cap. Guidance Rule: Vendor indemnity, third-party claims, uncapped liability limitation, hold harmless."
-    elif "limit of liability" in t or "limitation of liability" in t or "consequential damages" in t or "lost profits" in t or "cap" in t:
-        return "Category: INDEMNIFICATION & LIABILITY. Policy Title: Limitation of Liability Cap Standard. Guidance Rule: Vendor liability cap at 100% of Annual Contract Value ACV, exclusion of indirect consequential damages, avoid unlimited liability."
-    elif "payment" in t or "fee" in t or "invoice" in t or "penalty" in t or "late payment" in t:
-        return "Category: FINANCIAL & PAYMENT. Policy Title: Standard Commercial Payment Terms. Guidance Rule: Standard payment cycles Net 45 Net 60 days, invoice dispute protocol, prohibition of compounding late penalty interest."
-    elif "terminat" in t or "convenience" in t or "cure period" in t or "breach" in t:
-        return "Category: TERMINATION & EXIT. Policy Title: Termination for Convenience Clause Standard. Guidance Rule: Unilateral right to terminate for convenience 30 to 60 days notice without penalty, material breach cure periods."
-    elif "governing law" in t or "jurisdiction" in t or "dispute" in t or "arbitration" in t or "court" in t:
-        return "Category: LEGAL & JURISDICTION. Policy Title: Governing Law and Exclusive Jurisdiction. Guidance Rule: Laws of India, exclusive jurisdiction Mumbai courts, institutional arbitration under MCIA SIAC rules."
-    elif "confidential" in t or "proprietary" in t or "non-disclosure" in t:
-        return "Category: CONFIDENTIALITY & PRIVACY. Policy Title: Mutual Confidentiality and NDA Terms. Guidance Rule: Mandatory survival period of 3 to 5 years post-termination, proprietary data encryption."
-    elif "exclusive" in t or "subcontract" in t or "service provided" in t:
-        return "Category: STATUTORY COMPLIANCE & VENDOR MANAGEMENT. Policy Title: Competition Act Anti-Cartel Compliance and Subcontracting Approval. Guidance Rule: Prohibit exclusivity and lock-in, compliance with fair procurement standards."
+    # 1. Operational SLAs, Warranties & Service Credits
+    if any(k in h or k in t for k in ["sla", "service level", "availability", "99.9", "uptime", "service credit", "incident record", "rto", "rpo"]):
+        if any(k in h or k in t for k in ["business continuity", "disaster recovery", "rto", "rpo", "bcdr"]):
+            return "Category: OPERATIONS. Policy Title: Business Continuity and Disaster Recovery Plan. Reference ID: POL-BCDR-017. Guidance Rule: Operational continuity and recovery time objectives."
+        return "Category: PERFORMANCE & SERVICE. Policy Title: Warranties and Service Level Agreements SLAs. Reference ID: CLS-SLA-017. Guidance Rule: Operational availability 99.9% uptime, bug-free deliverables, financial remedies."
+
+    # 2. Insurance & Risk Coverage
+    elif any(k in h or k in t for k in ["insurance", "cyber liability", "errors and omissions", "commercial general insurance"]):
+        return "Category: RISK & INSURANCE. Policy Title: Mandatory Insurance Coverage Limits. Reference ID: CLS-INS-016. Guidance Rule: Minimum thresholds of Professional Liability and Cyber Insurance."
+
+    # 3. Subcontracting & Third-Party Sourcing
+    elif any(k in h or k in t for k in ["subcontract", "subprocessor"]):
+        return "Category: VENDOR MANAGEMENT. Policy Title: Subcontracting Approval Mandate. Reference ID: CLS-SUB-012. Guidance Rule: Prohibit subcontracting without prior written consent and enforce full liability flow-down."
+
+    # 4. Records, Retention & Archival
+    elif any(k in h or k in t for k in ["record retention", "billing records", "archival", "retain evidence"]):
+        return "Category: LEGAL OPERATIONS. Policy Title: Record Retention and Document Archival Policy. Reference ID: POL-RET-019. Guidance Rule: Preservation periods and secure destruction protocols for commercial records."
+
+    # 5. Cybersecurity & Incident Notification
+    elif any(k in h or k in t for k in ["vulnerabilit", "security incident", "cert-in", "patching", "mfa", "access review"]):
+        if "cert-in" in t or "incident notification" in t or "24 hours" in t:
+            return "Category: CYBER REGULATION. Policy Title: CERT-In Cyber Security Incident Directives. Reference ID: REG-CERT-021. Guidance Rule: Mandate logging and immediate reporting of security incidents."
+        return "Category: CYBERSECURITY. Policy Title: Group Information Security Policy GISP. Reference ID: POL-SEC-002. Guidance Rule: Mandatory security baselines, encryption, and vulnerability remediation."
+
+    # 6. Intellectual Property & Deliverables
+    elif any(k in h or k in t for k in ["background ip", "deliverable", "work made for hire", "open-source", "patent", "copyright"]):
+        return "Category: INTELLECTUAL PROPERTY. Policy Title: Intellectual Property Ownership Work Made for Hire. Reference ID: CLS-IP-006. Guidance Rule: Deliverables and created code vest exclusively with Tata Group."
+
+    # 7. Brand, Publicity & Marketing
+    elif any(k in h or k in t for k in ["publicity", "press release", "brand", "trademark", "marketing reference", "spokesperson", "logo"]):
+        return "Category: BRAND & MARKETING. Policy Title: Brand Usage and Publicity Restrictions. Reference ID: CLS-BRD-022. Guidance Rule: Prohibit unauthorized public announcements and use of Tata trademarks."
+
+    # 8. Anti-Bribery, Ethics & Conflicts
+    elif any(k in h or k in t for k in ["anti-bribery", "corruption", "abac", "conflict of interest", "fcpa"]):
+        return "Category: ETHICS & COMPLIANCE. Policy Title: Anti-Bribery and Anti-Corruption Clause. Reference ID: CLS-ETH-013. Guidance Rule: Zero tolerance for bribery, illicit payments, and conflict disclosures."
+
+    # 9. Personnel & Non-Solicitation
+    elif any(k in h or k in t for k in ["non-solicit", "solicit", "personnel", "employment"]):
+        return "Category: HUMAN RESOURCES. Policy Title: Mutual Non-Solicitation of Employees. Reference ID: CLS-SOL-014. Guidance Rule: Restrict solicitation during contract term and for 1 year post-termination."
+
+    # 10. Audit & Regulatory Inspection
+    elif any(k in h or k in t for k in ["audit", "inspection", "independent assurance", "regulat"]):
+        return "Category: GOVERNANCE & AUDIT. Policy Title: Audit and Inspection Rights. Reference ID: CLS-AUD-015. Guidance Rule: Grant unconditional access to inspect financial records and facilities."
+
+    # 11. Force Majeure
+    elif any(k in h or k in t for k in ["force majeure"]):
+        return "Category: RISK MANAGEMENT. Policy Title: Force Majeure Scope and Notification. Reference ID: CLS-FM-011. Guidance Rule: Define force majeure events and require written notice within 48 hours."
+
+    # 12. Indemnification & Third-Party Defense
+    elif any(k in h or k in t for k in ["indemn", "hold harmless", "defense of claim"]):
+        return "Category: INDEMNIFICATION & LIABILITY. Policy Title: Comprehensive Indemnification for IP Infringement. Reference ID: CLS-IND-002. Guidance Rule: Vendor must fully indemnify against third-party claims; avoid uncapped client indemnity."
+
+    # 13. Limitation of Liability
+    elif any(k in h or k in t for k in ["liability", "consequential damage", "lost profit", "super-cap", "aggregate liability"]):
+        return "Category: INDEMNIFICATION & LIABILITY. Policy Title: Limitation of Liability Cap Standard. Reference ID: CLS-LIAB-001. Guidance Rule: Vendor liability capped at 100% of ACV, mutual indirect damage exclusions."
+
+    # 14. Financial, Pricing & Payment Terms
+    elif any(k in h or k in t for k in ["payment", "fee", "invoice", "pricing", "disputed amount", "withhold payment"]):
+        return "Category: FINANCIAL & PAYMENT. Policy Title: Standard Commercial Payment Terms. Reference ID: CLS-PAY-007. Guidance Rule: Standard payment cycles Net 45 or Net 60 days, invoice dispute protocol."
+
+    # 15. Termination & Exit Management
+    elif any(k in h or k in t for k in ["terminat", "cure period", "material breach", "convenience", "transition assistance", "exit management"]):
+        if any(k in h or k in t for k in ["transition", "exit management", "data migration"]):
+            return "Category: TERMINATION & EXIT. Policy Title: Exit Management and Transition Assistance. Reference ID: CLS-EXIT-018. Guidance Rule: Obligate vendor to provide operational support and data return upon expiration."
+        return "Category: TERMINATION & EXIT. Policy Title: Termination for Convenience Clause. Reference ID: CLS-TERM-004. Guidance Rule: Unilateral right to terminate for convenience on 30 to 60 days advance written notice."
+
+    # 16. Confidentiality & Data Protection
+    elif any(k in h or k in t for k in ["confidential", "proprietary information", "trade secret", "data protection", "customer data"]):
+        return "Category: CONFIDENTIALITY & PRIVACY. Policy Title: Mutual Confidentiality and NDA Terms. Reference ID: CLS-NDA-003. Guidance Rule: Mandatory survival period of 3 to 5 years post-termination, proprietary data encryption."
+
+    # 17. Governing Law, Venue & Arbitration
+    elif any(k in h or k in t for k in ["governing law", "jurisdiction", "arbitrat", "dispute resolution", "courts"]):
+        if any(k in h or k in t for k in ["arbitrat", "mcia", "siac"]):
+            return "Category: DISPUTE RESOLUTION. Policy Title: Dispute Resolution and Institutional Arbitration. Reference ID: CLS-DIS-009. Guidance Rule: Binding institutional arbitration under MCIA or SIAC rules in Mumbai."
+        return "Category: LEGAL & JURISDICTION. Policy Title: Governing Law and Exclusive Jurisdiction. Reference ID: CLS-LAW-008. Guidance Rule: Laws of India, exclusive jurisdiction designated in Mumbai courts."
+
+    # 18. General Legal Boilerplate (Precedence, Assignment, Severability, Counterparts)
+    elif any(k in h or k in t for k in ["order of precedence", "severability", "waiver", "assignment", "counterpart", "entire agreement", "headings"]):
+        if "assignment" in h or "assignment" in t:
+            return "Category: GENERAL PROVISIONS. Policy Title: Assignment and Transfer Restrictions. Reference ID: CLS-ASG-021. Guidance Rule: Prohibit transfer of rights without prior written consent."
+        return "Category: GENERAL PROVISIONS. Policy Title: Severability and Waiver Documentation. Reference ID: CLS-GEN-020. Guidance Rule: Invalidating one clause does not void entire agreement; formal written waivers required."
 
     clean_header = re.sub(r'^\d+(\.\d+)*\s*', '', header).strip()
-    return f"Policy Title: {clean_header}. Category: General Provision. Guidance Rule: Standard corporate contracting policy guidelines for {clean_header}."
+    return f"Policy Title: {clean_header}. Category: General Provision. Reference ID: CLS-GEN-020. Guidance Rule: Standard corporate contracting policy guidelines for {clean_header}."
 
 def process_document(
     job_id: str = None,
@@ -144,7 +215,7 @@ def process_document(
 ):
     job = get_current_job()
     effective_job_id = job_id or (job.id if job else None) or kwargs.get("document_id")
-    print(f"🚀 Initializing Fast Legal Intelligence Pipeline for Job: {effective_job_id}")
+    print(f"🚀 Initializing Precision Legal Intelligence Pipeline for Job: {effective_job_id}")
 
     db: Session = SessionLocal()
     temp_path = f"/tmp/{effective_job_id}_{filename}"
@@ -156,26 +227,38 @@ def process_document(
     reasoning_service = LegalReasoningService()
 
     try:
+        # Stage 1: Text & OCR scanning
         publish_pipeline_event(effective_job_id, 1, "OCR_SCANNING", 20, "Extracting text and calculating page OCR scores...")
         pages_data, overall_confidence = extract_text_and_confidence_all_pages(temp_path)
         pages_count = len(pages_data)
 
+        # Stage 2: Sub-clause chunking
         publish_pipeline_event(effective_job_id, 2, "PARSING_CHUNKING", 40, f"Chunking sub-clauses across {pages_count} pages...")
         structured_chunks = segment_page_clauses_granular(pages_data)
 
-        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Cross-referencing Knowledge Base...")
+        # Stage 3: Dynamic Multi-File Knowledge Base Retrieval
+        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Retrieving policy citations across Knowledge Base...")
         enriched_candidates = []
+        SIMILARITY_FLOOR = 0.20
 
         for chunk in structured_chunks:
             policy_query = rephrase_clause_for_policy_retrieval(chunk["header"], chunk["text"])
-            retrieved = rag_service.semantic_search(policy_query, top_k=1)
-            
-            top_match = retrieved[0] if retrieved else {}
-            ref_id = top_match.get("ref", "STANDARD-BASELINE")
-            policy_rule = top_match.get("policy_text") or "Standard enterprise terms."
-            guidelines = top_match.get("guidelines") or "Review against business terms."
-            derived_clause_type = top_match.get("clause_type") or chunk["header"]
-            similarity_score = float(top_match.get("score", 0.75))
+            candidates = rag_service.semantic_search(policy_query, top_k=1)
+            top_match = candidates[0] if candidates else {}
+            score = float(top_match.get("score", 0.0))
+
+            if not top_match or score < SIMILARITY_FLOOR:
+                ref_id = "MISSING-POLICY"
+                derived_clause_type = chunk["header"]
+                policy_rule = "Unapproved contractual provision: No matching approved standard found in Knowledge Base (similarity < 20%)."
+                guidelines = "Clause represents an unmapped risk exposure. Requires explicit legal review and policy drafting."
+                final_score = max(0.05, score)
+            else:
+                ref_id = top_match.get("ref", "CLS-GEN-020")
+                derived_clause_type = top_match.get("clause_type") or chunk["header"]
+                policy_rule = top_match.get("policy_text") or top_match.get("text", "")
+                guidelines = top_match.get("guidelines", "")
+                final_score = score
 
             enriched_candidates.append({
                 "clause_type": derived_clause_type,
@@ -184,16 +267,23 @@ def process_document(
                 "matched_policy_text": policy_rule,
                 "handling_guidelines": guidelines,
                 "page_reference": str(chunk.get("page", 1)),
-                "confidence_score": round(similarity_score, 2),
+                "confidence_score": round(final_score, 2),
             })
 
+        # Stage 4: Batch LLM Reasoning (Chunks of 6 to guarantee sub-3s response without timeouts)
         publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 80, "Running AI legal reasoning & risk classification...")
         normalized = normalization_service.normalize_clauses(enriched_candidates)
 
-        final_clauses = reasoning_service.evaluate_risk_and_reasoning(
-            normalized, business_unit=business_unit, user_role=user_role
-        )
+        final_clauses = []
+        BATCH_SIZE = 6
+        for i in range(0, len(normalized), BATCH_SIZE):
+            batch = normalized[i:i + BATCH_SIZE]
+            evaluated_batch = reasoning_service.evaluate_risk_and_reasoning(
+                batch, business_unit=business_unit, user_role=user_role
+            )
+            final_clauses.extend(evaluated_batch)
 
+        # Stage 5: Database Commit
         publish_pipeline_event(effective_job_id, 5, "FINALIZING_REPORT", 95, "Committing risk reasoning to database...")
         doc = db.query(DocumentModel).filter(DocumentModel.job_id == effective_job_id).first()
         if doc:
@@ -207,11 +297,11 @@ def process_document(
                 job_id=effective_job_id,
                 clause_type=c.get("clause_type", "General Provision"),
                 extracted_text=c.get("extracted_text", ""),
-                confidence_score=float(c.get("confidence_score", 0.85)),
+                confidence_score=float(c.get("confidence_score", 0.50)),
                 risk_level=c.get("risk_level", "LOW"),
-                risk_rationale=c.get("risk_rationale", "Evaluated against policy standards."),
+                risk_rationale=c.get("risk_rationale", "Evaluated against corporate policy standards."),
                 involved_party=c.get("involved_party", "Tata Group & Counterparty"),
-                rag_reference_used=c.get("rag_reference_used") or "STANDARD-BASELINE",
+                rag_reference_used=c.get("rag_reference_used") or "MISSING-POLICY",
                 page_reference=str(c.get("page_reference", "1")),
                 obligation_owner=c.get("obligation_owner", "Legal & Procurement Desk"),
                 recommended_action=c.get("recommended_action", "Review"),
@@ -225,7 +315,7 @@ def process_document(
             "ocr_confidence": overall_confidence,
             "pages": pages_count,
         })
-        print(f"✅ Pipeline complete for {effective_job_id}. Processed {len(final_clauses)} clauses.")
+        print(f"✅ Fast pipeline complete for {effective_job_id}. Processed {len(final_clauses)} clauses.")
 
     except Exception as e:
         db.rollback()
