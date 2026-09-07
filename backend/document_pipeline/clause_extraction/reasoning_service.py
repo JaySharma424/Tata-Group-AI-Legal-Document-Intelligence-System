@@ -9,7 +9,6 @@ from backend.services.llm_config import get_llm_config
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     nvidia_env_key = os.getenv("NVIDIA_API_KEY")
 
-    # Priority 1: NVIDIA NIM using fast Llama-3.1-8b
     if api_key.startswith("nvapi-") or (nvidia_env_key and nvidia_env_key.startswith("nvapi-")):
         active_key = api_key if api_key.startswith("nvapi-") else nvidia_env_key
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
@@ -21,13 +20,11 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
             timeout=25
         ).invoke(prompt).content
 
-    # Priority 2: Groq Routing
     elif api_key.startswith("gsk_") or os.getenv("GROQ_API_KEY"):
         active_key = api_key if api_key.startswith("gsk_") else os.getenv("GROQ_API_KEY")
         from langchain_groq import ChatGroq
         return ChatGroq(model="llama-3.1-70b-versatile", api_key=active_key, temperature=0, max_retries=1).invoke(prompt).content
 
-    # Priority 3: Google Gemini with automated fallback to NVIDIA on 429
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
         target_model = model_name if "gemini" in model_name.lower() else "gemini-1.5-flash"
@@ -106,6 +103,7 @@ class LegalReasoningService:
                 "page_reference": str(c.get("page_reference", "1")),
                 "matched_reference_id": c.get("rag_reference_used", "MISSING-POLICY"),
                 "retrieved_policy_rule": c.get("matched_policy_text", "Standard enterprise terms."),
+                "baseline_taxonomy_risk": c.get("taxonomy_risk", "MEDIUM"),
                 "vector_similarity": float(c.get("confidence_score", 0.50))
             })
 
@@ -121,8 +119,8 @@ INSTRUCTIONS:
    - Classify 'risk_level' as "HIGH".
    - In 'risk_rationale': "Missing Policy: No approved corporate policy covers this clause (similarity < 20%). Represents an unmapped legal exposure."
    - In 'proposed_redline': Provide a compliant enterprise replacement clause.
-2. Otherwise, evaluate the clause against 'retrieved_policy_rule':
-   - "HIGH": Unlimited liability, uncapped customer indemnity, late payment penalties > 18% annual, multi-year lock-in without convenience termination, foreign governing law/venue.
+2. Otherwise, evaluate the clause against 'retrieved_policy_rule' taking into account 'baseline_taxonomy_risk':
+   - "HIGH": Unlimited liability, uncapped customer indemnity, late payment interest > 18% annual, multi-year lock-in without convenience termination, foreign governing law/venue.
    - "MEDIUM": Exclusivity restrictions, non-standard confidentiality survival (>5 years), liability caps > 1x ACV without GC approval.
    - "LOW": Standard reciprocal terms, standard SLAs, insurance baselines, or mutual non-solicitation fully compliant with policy.
 3. In 'risk_rationale', write 2 sentences explaining why the clause passes or violates the policy, citing 'matched_reference_id'.
@@ -149,38 +147,35 @@ Return ONLY a valid JSON array of objects with these exact keys:
 
         # Grounded Fallback: Inherits true taxonomy risk level directly from Knowledge Base
         fallback_results = []
-        # Inside evaluate_risk_and_reasoning():
-        for idx, c in enumerate(normalized_clauses, start=1):
-            clauses_context.append({
-                "item_index": idx,
-                "clause_type": c.get("clause_type", "General Provision"),
-                "extracted_text": c.get("extracted_text", ""),
-                "matched_reference_id": c.get("rag_reference_used", "MISSING-POLICY"),
-                "retrieved_policy_rule": c.get("matched_policy_text", ""),
-                "baseline_taxonomy_risk": c.get("taxonomy_risk", "MEDIUM"),
-                "vector_similarity": float(c.get("confidence_score", 0.50))
-            })
-
-        # Fallback: Inherit taxonomy_risk directly instead of forcing LOW
-        fallback_results = []
         for c in normalized_clauses:
             ref_id = c.get("rag_reference_used") or "MISSING-POLICY"
-            policy_text = c.get("matched_policy_text") or "Standard terms."
+            policy_text = c.get("matched_policy_text") or "Standard enterprise contracting guidelines."
             derived_type = c.get("clause_type") or "General Provision"
             score = float(c.get("confidence_score", 0.50))
-            level = c.get("taxonomy_risk", "MEDIUM")
+            level = c.get("taxonomy_risk") or ("HIGH" if ref_id == "MISSING-POLICY" or score < 0.20 else "LOW")
+
+            if level == "HIGH":
+                action = "Negotiate Amendment (High Policy Deviation)"
+                rationale = f"Policy Deviation [{ref_id}]: Term conflicts with mandatory Tata compliance rules for '{derived_type}'. Policy: {policy_text[:120]}..."
+            elif level == "MEDIUM":
+                action = "Procurement Review Required"
+                rationale = f"Policy Reference [{ref_id}]: Non-standard commercial term detected under '{derived_type}'. Policy: {policy_text[:120]}..."
+            else:
+                action = "Accept Standard Provision"
+                rationale = f"Policy Reference [{ref_id}]: Provision adheres to approved enterprise standard for '{derived_type}'."
 
             fallback_results.append({
                 "clause_type": derived_type,
                 "extracted_text": c.get("extracted_text", ""),
                 "confidence_score": score,
                 "risk_level": level,
-                "risk_rationale": f"Grounded in risk_taxonomy [{ref_id}]: Classified as {level} based on mandatory policy guidelines.",
+                "risk_rationale": rationale,
                 "involved_party": "Tata Group & Counterparty",
                 "rag_reference_used": ref_id,
                 "page_reference": str(c.get("page_reference", "1")),
                 "obligation_owner": "Legal & Procurement Desk",
-                "recommended_action": "Review Deviation" if level != "LOW" else "Accept Standard",
+                "recommended_action": action,
                 "proposed_redline": None,
             })
+
         return fallback_results
