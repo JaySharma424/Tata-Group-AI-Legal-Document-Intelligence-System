@@ -149,37 +149,38 @@ Return ONLY a valid JSON array of objects with these exact keys:
 
         # Grounded Fallback: Inherits true taxonomy risk level directly from Knowledge Base
         fallback_results = []
+        # Inside evaluate_risk_and_reasoning():
+        for idx, c in enumerate(normalized_clauses, start=1):
+            clauses_context.append({
+                "item_index": idx,
+                "clause_type": c.get("clause_type", "General Provision"),
+                "extracted_text": c.get("extracted_text", ""),
+                "matched_reference_id": c.get("rag_reference_used", "MISSING-POLICY"),
+                "retrieved_policy_rule": c.get("matched_policy_text", ""),
+                "baseline_taxonomy_risk": c.get("taxonomy_risk", "MEDIUM"),
+                "vector_similarity": float(c.get("confidence_score", 0.50))
+            })
+
+        # Fallback: Inherit taxonomy_risk directly instead of forcing LOW
+        fallback_results = []
         for c in normalized_clauses:
             ref_id = c.get("rag_reference_used") or "MISSING-POLICY"
-            policy_text = c.get("matched_policy_text") or "Standard enterprise contracting guidelines."
+            policy_text = c.get("matched_policy_text") or "Standard terms."
             derived_type = c.get("clause_type") or "General Provision"
             score = float(c.get("confidence_score", 0.50))
-            
-            # Inherit taxonomy risk level directly from vector DB
-            level = c.get("taxonomy_risk") or ("HIGH" if ref_id == "MISSING-POLICY" or score < 0.20 else "LOW")
-            
-            if level == "HIGH":
-                action = "Negotiate Amendment (High Policy Deviation)"
-                rationale = f"Policy Deviation [{ref_id}]: Term conflicts with mandatory Tata compliance rules for '{derived_type}'. Policy: {policy_text[:120]}..."
-            elif level == "MEDIUM":
-                action = "Procurement Review Required"
-                rationale = f"Policy Reference [{ref_id}]: Non-standard commercial term detected under '{derived_type}'. Policy: {policy_text[:120]}..."
-            else:
-                action = "Accept Standard Provision"
-                rationale = f"Policy Reference [{ref_id}]: Provision adheres to approved enterprise standard for '{derived_type}'."
+            level = c.get("taxonomy_risk", "MEDIUM")
 
             fallback_results.append({
                 "clause_type": derived_type,
                 "extracted_text": c.get("extracted_text", ""),
                 "confidence_score": score,
                 "risk_level": level,
-                "risk_rationale": rationale,
+                "risk_rationale": f"Grounded in risk_taxonomy [{ref_id}]: Classified as {level} based on mandatory policy guidelines.",
                 "involved_party": "Tata Group & Counterparty",
                 "rag_reference_used": ref_id,
                 "page_reference": str(c.get("page_reference", "1")),
                 "obligation_owner": "Legal & Procurement Desk",
-                "recommended_action": action,
+                "recommended_action": "Review Deviation" if level != "LOW" else "Accept Standard",
                 "proposed_redline": None,
             })
-
         return fallback_results
