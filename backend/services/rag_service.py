@@ -157,5 +157,4 @@ class RAGKnowledgeService:
                 candidates = scored_policies[:top_k]
             finally:
                 db.close()
-
         return candidates
