@@ -3,7 +3,6 @@ import re
 import time
 import json
 import base64
-import hashlib
 import numpy as np
 import redis
 import fitz  # PyMuPDF
@@ -15,7 +14,7 @@ from backend.models import DocumentModel, ClauseModel
 from backend.services.llm_config import get_llm_config
 from backend.services.rag_service import RAGKnowledgeService
 from backend.document_pipeline.normalization.normalization_service import ClauseNormalizationService
-from backend.document_pipeline.clause_extraction.reasoning_service import LegalReasoningService, _invoke_dynamic_llm, robust_json_harvester
+from backend.document_pipeline.clause_extraction.reasoning_service import LegalReasoningService
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
@@ -36,69 +35,108 @@ def publish_pipeline_event(job_id: str, stage: int, step_name: str, progress: in
     except Exception as e:
         print(f"[WARN] Redis publish error: {e}")
 
-def extract_text_page_wise(file_path: str) -> list:
-    """Extracts text page-by-page to prepare for LLM chunking."""
+def calculate_deterministic_page_ocr_confidence(text: str) -> float:
+    """
+    Deterministically computes an OCR extraction confidence score (50.0% - 99.9%)
+    based on alphanumeric ratio, printable legal punctuation, and token length distribution.
+    """
+    if not text or len(text.strip()) < 10:
+        return 50.0
+
+    clean_chars = [c for c in text if not c.isspace()]
+    if not clean_chars:
+        return 50.0
+
+    total_chars = len(clean_chars)
+    alnum_chars = sum(1 for c in clean_chars if c.isalnum())
+    alnum_ratio = alnum_chars / total_chars
+
+    allowed_punct = sum(1 for c in clean_chars if c in '.,;:()[]"\'%-/&$#@§')
+    noise_chars = total_chars - (alnum_chars + allowed_punct)
+    noise_ratio = noise_chars / total_chars
+
+    words = text.strip().split()
+    avg_word_len = sum(len(w) for w in words) / max(len(words), 1)
+
+    score = (alnum_ratio * 80.0) + 20.0 - (noise_ratio * 35.0)
+
+    if avg_word_len < 2.5 or avg_word_len > 15.0:
+        score -= 8.0
+
+    return round(min(99.9, max(50.0, score)), 2)
+
+def extract_text_and_confidence_all_pages(file_path: str) -> tuple[list, float]:
+    """
+    Parses EVERY single page of the document using PyMuPDF and computes
+    page-by-page deterministic OCR scores.
+    """
     pages_data = []
+
     if file_path.lower().endswith(".pdf"):
         try:
             with fitz.open(file_path) as pdf_doc:
-                for page_num, page in enumerate(pdf_doc):
-                    text = page.get_text().strip()
-                    if len(text) > 20:
-                        pages_data.append({"page": page_num + 1, "text": text})
+                for page_idx in range(len(pdf_doc)):
+                    page = pdf_doc[page_idx]
+                    page_text = page.get_text().strip()
+                    page_confidence = calculate_deterministic_page_ocr_confidence(page_text)
+                    pages_data.append({
+                        "page": page_idx + 1,
+                        "text": page_text,
+                        "confidence": page_confidence
+                    })
         except Exception as e:
-            print(f"[WARN] PyMuPDF extraction: {e}")
-            
-    # Fallback if PDF parsing fails
+            print(f"[WARN] PyMuPDF page parsing error: {e}")
+
     if not pages_data:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            text = f.read()
-        pages_data = [{"page": 1, "text": text}]
-        
-    return pages_data
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            conf = calculate_deterministic_page_ocr_confidence(content)
+            pages_data = [{"page": 1, "text": content, "confidence": conf}]
+        except Exception as e:
+            pages_data = [{"page": 1, "text": f"Extraction error: {e}", "confidence": 50.0}]
 
-def extract_clauses_with_nvidia_llm(page_text: str, page_num: int, api_key: str, model_name: str) -> list:
-    """Uses the NVIDIA LLM to intelligently extract structured clauses from a single page."""
-    prompt = f"""
-    You are an expert legal data extraction AI. 
-    Analyze the following page of a legal document and extract every distinct clause, sub-clause, definition, and provision.
-    Do NOT summarize. Extract the exact text.
-    
-    Return ONLY a valid JSON array of objects. Each object must have these exact keys: "clause_type", "extracted_text".
-    
-    Example output:
-    [
-      {{"clause_type": "4.1 Fees and Payment", "extracted_text": "Fees shall be as specified in the applicable Order Form..."}}
-    ]
+    avg_confidence = round(float(np.mean([p["confidence"] for p in pages_data])), 2)
+    return pages_data, avg_confidence
 
-    Page Text:
-    {page_text}
+def segment_page_clauses_granular(pages_data: list) -> list:
     """
-    try:
-        # Force NVIDIA model architecture as requested
-        target_model = model_name if "nvidia" in model_name.lower() or "llama" in model_name.lower() else "nvidia/nemotron-3.5-lightning-30b-a3b"
-        
-        raw_output = _invoke_dynamic_llm(prompt, target_model, api_key)
-        parsed = robust_json_harvester(raw_output)
-        
-        valid_clauses = []
-        for item in parsed:
-            if isinstance(item, dict) and "extracted_text" in item and len(item["extracted_text"]) > 15:
-                valid_clauses.append({
-                    "header": str(item.get("clause_type", "General Provision"))[:80],
-                    "text": str(item["extracted_text"]),
-                    "page": page_num
-                })
-        
-        if valid_clauses:
-            return valid_clauses
-            
-    except Exception as e:
-        print(f"[WARN] NVIDIA LLM Extraction failed for page {page_num}: {e}")
-        
-    # Fallback if the LLM fails on this specific page
-    return [{"header": f"Page {page_num} Text", "text": page_text, "page": page_num}]
+    1. Extracts sub-clauses (e.g., 1.1, 4.2).
+    2. If no sub-clauses exist in a section, falls back to clause-wise extraction.
+    3. Retains exact page-number metadata for every chunk.
+    """
+    all_chunks = []
+    sub_clause_pattern = re.compile(r'(?m)^\s*(?P<header>\d{1,2}\.\d{1,2}(?:\.\d{1,2})?\s+[A-Z][a-zA-Z0-9"\'\s]{1,50})')
+    clause_pattern = re.compile(r'(?m)^\s*(?P<header>(?:\d{1,2}\.\s+[A-Z][A-Za-z\s,&]+)|(?:(?:SCHEDULE|ARTICLE|ANNEXURE)\s+[A-Z0-9]+)|WHEREAS)')
 
+    for p in pages_data:
+        page_num = p["page"]
+        text = p["text"]
+
+        sub_matches = list(sub_clause_pattern.finditer(text))
+        if sub_matches:
+            for i in range(len(sub_matches)):
+                start = sub_matches[i].start()
+                end = sub_matches[i+1].start() if i + 1 < len(sub_matches) else len(text)
+                chunk_text = text[start:end].strip()
+                if len(chunk_text) > 20:
+                    header = chunk_text.split('\n')[0][:80].strip()
+                    all_chunks.append({"header": header, "text": chunk_text, "page": page_num})
+        else:
+            clause_matches = list(clause_pattern.finditer(text))
+            if clause_matches:
+                for i in range(len(clause_matches)):
+                    start = clause_matches[i].start()
+                    end = clause_matches[i+1].start() if i + 1 < len(clause_matches) else len(text)
+                    chunk_text = text[start:end].strip()
+                    if len(chunk_text) > 20:
+                        header = chunk_text.split('\n')[0][:80].strip()
+                        all_chunks.append({"header": header, "text": chunk_text, "page": page_num})
+            elif len(text.strip()) > 30:
+                header = text.strip().split('\n')[0][:80].strip()
+                all_chunks.append({"header": header or f"Page {page_num} Section", "text": text.strip(), "page": page_num})
+
+    return all_chunks
 
 def process_document(
     job_id: str = None,
@@ -111,7 +149,7 @@ def process_document(
 ):
     job = get_current_job()
     effective_job_id = job_id or (job.id if job else None) or kwargs.get("document_id")
-    print(f"🚀 Initializing V2 Page-Wise NVIDIA Pipeline for Job: {effective_job_id}")
+    print(f"🚀 Initializing Deterministic Multi-Page Pipeline for Job: {effective_job_id}")
 
     db: Session = SessionLocal()
     temp_path = f"/tmp/{effective_job_id}_{filename}"
@@ -123,34 +161,31 @@ def process_document(
     reasoning_service = LegalReasoningService()
 
     try:
-        config = get_llm_config()
-        api_key = config.get("api_key", "")
-        active_llm = config.get("llm_model", "nvidia/nemotron-3.5-lightning-30b-a3b")
-        
-        # FIX: Default to NVIDIA API key from Render Environment
-        if not api_key:
-            api_key = os.getenv("NVIDIA_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
-
-        # Stage 1: Text extraction (Page-by-Page)
-        publish_pipeline_event(effective_job_id, 1, "OCR_SCANNING", 20, "Extracting text page-by-page...")
-        pages_data = extract_text_page_wise(temp_path)
+        # Stage 1: Page-by-Page OCR and Deterministic Scoring
+        publish_pipeline_event(effective_job_id, 1, "OCR_SCANNING", 20, "Extracting all pages and calculating deterministic OCR scores...")
+        pages_data, overall_confidence = extract_text_and_confidence_all_pages(temp_path)
         pages_count = len(pages_data)
 
-        # Stage 2: Context-Aware LLM Extraction (NVIDIA)
-        publish_pipeline_event(effective_job_id, 2, "PARSING_CHUNKING", 30, f"Extracting structured clauses via NVIDIA LLM across {pages_count} pages...")
-        structured_chunks = []
-        for idx, p_data in enumerate(pages_data):
-            publish_pipeline_event(effective_job_id, 2, "PARSING_CHUNKING", 30 + int((idx/pages_count)*20), f"NVIDIA AI extracting clauses on Page {p_data['page']}...")
-            extracted_items = extract_clauses_with_nvidia_llm(p_data["text"], p_data["page"], api_key, active_llm)
-            structured_chunks.extend(extracted_items)
-            time.sleep(2) # Pause briefly to respect LLM provider rate limits
+        # Cache page-level breakdown in Redis for the Frontend Monitor Tab
+        page_metrics = [
+            {
+                "page": p["page"],
+                "ocrConfidence": p["confidence"],
+                "isHighQuality": p["confidence"] >= 85.0,
+                "length": len(p["text"])
+            }
+            for p in pages_data
+        ]
+        redis_client.set(f"pipeline_pages:{effective_job_id}", json.dumps(page_metrics), ex=86400)
 
-        # Stage 3: Dynamic Vector DB Retrieval (Searching Qdrant for policies)
-        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 55, "Retrieving matching policies from Vector DB...")
+        # Stage 2: Sub-Clause Chunking with Page Tracking
+        publish_pipeline_event(effective_job_id, 2, "PARSING_CHUNKING", 40, f"Chunking sub-clauses across {pages_count} pages...")
+        structured_chunks = segment_page_clauses_granular(pages_data)
+
+        # Stage 3: High-Score Vector Search with >= 85% Gate
+        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Querying Qdrant Vector DB with 85%+ threshold...")
         enriched_candidates = []
-        
-        # USER REQUESTED THRESHOLD: 85%+ (0.85)
-        VECTOR_THRESHOLD = 0.85 
+        VECTOR_THRESHOLD = 0.85
 
         for chunk in structured_chunks:
             retrieved = rag_service.semantic_search(chunk["text"][:1500], top_k=1)
@@ -158,13 +193,13 @@ def process_document(
             similarity_score = float(top_match.get("score", 0.0))
 
             if similarity_score >= VECTOR_THRESHOLD:
-                ref_id = top_match.get("ref", "TAXONOMY-RULE")
+                ref_id = top_match.get("ref", "KB-POLICY-RULE")
                 policy_rule = top_match.get("policy_text") or top_match.get("text", "")
                 guidelines = top_match.get("guidelines", "")
                 derived_clause_type = top_match.get("clause_type") or chunk["header"]
             else:
                 ref_id = "STANDARD-BASELINE"
-                policy_rule = f"No material policy deviation detected above {int(VECTOR_THRESHOLD*100)}% threshold."
+                policy_rule = f"Standard enterprise terms. No policy deviation above {int(VECTOR_THRESHOLD*100)}% threshold."
                 guidelines = "Review against standard business terms."
                 derived_clause_type = chunk["header"]
 
@@ -175,33 +210,28 @@ def process_document(
                 "matched_policy_text": policy_rule,
                 "handling_guidelines": guidelines,
                 "page_reference": str(chunk.get("page", 1)),
-                "confidence_score": similarity_score if similarity_score > 0 else 0.95,
+                "confidence_score": similarity_score,
             })
 
-        # Stage 4: Batch LLM Reasoning grounded strictly in Vector DB context
-        publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 70, "Evaluating risks against retrieved guidelines...")
+        # Stage 4: Batch LLM Reasoning
+        publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 80, "Running legal reasoning and risk evaluation...")
         normalized = normalization_service.normalize_clauses(enriched_candidates)
-        
+
         final_clauses = []
-        BATCH_SIZE = 5 
-        
+        BATCH_SIZE = 5
+
         for i in range(0, len(normalized), BATCH_SIZE):
             batch = normalized[i:i + BATCH_SIZE]
-            publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 70 + int((i/len(normalized))*20), f"Reasoning analysis: items {i+1} to {min(i+BATCH_SIZE, len(normalized))}...")
-            
             evaluated_batch = reasoning_service.evaluate_risk_and_reasoning(
                 batch, business_unit=business_unit, user_role=user_role
             )
             final_clauses.extend(evaluated_batch)
-            
-            if i + BATCH_SIZE < len(normalized):
-                time.sleep(10) # Prevent rate limits during batch reasoning
 
-        # Stage 5: Database Persistence
-        publish_pipeline_event(effective_job_id, 5, "FINALIZING_REPORT", 95, "Committing evaluated clauses...")
+        # Stage 5: Database Commit
+        publish_pipeline_event(effective_job_id, 5, "FINALIZING_REPORT", 95, "Persisting structured analysis...")
         doc = db.query(DocumentModel).filter(DocumentModel.job_id == effective_job_id).first()
         if doc:
-            doc.ocr_confidence = 98.5
+            doc.ocr_confidence = overall_confidence
             doc.pages = pages_count
             doc.entities_detected = len(final_clauses) * 4
             doc.requires_manual_review = any(c.get("risk_level") == "HIGH" for c in final_clauses)
@@ -213,10 +243,10 @@ def process_document(
                 extracted_text=c.get("extracted_text", ""),
                 confidence_score=c.get("confidence_score", 0.95),
                 risk_level=c.get("risk_level", "LOW"),
-                risk_rationale=c.get("risk_rationale", "Evaluated against corporate policy standards."),
+                risk_rationale=c.get("risk_rationale", "Evaluated against policy standards."),
                 involved_party=c.get("involved_party", "Tata Group & Counterparty"),
                 rag_reference_used=c.get("rag_reference_used", "N/A"),
-                page_reference=c.get("page_reference", "1"),
+                page_reference=str(c.get("page_reference", "1")),
                 obligation_owner=c.get("obligation_owner", "Legal Desk"),
                 recommended_action=c.get("recommended_action", "Review"),
                 proposed_redline=c.get("proposed_redline"),
@@ -226,10 +256,10 @@ def process_document(
 
         publish_pipeline_event(effective_job_id, 5, "COMPLETED", 100, "Analysis complete.", {
             "clauses_count": len(final_clauses),
-            "ocr_confidence": 98.5,
+            "ocr_confidence": overall_confidence,
             "pages": pages_count,
         })
-        print(f"✅ Pipeline complete. Extracted {len(final_clauses)} structured clauses via NVIDIA LLM.")
+        print(f"✅ Pipeline complete for {effective_job_id}. Processed {pages_count} pages with {overall_confidence}% OCR confidence.")
 
     except Exception as e:
         db.rollback()
