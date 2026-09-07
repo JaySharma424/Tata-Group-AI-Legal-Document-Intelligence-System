@@ -111,6 +111,32 @@ def segment_page_clauses_granular(pages_data: list) -> list:
 
     return all_chunks
 
+def rephrase_clause_for_policy_retrieval(header: str, text: str) -> str:
+    """
+    Transforms raw contract text into a targeted policy retrieval query
+    that mirrors the format of risk_taxonomy.csv and knowledge base files.
+    """
+    t = text.lower()
+    h = header.lower()
+
+    if "indemnif" in t or "indemn" in h or "hold harmless" in t:
+        return "Category: INDEMNIFICATION & LIABILITY. Policy Title: Comprehensive Indemnification and Liability Cap. Guidance Rule: Vendor indemnity, third-party claims, uncapped liability limitation, hold harmless."
+    elif "limit of liability" in t or "limitation of liability" in t or "consequential damages" in t or "lost profits" in t or "cap" in t:
+        return "Category: INDEMNIFICATION & LIABILITY. Policy Title: Limitation of Liability Cap Standard. Guidance Rule: Vendor liability cap at 100% of Annual Contract Value ACV, exclusion of indirect consequential damages, avoid unlimited liability."
+    elif "payment" in t or "fee" in t or "invoice" in t or "penalty" in t or "late payment" in t:
+        return "Category: FINANCIAL & PAYMENT. Policy Title: Standard Commercial Payment Terms. Guidance Rule: Standard payment cycles Net 45 Net 60 days, invoice dispute protocol, prohibition of compounding late penalty interest."
+    elif "terminat" in t or "convenience" in t or "cure period" in t or "breach" in t:
+        return "Category: TERMINATION & EXIT. Policy Title: Termination for Convenience Clause Standard. Guidance Rule: Unilateral right to terminate for convenience 30 to 60 days notice without penalty, material breach cure periods."
+    elif "governing law" in t or "jurisdiction" in t or "dispute" in t or "arbitration" in t or "court" in t:
+        return "Category: LEGAL & JURISDICTION. Policy Title: Governing Law and Exclusive Jurisdiction. Guidance Rule: Laws of India, exclusive jurisdiction Mumbai courts, institutional arbitration under MCIA SIAC rules."
+    elif "confidential" in t or "proprietary" in t or "non-disclosure" in t:
+        return "Category: CONFIDENTIALITY & PRIVACY. Policy Title: Mutual Confidentiality and NDA Terms. Guidance Rule: Mandatory survival period of 3 to 5 years post-termination, proprietary data encryption."
+    elif "exclusive" in t or "subcontract" in t or "service provided" in t:
+        return "Category: STATUTORY COMPLIANCE & VENDOR MANAGEMENT. Policy Title: Competition Act Anti-Cartel Compliance and Subcontracting Approval. Guidance Rule: Prohibit exclusivity and lock-in, compliance with fair procurement standards."
+    
+    clean_header = re.sub(r'^\d+(\.\d+)*\s*', '', header).strip()
+    return f"Policy Title: {clean_header}. Category: General Provision. Guidance Rule: Standard corporate contracting policy guidelines for {clean_header}."
+
 def process_document(
     job_id: str = None,
     file_data_base64: str = "",
@@ -141,25 +167,30 @@ def process_document(
         publish_pipeline_event(effective_job_id, 2, "PARSING_CHUNKING", 40, f"Chunking sub-clauses across {pages_count} pages...")
         structured_chunks = segment_page_clauses_granular(pages_data)
 
-        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Cross-referencing against Qdrant Cloud collection...")
+        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Rephrasing queries & searching Qdrant Knowledge Base...")
         enriched_candidates = []
-        VECTOR_THRESHOLD = 0.38
+        VECTOR_THRESHOLD = 0.35
 
         for chunk in structured_chunks:
-            retrieved = rag_service.semantic_search(chunk["text"][:1500], top_k=1)
+            # Rephrase raw contract text into a structured policy query
+            policy_query = rephrase_clause_for_policy_retrieval(chunk["header"], chunk["text"])
+            retrieved = rag_service.semantic_search(policy_query, top_k=1)
+            
             top_match = retrieved[0] if retrieved else {}
-            similarity_score = float(top_match.get("score", 0.0))
+            raw_score = float(top_match.get("score", 0.0))
 
-            if similarity_score >= VECTOR_THRESHOLD and top_match.get("ref"):
+            if raw_score >= VECTOR_THRESHOLD and top_match.get("ref"):
                 ref_id = top_match.get("ref")
                 policy_rule = top_match.get("policy_text") or top_match.get("text", "")
                 guidelines = top_match.get("guidelines", "")
                 derived_clause_type = top_match.get("clause_type") or chunk["header"]
+                final_score = round(min(0.99, max(0.50, raw_score)), 2)
             else:
                 ref_id = "STANDARD-BASELINE"
                 policy_rule = "Standard commercial provision with no material policy conflict."
                 guidelines = "Review against standard business terms."
                 derived_clause_type = chunk["header"]
+                final_score = 0.50
 
             enriched_candidates.append({
                 "clause_type": derived_clause_type,
@@ -168,7 +199,7 @@ def process_document(
                 "matched_policy_text": policy_rule,
                 "handling_guidelines": guidelines,
                 "page_reference": str(chunk.get("page", 1)),
-                "confidence_score": round(similarity_score, 2) if similarity_score > 0 else 0.85,
+                "confidence_score": final_score,
             })
 
         publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 80, "Running AI legal reasoning & risk classification...")
@@ -191,7 +222,7 @@ def process_document(
                 job_id=effective_job_id,
                 clause_type=c.get("clause_type", "General Provision"),
                 extracted_text=c.get("extracted_text", ""),
-                confidence_score=c.get("confidence_score", 0.85),
+                confidence_score=float(c.get("confidence_score", 0.75)),
                 risk_level=c.get("risk_level", "LOW"),
                 risk_rationale=c.get("risk_rationale", "Evaluated against corporate policy standards."),
                 involved_party=c.get("involved_party", "Tata Group & Counterparty"),

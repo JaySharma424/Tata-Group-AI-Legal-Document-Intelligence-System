@@ -9,7 +9,6 @@ from backend.services.llm_config import get_llm_config
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
     nvidia_env_key = os.getenv("NVIDIA_API_KEY")
 
-    # Priority 1: NVIDIA Routing using reliable high-speed model
     if api_key.startswith("nvapi-") or (nvidia_env_key and nvidia_env_key.startswith("nvapi-")):
         active_key = api_key if api_key.startswith("nvapi-") else nvidia_env_key
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
@@ -21,13 +20,11 @@ def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
             timeout=30
         ).invoke(prompt).content
 
-    # Priority 2: Groq Routing
     elif api_key.startswith("gsk_") or os.getenv("GROQ_API_KEY"):
         active_key = api_key if api_key.startswith("gsk_") else os.getenv("GROQ_API_KEY")
         from langchain_groq import ChatGroq
         return ChatGroq(model="llama-3.1-70b-versatile", api_key=active_key, temperature=0, max_retries=1).invoke(prompt).content
 
-    # Priority 3: Google Gemini with automatic fallback to NVIDIA on 429
     else:
         from langchain_google_genai import ChatGoogleGenerativeAI
         target_model = model_name if "gemini" in model_name.lower() else "gemini-1.5-flash"
@@ -106,25 +103,27 @@ class LegalReasoningService:
                 "page_reference": str(c.get("page_reference", "1")),
                 "matched_reference_id": c.get("rag_reference_used", "STANDARD-BASELINE"),
                 "retrieved_policy_rule": c.get("matched_policy_text", "Standard enterprise terms."),
-                "handling_guidelines": c.get("handling_guidelines", "Review against business terms.")
+                "handling_guidelines": c.get("handling_guidelines", "Review against business terms."),
+                "vector_similarity": float(c.get("confidence_score", 0.75))
             })
 
         prompt = f"""
 You are Senior Legal Counsel at Tata Group evaluating contractual clauses for the '{business_unit}' division.
-You must analyze each clause against the vector-matched policy rule retrieved from our knowledge base (6 policy files + risk_taxonomy.csv).
+Classify risk strictly using risk_taxonomy.csv rules and the retrieved policy citations.
 
 RETRIEVED CONTRACT CLAUSES & KNOWLEDGE BASE POLICIES:
 {json.dumps(clauses_context, indent=2)}
 
 EVALUATION INSTRUCTIONS:
-1. Examine each clause against its specific 'retrieved_policy_rule' and 'handling_guidelines'.
-2. Classify 'risk_level' strictly as:
-   - "HIGH": Direct conflict with policy (e.g., unlimited liability, uncapped indemnity, excessive interest penalties, unilateral lock-in, non-Indian jurisdiction).
-   - "MEDIUM": Ambiguous terms, non-standard payment windows, or missing governance safeguards.
-   - "LOW": Standard definitions, recitals, or provisions fully compliant with policy.
-3. In 'risk_rationale', provide 2-3 sentences of legal reasoning explaining why the clause passes or deviates from policy, explicitly citing the matched reference ID.
-4. CRITICAL: Set 'rag_reference_used' to the exact 'matched_reference_id' provided in the context (e.g., CLS-LIAB-001, CLS-IND-002, TAX-04). If standard with no deviation, set to 'STANDARD-BASELINE'.
-5. In 'proposed_redline': If risk is HIGH or MEDIUM, write a revised clause that brings the term into full compliance with Tata policy. If risk is LOW, set to null.
+1. Examine each clause against its 'retrieved_policy_rule'.
+2. Classify 'risk_level' strictly according to risk_taxonomy.csv:
+   - "HIGH": Unlimited liability, uncapped customer indemnity, late payment penalties > 18% annual, lock-in with no termination for convenience, non-Indian jurisdiction/governing law.
+   - "MEDIUM": Ambiguous survival terms (>5 years confidentiality), exclusivity lock-ins, missing dispute escalation tiers.
+   - "LOW": Standard reciprocal terms fully compliant with Tata Group policies.
+3. In 'risk_rationale', write 2 concise sentences explaining why the clause fails or complies with the cited policy, referencing 'matched_reference_id'.
+4. CRITICAL: Preserve the exact 'matched_reference_id' in 'rag_reference_used' (e.g., CLS-LIAB-001, CLS-IND-002, CLS-PAY-007, CLS-TERM-004, LAW-MUM-001). Never change to STANDARD-BASELINE if a valid reference exists.
+5. Set 'confidence_score' to the exact numeric value provided in 'vector_similarity'.
+6. In 'proposed_redline': If HIGH or MEDIUM, provide a redlined amendment that makes the clause fully compliant with Tata policy. If LOW, set to null.
 
 Return ONLY a valid JSON array of objects with these exact keys:
 ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action", "proposed_redline"]
@@ -143,7 +142,7 @@ Return ONLY a valid JSON array of objects with these exact keys:
             except Exception as e:
                 print(f"[WARN] LLM evaluation error: {e}")
 
-        # Fallback maintaining true retrieved metadata and citations
+        # Deterministic fallback preserving real retrieved references and dynamic scores
         fallback_results = []
         for c in normalized_clauses:
             text_lower = c.get("extracted_text", "").lower()
@@ -154,17 +153,20 @@ Return ONLY a valid JSON array of objects with these exact keys:
                 "unlimited", "penalty of 5%", "may not terminate",
                 "laws of the state of new york", "without any cap"
             ])
+            is_med = any(k in text_lower for k in ["exclusive", "ten (10) years"])
+
+            level = "HIGH" if is_high else ("MEDIUM" if is_med else "LOW")
             fallback_results.append({
                 "clause_type": c.get("clause_type", "General Provision"),
                 "extracted_text": c.get("extracted_text", ""),
-                "confidence_score": c.get("confidence_score", 0.85),
-                "risk_level": "HIGH" if is_high else "LOW",
+                "confidence_score": float(c.get("confidence_score", 0.75)),
+                "risk_level": level,
                 "risk_rationale": f"Evaluated against [{ref_id}]: {policy_text}",
                 "involved_party": "Tata Group & Counterparty",
                 "rag_reference_used": ref_id,
                 "page_reference": str(c.get("page_reference", "1")),
                 "obligation_owner": "Legal & Procurement Desk",
-                "recommended_action": "Modify terms to align with Tata standard baseline" if is_high else "Accept as standard",
+                "recommended_action": "Amend clause to comply with Tata policy" if level != "LOW" else "Accept as standard",
                 "proposed_redline": None,
             })
         return fallback_results
