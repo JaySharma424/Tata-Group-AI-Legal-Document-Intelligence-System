@@ -160,7 +160,6 @@ class RAGKnowledgeService:
                 candidates = scored_policies[:top_k]
             finally:
                 db.close()
-
         return candidates
 
     def upsert_document_knowledge(self, doc_id: str, clauses: List[Dict]):
