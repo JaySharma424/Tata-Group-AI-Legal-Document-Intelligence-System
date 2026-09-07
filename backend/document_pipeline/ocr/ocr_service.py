@@ -44,7 +44,7 @@ class OCRService:
             try:
                 img = Image.open(file_path)
                 # Use valid free tier models
-                model_candidates = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+                model_candidates = ["gemini-3.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
                 extracted_text = None
 
                 for model_name in model_candidates:
