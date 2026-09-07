@@ -81,10 +81,11 @@ class LegalReasoningService:
 
         config = get_llm_config()
         api_key = config.get("api_key", "")
-        selected_llm = config.get("llm_model", "gemini-1.5-flash")
+        selected_llm = config.get("llm_model", "nvidia/nemotron-3.5-lightning-30b-a3b")
 
+        # FIX: Default to NVIDIA API key from Render Environment
         if not api_key:
-            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
+            api_key = os.getenv("NVIDIA_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
 
         # Format retrieved policy context dynamically for each clause
         clauses_context = []
