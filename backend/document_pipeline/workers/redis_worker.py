@@ -138,26 +138,35 @@ def extract_text_and_confidence_all_pages(file_path: str, filename: str) -> tupl
     avg_confidence = round(float(np.mean([p["confidence"] for p in pages_data])), 2)
     return pages_data, avg_confidence
 
-def extract_text_and_confidence_all_pages(file_path: str) -> tuple[list, float]:
+def extract_text_and_confidence_all_pages(file_path: str, filename: str) -> tuple[list, float]:
     pages_data = []
-    if file_path.lower().endswith(".pdf"):
+    ext = os.path.splitext(filename)[1].lower()
+
+    if ext == ".pdf":
         try:
             with fitz.open(file_path) as pdf_doc:
                 for page_idx in range(len(pdf_doc)):
                     page_text = pdf_doc[page_idx].get_text().strip()
-                    pages_data.append({
-                        "page": page_idx + 1,
-                        "text": page_text,
-                        "confidence": calculate_deterministic_page_ocr_confidence(page_text)
-                    })
+                    is_scanned = False
+                    
+                    if len(page_text) < 20:
+                        is_scanned = True
+                        page_text = pdf_doc[page_idx].get_text("text").strip()
+                        if not page_text:
+                            page_text = "[SCANNED PAGE - TEXT UNREADABLE OR BLANK]"
+                            
+                    conf = calculate_deterministic_page_ocr_confidence(page_text, ext, is_scanned)
+                    pages_data.append({"page": page_idx + 1, "text": page_text, "confidence": conf})
         except Exception as e:
             print(f"[WARN] PyMuPDF error: {e}")
 
+    # Fallback to plain text read if PDF extraction failed or if it's a txt file
     if not pages_data:
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
-            pages_data = [{"page": 1, "text": content, "confidence": calculate_deterministic_page_ocr_confidence(content)}]
+            conf = calculate_deterministic_page_ocr_confidence(content, ext if ext == '.txt' else '.txt', False)
+            pages_data = [{"page": 1, "text": content, "confidence": conf}]
         except Exception as e:
             pages_data = [{"page": 1, "text": f"Extraction error: {e}", "confidence": 50.0}]
 
@@ -276,7 +285,7 @@ def process_document(
     try:
         # Stage 1: Text extraction & OCR scoring
         publish_pipeline_event(effective_job_id, 1, "OCR_SCANNING", 20, "Extracting text and calculating page OCR scores...")
-        pages_data, overall_confidence = extract_text_and_confidence_all_pages(temp_path)
+        pages_data, overall_confidence = extract_text_and_confidence_all_pages(temp_path, filename)
         pages_count = len(pages_data)
 
         # Stage 2: Sub-clause chunking
