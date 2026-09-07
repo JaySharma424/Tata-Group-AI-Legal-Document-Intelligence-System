@@ -210,10 +210,12 @@ def process_document(
         publish_pipeline_event(effective_job_id, 2, "PARSING_CHUNKING", 40, "Segmenting contract clauses...")
         structured_chunks = segment_contract_clauses(full_text)
 
-        # Stage 3: Dynamic Vector DB Retrieval (Searching Qdrant for policies from CSV & TXT)
+        # Stage 3: Dynamic Vector DB Retrieval
         publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Retrieving matching policies from Vector DB...")
         enriched_candidates = []
-        VECTOR_THRESHOLD = 0.90
+        
+        # Lowered threshold for asymmetric text (long clause vs short policy)
+        VECTOR_THRESHOLD = 0.75 
 
         for chunk in structured_chunks:
             retrieved = rag_service.semantic_search(chunk["text"][:1500], top_k=1)
@@ -226,9 +228,8 @@ def process_document(
                 guidelines = top_match.get("guidelines", "")
                 derived_clause_type = top_match.get("clause_type") or chunk["header"]
             else:
-                # Below threshold: Do not force an artificial policy violation
                 ref_id = "STANDARD-BASELINE"
-                policy_rule = "No material corporate policy deviation detected above 90% threshold."
+                policy_rule = "No material corporate policy deviation detected."
                 guidelines = "Review against standard business terms."
                 derived_clause_type = chunk["header"]
 
@@ -241,12 +242,19 @@ def process_document(
                 "confidence_score": similarity_score if similarity_score > 0 else 0.95,
             })
 
-        # Stage 4: Batch LLM Reasoning grounded strictly in Vector DB context
+        # Stage 4: Batch LLM Reasoning to prevent JSON Truncation
         publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 80, "Evaluating risks and detecting missing clauses...")
         normalized = normalization_service.normalize_clauses(enriched_candidates)
-        final_clauses = reasoning_service.evaluate_risk_and_reasoning(
-            normalized, business_unit=business_unit, user_role=user_role
-        )
+        
+        final_clauses = []
+        BATCH_SIZE = 5 # Process 5 clauses at a time to stay safely under max_tokens
+        
+        for i in range(0, len(normalized), BATCH_SIZE):
+            batch = normalized[i:i + BATCH_SIZE]
+            evaluated_batch = reasoning_service.evaluate_risk_and_reasoning(
+                batch, business_unit=business_unit, user_role=user_role
+            )
+            final_clauses.extend(evaluated_batch)
 
         # Stage 4.5: Missing Clause Detection
         clause_types_found = " ".join([c.get("clause_type", "") for c in final_clauses]).lower()
@@ -259,11 +267,11 @@ def process_document(
                 "confidence_score": 0.99,
                 "risk_level": "HIGH",
                 "risk_rationale": "Failure to include standard IP and third-party indemnification exposes the Enterprise to uncapped legal liability.",
-                "rag_reference_used": "RISK-IND-101",
+                "rag_reference_used": "CLS-IND-002",
                 "page_reference": "Document Wide",
                 "obligation_owner": "Legal Counsel",
                 "recommended_action": "ESCALATE",
-                "proposed_redline": "Vendor shall defend, indemnify and hold harmless the Enterprise from any third-party claims alleging intellectual property infringement or bodily injury."
+                "proposed_redline": "Vendor shall defend, indemnify and hold harmless the Enterprise from any third-party claims alleging intellectual property infringement."
             })
             
         if "liability" not in clause_types_found and "cap" not in full_text.lower():
@@ -273,11 +281,11 @@ def process_document(
                 "confidence_score": 0.99,
                 "risk_level": "HIGH",
                 "risk_rationale": "Missing liability caps result in unlimited financial exposure. Policy mandates capping vendor liability at 100% of ACV.",
-                "rag_reference_used": "RISK-CAP-99",
+                "rag_reference_used": "CLS-LIAB-001",
                 "page_reference": "Document Wide",
                 "obligation_owner": "Legal Counsel",
                 "recommended_action": "ESCALATE",
-                "proposed_redline": "Neither Party's aggregate liability shall exceed 100% of the annual contract value, excluding breaches of confidentiality or gross negligence."
+                "proposed_redline": "Neither Party's aggregate liability shall exceed 100% of the annual contract value."
             })
             
         final_clauses.extend(missing_clauses)
