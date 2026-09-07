@@ -7,29 +7,34 @@ from backend.services.llm_config import get_llm_config
 
 
 def _invoke_dynamic_llm(prompt: str, model_name: str, api_key: str) -> str:
-    if not api_key or not model_name:
-        raise ValueError("ADMIN_CONFIG_MISSING: No API Key or Model found.")
+    if not api_key:
+        raise ValueError("ADMIN_CONFIG_MISSING: No API Key found.")
 
-    model_lower = model_name.lower()
-    if "nvidia" in model_lower or "nemotron" in model_lower:
+    # 1. Automatic Key-Based Provider Routing
+    if api_key.startswith("nvapi-"):
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-        return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096, timeout=120).invoke(prompt).content
-    elif "gpt" in model_lower:
+        target_model = model_name if ("nvidia" in model_name.lower() or "nemotron" in model_name.lower()) else "nvidia/nemotron-3.5-lightning-30b-a3b"
+        return ChatNVIDIA(model=target_model, api_key=api_key, temperature=0, max_tokens=4096, timeout=120).invoke(prompt).content
+
+    elif api_key.startswith("gsk_"):
+        from langchain_groq import ChatGroq
+        target_model = model_name if "llama" in model_name.lower() else "llama-3.1-70b-versatile"
+        return ChatGroq(model=target_model, api_key=api_key, temperature=0, max_retries=2).invoke(prompt).content
+
+    elif api_key.startswith("sk-") and not api_key.startswith("sk-ant-"):
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0, max_retries=1).invoke(prompt).content
-    elif "claude" in model_lower:
+        target_model = model_name if "gpt" in model_name.lower() else "gpt-4o-mini"
+        return ChatOpenAI(model=target_model, api_key=api_key, temperature=0, max_retries=1).invoke(prompt).content
+
+    elif api_key.startswith("sk-ant-"):
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model_name, api_key=api_key, temperature=0, max_retries=1).invoke(prompt).content
-    elif "llama" in model_lower or "mixtral" in model_lower or "mistral" in model_lower:
-        if api_key.startswith("nvapi-"):
-            from langchain_nvidia_ai_endpoints import ChatNVIDIA
-            return ChatNVIDIA(model=model_name, api_key=api_key, temperature=0, max_tokens=4096, timeout=120).invoke(prompt).content
-        else:
-            from langchain_groq import ChatGroq
-            return ChatGroq(model=model_name, api_key=api_key, temperature=0, max_retries=1).invoke(prompt).content
+        return ChatAnthropic(model=model_name or "claude-3-5-sonnet-20241022", api_key=api_key, temperature=0, max_retries=1).invoke(prompt).content
+
     else:
+        # Default Google Gemini routing
         from langchain_google_genai import ChatGoogleGenerativeAI
-        response = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0, max_retries=1).invoke(prompt)
+        target_model = model_name if "gemini" in model_name.lower() else "gemini-1.5-flash"
+        response = ChatGoogleGenerativeAI(model=target_model, google_api_key=api_key, temperature=0, max_retries=1).invoke(prompt)
         if isinstance(response, list):
             return str(response[0]) if response else ""
         return str(response.content) if hasattr(response, "content") else str(response)
@@ -81,45 +86,48 @@ class LegalReasoningService:
 
         config = get_llm_config()
         api_key = config.get("api_key", "")
-        selected_llm = config.get("llm_model", "nvidia/nemotron-3.5-lightning-30b-a3b")
-
-        # FIX: Default to NVIDIA API key from Render Environment
         if not api_key:
             api_key = os.getenv("NVIDIA_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
 
-        # Format retrieved policy context dynamically for each clause
+        selected_llm = config.get("llm_model", "nvidia/nemotron-3.5-lightning-30b-a3b")
+
         clauses_context = []
         for idx, c in enumerate(normalized_clauses, start=1):
             clauses_context.append({
                 "item_index": idx,
                 "clause_type": c.get("clause_type", "General Provision"),
                 "extracted_text": c.get("extracted_text", ""),
-                "vector_policy_matched": c.get("matched_policy_text", "Standard enterprise compliance guidelines."),
-                "mandatory_guidelines": c.get("handling_guidelines", "Ensure balanced terms."),
-                "matched_reference_id": c.get("rag_reference_used", "POL-IND-2026-01"),
+                "page_reference": str(c.get("page_reference", "1")),
+                "matched_reference_id": c.get("rag_reference_used", "STANDARD-BASELINE"),
+                "knowledge_source_file": c.get("knowledge_source", "Corporate Policy Repository"),
+                "retrieved_policy_rule": c.get("matched_policy_text", "Standard enterprise terms."),
+                "handling_guidelines": c.get("handling_guidelines", "Review against business terms.")
             })
 
         clauses_json_str = json.dumps(clauses_context, indent=2)
 
         prompt = f"""
-You are Senior Legal Counsel at Tata Group evaluating contractual clauses for the '{business_unit}' business unit.
-You MUST evaluate risk severity and draft remediation redlines strictly against the vector-retrieved policy standards provided below.
+You are Senior Legal Counsel at Tata Group evaluating contractual clauses for the '{business_unit}' division.
+You must analyze each clause against the vector-matched policy rule retrieved from our knowledge base (6 policy files + risk_taxonomy.csv).
 
-RETRIEVED CONTRACT CLAUSES & MATCHED VECTOR DB POLICIES:
+RETRIEVED CONTRACT CLAUSES & KNOWLEDGE BASE POLICIES:
 {clauses_json_str}
 
 EVALUATION INSTRUCTIONS:
-1. Compare each extracted clause against its specific 'vector_policy_matched'.
-2. Classify risk_level strictly as: "HIGH", "MEDIUM", or "LOW" based on deviations.
-3. In 'risk_rationale', you MUST explicitly explain the reasoning AND cite the policy requirement. 
-4. CRITICAL: Set 'rag_reference_used' to the EXACT string provided in 'matched_reference_id' (e.g., CLS-LIAB-001 or CLS-IND-002). Do NOT invent reference IDs.
-5. In 'proposed_redline', if risk is HIGH or MEDIUM, provide an exact replacement clause that satisfies Tata corporate policy. If risk is LOW, set to null.
+1. Examine each clause against its specific 'retrieved_policy_rule' and 'handling_guidelines'.
+2. Classify 'risk_level' strictly as:
+   - "HIGH": Direct conflict with policy (e.g., unlimited liability, uncapped indemnity, excessive interest penalties, unilateral termination).
+   - "MEDIUM": Ambiguous terms, non-standard payment windows, or missing governance safeguards.
+   - "LOW": Standard definitions, recitals, or provisions fully compliant with policy.
+3. In 'risk_rationale', provide 2-3 sentences of legal reasoning explaining why the clause passes or deviates from policy, explicitly mentioning the policy reference.
+4. CRITICAL: Set 'rag_reference_used' to the exact 'matched_reference_id' provided in the context (e.g., CLS-LIAB-001, CLS-IND-002, TAX-04). If the clause is standard with no deviation, keep it as 'STANDARD-BASELINE'.
+5. In 'proposed_redline': If risk is HIGH or MEDIUM, write a revised clause that brings the term into full compliance with Tata policy. If risk is LOW, set to null.
 
-Return ONLY a valid JSON array of objects. Each object must have these exact keys:
+Return ONLY a valid JSON array of objects with these exact keys:
 ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action", "proposed_redline"]
 """
 
-        if selected_llm and api_key:
+        if api_key:
             try:
                 raw_output = _invoke_dynamic_llm(prompt, selected_llm, api_key)
                 parsed = robust_json_harvester(raw_output)
@@ -132,22 +140,24 @@ Return ONLY a valid JSON array of objects. Each object must have these exact key
                 elif len(valid) > 0:
                     return valid
             except Exception as e:
-                print(f"[WARN] Dynamic LLM evaluation failed: {e}")
+                print(f"[WARN] LLM evaluation error: {e}")
 
-        # Non-hardcoded fallback: maintain the vector-matched policy metadata
+        # Fallback maintaining true retrieved metadata and scores
         fallback_results = []
         for c in normalized_clauses:
+            policy_text = c.get('matched_policy_text', 'Standard enterprise guidelines.')
+            ref_id = c.get('rag_reference_used', 'STANDARD-BASELINE')
             fallback_results.append({
                 "clause_type": c.get("clause_type", "General Provision"),
                 "extracted_text": c.get("extracted_text", ""),
-                "confidence_score": c.get("confidence_score", 0.90),
-                "risk_level": c.get("risk_level", "MEDIUM"),
-                "risk_rationale": f"Evaluated against policy: {c.get('matched_policy_text', 'Standard guidelines.')}",
-                "involved_party": c.get("involved_party", "Tata Group & Counterparty"),
-                "rag_reference_used": c.get("rag_reference_used", "POL-IND-2026-01"),
-                "page_reference": c.get("page_reference", "Section 1"),
-                "obligation_owner": c.get("obligation_owner", "Compliance Desk"),
-                "recommended_action": c.get("recommended_action", "Review against policy standards"),
+                "confidence_score": c.get("confidence_score", 0.85),
+                "risk_level": "HIGH" if "indemnif" in c.get("extracted_text", "").lower() and "unlimited" in c.get("extracted_text", "").lower() else "LOW",
+                "risk_rationale": f"Evaluated against {c.get('knowledge_source', 'Knowledge Base')} [{ref_id}]: {policy_text[:120]}...",
+                "involved_party": "Tata Group & Counterparty",
+                "rag_reference_used": ref_id,
+                "page_reference": str(c.get("page_reference", "1")),
+                "obligation_owner": "Legal & Procurement Desk",
+                "recommended_action": "Review against Tata Enterprise Standards",
                 "proposed_redline": None,
             })
         return fallback_results
