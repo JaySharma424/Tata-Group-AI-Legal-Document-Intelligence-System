@@ -36,10 +36,7 @@ def publish_pipeline_event(job_id: str, stage: int, step_name: str, progress: in
         print(f"[WARN] Redis publish error: {e}")
 
 def calculate_deterministic_page_ocr_confidence(text: str) -> float:
-    """
-    Deterministically computes an OCR extraction confidence score (50.0% - 99.9%)
-    based on alphanumeric ratio, printable legal punctuation, and token length distribution.
-    """
+    """Computes an OCR extraction confidence score (50.0% - 99.9%) deterministically."""
     if not text or len(text.strip()) < 10:
         return 50.0
 
@@ -66,10 +63,7 @@ def calculate_deterministic_page_ocr_confidence(text: str) -> float:
     return round(min(99.9, max(50.0, score)), 2)
 
 def extract_text_and_confidence_all_pages(file_path: str) -> tuple[list, float]:
-    """
-    Parses EVERY single page of the document using PyMuPDF and computes
-    page-by-page deterministic OCR scores.
-    """
+    """Parses every page using PyMuPDF and computes page-by-page deterministic OCR scores."""
     pages_data = []
 
     if file_path.lower().endswith(".pdf"):
@@ -100,11 +94,7 @@ def extract_text_and_confidence_all_pages(file_path: str) -> tuple[list, float]:
     return pages_data, avg_confidence
 
 def segment_page_clauses_granular(pages_data: list) -> list:
-    """
-    1. Extracts sub-clauses (e.g., 1.1, 4.2).
-    2. If no sub-clauses exist in a section, falls back to clause-wise extraction.
-    3. Retains exact page-number metadata for every chunk.
-    """
+    """Extracts sub-clauses (or falls back to primary clauses) while tracking page numbers."""
     all_chunks = []
     sub_clause_pattern = re.compile(r'(?m)^\s*(?P<header>\d{1,2}\.\d{1,2}(?:\.\d{1,2})?\s+[A-Z][a-zA-Z0-9"\'\s]{1,50})')
     clause_pattern = re.compile(r'(?m)^\s*(?P<header>(?:\d{1,2}\.\s+[A-Z][A-Za-z\s,&]+)|(?:(?:SCHEDULE|ARTICLE|ANNEXURE)\s+[A-Z0-9]+)|WHEREAS)')
@@ -166,7 +156,7 @@ def process_document(
         pages_data, overall_confidence = extract_text_and_confidence_all_pages(temp_path)
         pages_count = len(pages_data)
 
-        # Cache page-level breakdown in Redis for the Frontend Monitor Tab
+        # Cache page-level metrics in Redis for the Frontend tab
         page_metrics = [
             {
                 "page": p["page"],
