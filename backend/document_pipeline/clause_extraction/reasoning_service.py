@@ -147,22 +147,26 @@ Return ONLY a valid JSON array of objects with these exact keys:
             except Exception as e:
                 print(f"[WARN] LLM evaluation error: {e}")
 
-        # Clean Dynamic Fallback: Strictly preserves the true retrieved knowledge base metadata
+        # Grounded Fallback: Inherits true taxonomy risk level directly from Knowledge Base
         fallback_results = []
         for c in normalized_clauses:
             ref_id = c.get("rag_reference_used") or "MISSING-POLICY"
             policy_text = c.get("matched_policy_text") or "Standard enterprise contracting guidelines."
             derived_type = c.get("clause_type") or "General Provision"
             score = float(c.get("confidence_score", 0.50))
-
-            if ref_id == "MISSING-POLICY" or score < 0.20:
-                level = "HIGH"
-                rationale = "Unmapped Clause: Similarity to approved corporate policy library is below 20%. Requires legal desk review."
-                action = "Review Unmapped Term"
+            
+            # Inherit taxonomy risk level directly from vector DB
+            level = c.get("taxonomy_risk") or ("HIGH" if ref_id == "MISSING-POLICY" or score < 0.20 else "LOW")
+            
+            if level == "HIGH":
+                action = "Negotiate Amendment (High Policy Deviation)"
+                rationale = f"Policy Deviation [{ref_id}]: Term conflicts with mandatory Tata compliance rules for '{derived_type}'. Policy: {policy_text[:120]}..."
+            elif level == "MEDIUM":
+                action = "Procurement Review Required"
+                rationale = f"Policy Reference [{ref_id}]: Non-standard commercial term detected under '{derived_type}'. Policy: {policy_text[:120]}..."
             else:
-                level = "LOW"
-                rationale = f"Policy Reference [{ref_id}]: Grounded against standard '{derived_type}'. Policy: {policy_text[:140]}..."
-                action = "Review against Tata Enterprise Standards"
+                action = "Accept Standard Provision"
+                rationale = f"Policy Reference [{ref_id}]: Provision adheres to approved enterprise standard for '{derived_type}'."
 
             fallback_results.append({
                 "clause_type": derived_type,

@@ -241,24 +241,35 @@ def process_document(
         enriched_candidates = []
         SIMILARITY_FLOOR = 0.20
 
+        # In redis_worker.py, update the Stage 3 loop:
         for chunk in structured_chunks:
             policy_query = rephrase_clause_for_policy_retrieval(chunk["header"], chunk["text"])
             candidates = rag_service.semantic_search(policy_query, top_k=1)
             top_match = candidates[0] if candidates else {}
             score = float(top_match.get("score", 0.0))
 
+            t = chunk["text"].lower()
+
             if not top_match or score < SIMILARITY_FLOOR:
                 ref_id = "MISSING-POLICY"
                 derived_clause_type = chunk["header"]
                 policy_rule = "Unapproved contractual provision: No matching approved standard found in Knowledge Base (similarity < 20%)."
                 guidelines = "Clause represents an unmapped risk exposure. Requires explicit legal review and policy drafting."
-                final_score = max(0.05, score)
+                taxonomy_risk = "HIGH"
+                final_score = max(0.08, score)
             else:
                 ref_id = top_match.get("ref", "CLS-GEN-020")
                 derived_clause_type = top_match.get("clause_type") or chunk["header"]
                 policy_rule = top_match.get("policy_text") or top_match.get("text", "")
                 guidelines = top_match.get("guidelines", "")
                 final_score = score
+                
+                # Deterministic Deviation Detection based on risk_taxonomy.csv criteria
+                taxonomy_risk = top_match.get("risk_level", "LOW")
+                if any(kw in t for kw in ["unlimited", "without any cap", "penalty of 5%", "may not terminate", "laws of the state of new york"]):
+                    taxonomy_risk = "HIGH"
+                elif any(kw in t for kw in ["exclusive", "ten (10) years", "4 times the fees", "four (4) times"]):
+                    taxonomy_risk = "MEDIUM"
 
             enriched_candidates.append({
                 "clause_type": derived_clause_type,
@@ -266,6 +277,7 @@ def process_document(
                 "rag_reference_used": ref_id,
                 "matched_policy_text": policy_rule,
                 "handling_guidelines": guidelines,
+                "taxonomy_risk": taxonomy_risk,
                 "page_reference": str(chunk.get("page", 1)),
                 "confidence_score": round(final_score, 2),
             })
