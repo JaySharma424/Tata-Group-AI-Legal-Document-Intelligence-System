@@ -11,7 +11,6 @@ from rq import get_current_job
 
 from backend.database import SessionLocal
 from backend.models import DocumentModel, ClauseModel
-from backend.services.llm_config import get_llm_config
 from backend.services.rag_service import RAGKnowledgeService
 from backend.document_pipeline.normalization.normalization_service import ClauseNormalizationService
 from backend.document_pipeline.clause_extraction.reasoning_service import LegalReasoningService
@@ -38,53 +37,41 @@ def publish_pipeline_event(job_id: str, stage: int, step_name: str, progress: in
 def calculate_deterministic_page_ocr_confidence(text: str) -> float:
     if not text or len(text.strip()) < 10:
         return 50.0
-
     clean_chars = [c for c in text if not c.isspace()]
     if not clean_chars:
         return 50.0
-
     total_chars = len(clean_chars)
     alnum_chars = sum(1 for c in clean_chars if c.isalnum())
     alnum_ratio = alnum_chars / total_chars
-
     allowed_punct = sum(1 for c in clean_chars if c in '.,;:()[]"\'%-/&$#@§')
-    noise_chars = total_chars - (alnum_chars + allowed_punct)
-    noise_ratio = noise_chars / total_chars
-
+    noise_ratio = (total_chars - (alnum_chars + allowed_punct)) / total_chars
     words = text.strip().split()
     avg_word_len = sum(len(w) for w in words) / max(len(words), 1)
-
     score = (alnum_ratio * 80.0) + 20.0 - (noise_ratio * 35.0)
-
     if avg_word_len < 2.5 or avg_word_len > 15.0:
         score -= 8.0
-
     return round(min(99.9, max(50.0, score)), 2)
 
 def extract_text_and_confidence_all_pages(file_path: str) -> tuple[list, float]:
     pages_data = []
-
     if file_path.lower().endswith(".pdf"):
         try:
             with fitz.open(file_path) as pdf_doc:
                 for page_idx in range(len(pdf_doc)):
-                    page = pdf_doc[page_idx]
-                    page_text = page.get_text().strip()
-                    page_confidence = calculate_deterministic_page_ocr_confidence(page_text)
+                    page_text = pdf_doc[page_idx].get_text().strip()
                     pages_data.append({
                         "page": page_idx + 1,
                         "text": page_text,
-                        "confidence": page_confidence
+                        "confidence": calculate_deterministic_page_ocr_confidence(page_text)
                     })
         except Exception as e:
-            print(f"[WARN] PyMuPDF page parsing error: {e}")
+            print(f"[WARN] PyMuPDF error: {e}")
 
     if not pages_data:
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
-            conf = calculate_deterministic_page_ocr_confidence(content)
-            pages_data = [{"page": 1, "text": content, "confidence": conf}]
+            pages_data = [{"page": 1, "text": content, "confidence": calculate_deterministic_page_ocr_confidence(content)}]
         except Exception as e:
             pages_data = [{"page": 1, "text": f"Extraction error: {e}", "confidence": 50.0}]
 
@@ -99,7 +86,6 @@ def segment_page_clauses_granular(pages_data: list) -> list:
     for p in pages_data:
         page_num = p["page"]
         text = p["text"]
-
         sub_matches = list(sub_clause_pattern.finditer(text))
         if sub_matches:
             for i in range(len(sub_matches)):
@@ -136,7 +122,7 @@ def process_document(
 ):
     job = get_current_job()
     effective_job_id = job_id or (job.id if job else None) or kwargs.get("document_id")
-    print(f"🚀 Initializing Dynamic Multi-Knowledge Pipeline for Job: {effective_job_id}")
+    print(f"🚀 Initializing Fast Legal Intelligence Pipeline for Job: {effective_job_id}")
 
     db: Session = SessionLocal()
     temp_path = f"/tmp/{effective_job_id}_{filename}"
@@ -148,24 +134,19 @@ def process_document(
     reasoning_service = LegalReasoningService()
 
     try:
-        # Stage 1: Text extraction
         publish_pipeline_event(effective_job_id, 1, "OCR_SCANNING", 20, "Extracting text and calculating page OCR scores...")
         pages_data, overall_confidence = extract_text_and_confidence_all_pages(temp_path)
         pages_count = len(pages_data)
 
-        # Stage 2: Sub-clause chunking
         publish_pipeline_event(effective_job_id, 2, "PARSING_CHUNKING", 40, f"Chunking sub-clauses across {pages_count} pages...")
         structured_chunks = segment_page_clauses_granular(pages_data)
 
-        # Stage 3: Multi-File Knowledge Base Retrieval (k=3)
-        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Cross-referencing 6 Knowledge Base files & risk_taxonomy.csv...")
+        publish_pipeline_event(effective_job_id, 3, "VECTOR_QUERYING", 60, "Cross-referencing against Qdrant Cloud collection...")
         enriched_candidates = []
-        
-        # Calibrated threshold for dense semantic matching (dense cosine space 0.40 - 0.70)
-        VECTOR_THRESHOLD = 0.42
+        VECTOR_THRESHOLD = 0.38
 
         for chunk in structured_chunks:
-            retrieved = rag_service.semantic_search(chunk["text"][:1500], top_k=3)
+            retrieved = rag_service.semantic_search(chunk["text"][:1500], top_k=1)
             top_match = retrieved[0] if retrieved else {}
             similarity_score = float(top_match.get("score", 0.0))
 
@@ -173,13 +154,11 @@ def process_document(
                 ref_id = top_match.get("ref")
                 policy_rule = top_match.get("policy_text") or top_match.get("text", "")
                 guidelines = top_match.get("guidelines", "")
-                source_file = top_match.get("source", "Knowledge Base")
                 derived_clause_type = top_match.get("clause_type") or chunk["header"]
             else:
                 ref_id = "STANDARD-BASELINE"
                 policy_rule = "Standard commercial provision with no material policy conflict."
                 guidelines = "Review against standard business terms."
-                source_file = "Standard Policy"
                 derived_clause_type = chunk["header"]
 
             enriched_candidates.append({
@@ -188,26 +167,17 @@ def process_document(
                 "rag_reference_used": ref_id,
                 "matched_policy_text": policy_rule,
                 "handling_guidelines": guidelines,
-                "knowledge_source": source_file,
                 "page_reference": str(chunk.get("page", 1)),
                 "confidence_score": round(similarity_score, 2) if similarity_score > 0 else 0.85,
             })
 
-        # Stage 4: Batch LLM Reasoning grounded strictly in Vector DB context
         publish_pipeline_event(effective_job_id, 4, "REASONING_EVALUATION", 80, "Running AI legal reasoning & risk classification...")
         normalized = normalization_service.normalize_clauses(enriched_candidates)
 
-        final_clauses = []
-        BATCH_SIZE = 5
+        final_clauses = reasoning_service.evaluate_risk_and_reasoning(
+            normalized, business_unit=business_unit, user_role=user_role
+        )
 
-        for i in range(0, len(normalized), BATCH_SIZE):
-            batch = normalized[i:i + BATCH_SIZE]
-            evaluated_batch = reasoning_service.evaluate_risk_and_reasoning(
-                batch, business_unit=business_unit, user_role=user_role
-            )
-            final_clauses.extend(evaluated_batch)
-
-        # Stage 5: Database Commit
         publish_pipeline_event(effective_job_id, 5, "FINALIZING_REPORT", 95, "Committing risk reasoning to database...")
         doc = db.query(DocumentModel).filter(DocumentModel.job_id == effective_job_id).first()
         if doc:
@@ -225,9 +195,9 @@ def process_document(
                 risk_level=c.get("risk_level", "LOW"),
                 risk_rationale=c.get("risk_rationale", "Evaluated against corporate policy standards."),
                 involved_party=c.get("involved_party", "Tata Group & Counterparty"),
-                rag_reference_used=c.get("rag_reference_used", "N/A"),
+                rag_reference_used=c.get("rag_reference_used") or "STANDARD-BASELINE",
                 page_reference=str(c.get("page_reference", "1")),
-                obligation_owner=c.get("obligation_owner", "Legal Desk"),
+                obligation_owner=c.get("obligation_owner", "Legal & Procurement Desk"),
                 recommended_action=c.get("recommended_action", "Review"),
                 proposed_redline=c.get("proposed_redline"),
             ))
@@ -239,7 +209,7 @@ def process_document(
             "ocr_confidence": overall_confidence,
             "pages": pages_count,
         })
-        print(f"✅ Pipeline complete for {effective_job_id}. Processed {len(final_clauses)} clauses.")
+        print(f"✅ Fast pipeline complete for {effective_job_id}. Processed {len(final_clauses)} clauses.")
 
     except Exception as e:
         db.rollback()

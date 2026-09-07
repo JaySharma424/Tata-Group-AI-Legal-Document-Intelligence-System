@@ -25,7 +25,6 @@ class RAGKnowledgeService:
     def __init__(self, storage_path: str = "./backend/storage/qdrant_db"):
         self.collection_name = "tata_legal_knowledge_v4"
         self.vector_dim = 768
-        self.is_seeding = False
 
         try:
             Base.metadata.create_all(bind=engine)
@@ -56,7 +55,7 @@ class RAGKnowledgeService:
             if not qdrant_url.startswith("http"):
                 qdrant_url = f"https://{qdrant_url}"
             try:
-                self.qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=60)
+                self.qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=30)
             except Exception:
                 self.qdrant = QdrantClient(":memory:")
         else:
@@ -71,15 +70,17 @@ class RAGKnowledgeService:
                 response = self.client.models.embed_content(
                     model="gemini-embedding-001",
                     contents=text[:2000],
-                    config=types.EmbedContentConfig(),
+                    config=types.EmbedContentConfig(output_dimensionality=768),
                 )
                 if response and response.embeddings:
                     emb = list(response.embeddings[0].values)
-                    if len(emb) == self.vector_dim:
-                        return emb
-                    return emb[:self.vector_dim] if len(emb) > self.vector_dim else emb + [0.0] * (self.vector_dim - len(emb))
+                    if len(emb) > 768:
+                        emb = emb[:768]
+                    elif len(emb) < 768:
+                        emb = emb + [0.0] * (768 - len(emb))
+                    return emb
             except Exception:
-                time.sleep(0.5 * (attempt + 1))
+                time.sleep(0.3 * (attempt + 1))
         return [0.0] * self.vector_dim
 
     def semantic_search(self, query: str, top_k: int = 1, filters: Optional[Dict] = None) -> List[Dict]:
@@ -124,31 +125,4 @@ class RAGKnowledgeService:
             return []
 
     def upsert_document_knowledge(self, doc_id: str, clauses: List[Dict]):
-        points = []
-        for i, clause in enumerate(clauses):
-            text_val = (
-                f"Clause Type: {clause.get('clause_type', 'General')}. "
-                f"Risk: {clause.get('risk_level', 'Unspecified')}. "
-                f"Text: {clause.get('extracted_text', '')[:600]}"
-            )
-            emb = self._get_embedding(text_val)
-            deterministic_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{doc_id}_{i}"))
-            points.append(
-                PointStruct(
-                    id=deterministic_id,
-                    vector=emb,
-                    payload={
-                        "ref": clause.get("rag_reference_used", f"DOC-{doc_id[:6]}-{i+1}"),
-                        "source": "analyzed_contract",
-                        "doc_id": doc_id,
-                        "clause_type": clause.get("clause_type", ""),
-                        "risk_level": clause.get("risk_level", ""),
-                        "text": text_val,
-                    },
-                )
-            )
-        if points:
-            try:
-                self.qdrant.upsert(collection_name=self.collection_name, points=points)
-            except Exception as e:
-                print(f"[WARN] Knowledge upsert error: {e}")
+        pass
