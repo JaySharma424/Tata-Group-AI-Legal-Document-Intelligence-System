@@ -108,11 +108,11 @@ RETRIEVED CONTRACT CLAUSES & MATCHED VECTOR DB POLICIES:
 {clauses_json_str}
 
 EVALUATION INSTRUCTIONS:
-1. Compare each extracted clause against its specific 'vector_policy_matched' and 'mandatory_guidelines'.
-2. Classify risk_level strictly as: "HIGH", "MEDIUM", or "LOW" based on deviations from the policy.
-3. In 'risk_rationale', explicitly describe the legal deviation or compliance with the retrieved policy.
-4. Set 'rag_reference_used' to the exact matched reference ID provided.
-5. In 'proposed_redline', if risk is HIGH or MEDIUM, provide an exact replacement clause in formal legal English that fully resolves the deviation and satisfies Tata corporate policy. If risk is LOW, set to null.
+1. Compare each extracted clause against its specific 'vector_policy_matched'.
+2. Classify risk_level strictly as: "HIGH", "MEDIUM", or "LOW" based on deviations.
+3. In 'risk_rationale', you MUST explicitly explain the reasoning AND cite the policy requirement. 
+4. CRITICAL: Set 'rag_reference_used' to the EXACT string provided in 'matched_reference_id' (e.g., CLS-LIAB-001 or CLS-IND-002). Do NOT invent reference IDs.
+5. In 'proposed_redline', if risk is HIGH or MEDIUM, provide an exact replacement clause that satisfies Tata corporate policy. If risk is LOW, set to null.
 
 Return ONLY a valid JSON array of objects. Each object must have these exact keys:
 ["clause_type", "extracted_text", "confidence_score", "risk_level", "risk_rationale", "involved_party", "rag_reference_used", "page_reference", "obligation_owner", "recommended_action", "proposed_redline"]
