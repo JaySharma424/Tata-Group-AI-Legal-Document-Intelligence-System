@@ -4,16 +4,15 @@ import base64
 import asyncio
 import json
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from redis import Redis
 from rq import Queue
-import jwt
 
-from backend.database import get_db, SessionLocal
+from backend.database import get_db
 from backend.models import DocumentModel, ClauseModel, AuditLogModel, UserModel
-from backend.api.v1.auth import get_current_user, SECRET_KEY, ALGORITHM
+from backend.api.v1.auth import get_current_user
 from backend.services.llm_config import get_llm_config
 from backend.document_pipeline.reporting.docx_remediation_service import DocxRemediationService
 from backend.document_pipeline.reporting.report_service import ReportService
@@ -47,27 +46,40 @@ async def websocket_pipeline_endpoint(websocket: WebSocket, job_id: str):
     pubsub = redis_async.pubsub()
     await asyncio.to_thread(pubsub.subscribe, f"pipeline:{job_id}")
 
-    # Immediately push cached last known state if available
     initial_state = await asyncio.to_thread(redis_async.get, f"pipeline_state:{job_id}")
     if initial_state:
-        await websocket.send_text(initial_state)
+        try:
+            await websocket.send_text(initial_state)
+        except Exception:
+            pass
 
     try:
         while True:
-            # Poll Pub/Sub in non-blocking executor thread
             message = await asyncio.to_thread(pubsub.get_message, ignore_subscribe_messages=True, timeout=1.0)
             if message and message.get("data"):
                 data = message["data"]
-                await websocket.send_text(data)
-                parsed = json.loads(data)
-                if parsed.get("step") in ["COMPLETED", "FAILED"]:
+                try:
+                    await websocket.send_text(data)
+                except Exception:
                     break
+                try:
+                    parsed = json.loads(data)
+                    if parsed.get("step") in ["COMPLETED", "FAILED"]:
+                        break
+                except Exception:
+                    pass
             await asyncio.sleep(0.5)
     except (WebSocketDisconnect, Exception):
         pass
     finally:
-        await asyncio.to_thread(pubsub.unsubscribe, f"pipeline:{job_id}")
-        await websocket.close()
+        try:
+            await asyncio.to_thread(pubsub.unsubscribe, f"pipeline:{job_id}")
+        except Exception:
+            pass
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 # ---------------------------------------------------------
 # DOCUMENT UPLOAD & INGESTION
@@ -117,7 +129,6 @@ async def upload_document(
     db.add(db_doc)
     db.commit()
 
-    # Enqueue with positional arguments to avoid RQ keyword parameter collisions
     task_queue.enqueue(
         'backend.document_pipeline.workers.redis_worker.process_document',
         job_id,
@@ -187,6 +198,15 @@ async def get_document_details(document_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Document not found")
 
     clauses = db.query(ClauseModel).filter(ClauseModel.job_id == document_id).all()
+
+    page_breakdown = []
+    try:
+        cached_pages = redis_async.get(f"pipeline_pages:{document_id}")
+        if cached_pages:
+            page_breakdown = json.loads(cached_pages)
+    except Exception:
+        page_breakdown = []
+
     return {
         "document": {
             "job_id": doc.job_id,
@@ -201,7 +221,8 @@ async def get_document_details(document_id: str, db: Session = Depends(get_db)):
             "ragas_faithfulness": doc.ragas_faithfulness,
             "ragas_answer_relevancy": doc.ragas_answer_relevancy,
             "ragas_context_precision": doc.ragas_context_precision,
-            "ragas_context_recall": doc.ragas_context_recall
+            "ragas_context_recall": doc.ragas_context_recall,
+            "page_breakdown": page_breakdown
         },
         "clauses": [
             {
@@ -213,7 +234,7 @@ async def get_document_details(document_id: str, db: Session = Depends(get_db)):
                 "risk_rationale": c.risk_rationale,
                 "involved_party": c.involved_party,
                 "rag_reference_used": c.rag_reference_used,
-                "page_reference": c.page_reference,
+                "page_reference": str(c.page_reference or "1"),
                 "obligation_owner": c.obligation_owner,
                 "recommended_action": c.recommended_action,
                 "proposed_redline": c.proposed_redline
