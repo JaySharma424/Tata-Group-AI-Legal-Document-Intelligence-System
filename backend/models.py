@@ -27,7 +27,6 @@ class UserModel(Base):
 
 
 class SessionModel(Base):
-    """Session model for managing JWT tokens and user logins"""
     __tablename__ = "sessions"
     __table_args__ = {'extend_existing': True}
     
@@ -41,6 +40,24 @@ class SessionModel(Base):
     is_active = Column(Boolean, default=True)
     
     user = relationship("UserModel", back_populates="sessions")
+
+
+# ==================== KNOWLEDGE BASE MODEL (POSTGRESQL PERSISTENCE) ====================
+
+class KnowledgeBaseModel(Base):
+    """Stores all enterprise knowledge base rules in PostgreSQL linked to Qdrant via UUID."""
+    __tablename__ = "knowledge_base"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(String, primary_key=True, index=True)  # Deterministic UUID string matching Qdrant point ID
+    reference_id = Column(String, unique=True, index=True, nullable=False)  # e.g., CLS-LIAB-001
+    title = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    jurisdiction = Column(String, default="Global")
+    guidance = Column(Text, nullable=False)
+    source_file = Column(String, nullable=False)
+    search_text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 # ==================== DOCUMENT MODELS ====================
@@ -71,8 +88,8 @@ class DocumentModel(Base):
     ragas_context_recall = Column(Float, nullable=True, default=0.0)
     ragas_answer_correctness = Column(Float, nullable=True, default=0.0)
     
-    llm_model_used = Column(String, default="gemini-3.5-flash")
-    api_key_masked = Column(String, default="...fkkQ")
+    llm_model_used = Column(String, default="nvidia/nemotron-3.5-lightning-30b-a3b")
+    api_key_masked = Column(String, default="...N/A")
     
     uploaded_by = Column(String, ForeignKey("users.email", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -96,14 +113,11 @@ class ClauseModel(Base):
     risk_rationale = Column(String, nullable=True)
     involved_party = Column(String, nullable=True)
     
-    page_reference = Column(String, default="N/A")
-    obligation_owner = Column(String, default="N/A")
+    page_reference = Column(String, default="1")
+    obligation_owner = Column(String, default="Legal & Procurement Desk")
     recommended_action = Column(String, default="Review")
     
-    # RAG Knowledge Citation
-    rag_reference_used = Column(String, nullable=True, default="POL-IND-2026-01")
-    
-    # Automated Redlining & Remediation Support
+    rag_reference_used = Column(String, nullable=True, default="STANDARD-BASELINE")
     proposed_redline = Column(Text, nullable=True)
     
     edited_text = Column(Text, nullable=True)
@@ -137,14 +151,13 @@ class AuditLogModel(Base):
 # ==================== SYSTEM CONFIGURATION ====================
 
 class SystemConfigModel(Base):
-    """Stores global system configurations dynamically."""
     __tablename__ = "system_config"
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
     config_key = Column(String, unique=True, index=True, nullable=False)
     
-    llm_model = Column(String, default="gemini-3.5-flash-lite")
+    llm_model = Column(String, default="nvidia/nemotron-3.5-lightning-30b-a3b")
     embedding_model = Column(String, default="gemini-embedding-001")
     api_key = Column(String, nullable=True)
     
